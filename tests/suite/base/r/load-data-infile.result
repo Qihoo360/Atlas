@@ -1,0 +1,5 @@
+load data local infile 'testfile' into table foo.bar;
+load data local infile 'testfile' into table foo.bar;
+SELECT 1;
+1
+1

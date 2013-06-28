@@ -1,0 +1,128 @@
+/*
+  the building blocks of the proxy
+
+  You may use "dot" from graphviz to generate human consumable output
+  like PNG or PDF:
+ 
+    $ dot -T pdf -o architecture.pdf architecture.dot
+    $ dot -T png -o architecture.png architecture.dot
+
+  or you generate a image-map
+
+    $ dot -T cmapx -o architecture.map -Tpng -o architecture.png architecture.dot && \
+      echo '<img src="architecture.png" border="0" usemap="#g"/>' > architecture.html && \
+      cat architecture.map >> architecture.html
+*/
+digraph G {
+	node [
+		shape = "plaintext"
+		fontname = "Courier"
+		fontsize = 10
+	]
+
+	rank = "same";
+	rankdir = "LR";
+	subgraph clients {
+		Clients1 [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="grey" port="head">
+				   <font color="white">Client</font>
+				  </td>
+				 </tr>
+				 <tr border="0"><td border="0"><table border="0">
+				 <tr>
+				  <td border="1" port="app">app</td>
+				 </tr>
+				</table>
+				</td></tr></table>
+				>
+		];
+
+		Clients2 [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="grey" port="head">
+				   <font color="white">Client</font>
+				  </td>
+				 </tr>
+				 <tr border="0"><td border="0"><table border="0">
+				 <tr>
+				  <td border="1" port="app">app</td>
+				 </tr>
+				</table>
+				</td></tr></table>
+				>
+		];
+	}
+
+	subgraph backends {
+		Backend1 [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="grey" port="head">
+				   <font color="white">MySQL Server</font>
+				  </td>
+				 </tr>
+				 <tr border="0"><td border="0"><table border="0">
+				 <tr>
+				  <td border="1" port="port">10.0.0.1:3306</td>
+				 </tr>
+				</table>
+				</td></tr></table>
+				>
+
+		];
+
+		Backend2 [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="grey" port="head">
+				   <font color="white">MySQL Server</font>
+				  </td>
+				 </tr>
+				 <tr border="0"><td border="0"><table border="0">
+				 <tr>
+				  <td border="1" port="port">10.0.0.2:3306</td>
+				 </tr>
+				</table>
+				</td></tr></table>
+				>
+
+		];
+
+	}
+
+	Blocks [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr>
+			  <td bgcolor="black" port="head">
+			   <font color="white">MySQL Proxy</font>
+			  </td>
+			 </tr>
+			 <tr border="0"><td border="0"><table border="0">
+			 <tr>
+			  <td border="1" port="script">script</td>
+			 </tr>
+			 <tr>
+			  <td border="1" port="plugin">plugin</td>
+			 </tr>
+			 <tr>
+			  <td border="1" port="proxy">network core</td>
+			 </tr>
+			</table>
+			</td></tr></table>
+			>
+	]
+
+
+	Clients1:app:e -> Blocks:w;
+	Clients2:app:e -> Blocks:w;
+	Blocks:e -> Backend1:port:w;
+	Blocks:e -> Backend2:port:w;
+}

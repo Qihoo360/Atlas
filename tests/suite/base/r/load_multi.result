@@ -1,0 +1,47 @@
+info
+module "<srcdir>/base/t/lm2.lua" loaded
+select pload status;
+function	hits
+read_query2	1
+info
+module "<srcdir>/base/t/lm1.lua" loaded
+select 'first' as info;
+info
+first
+select pload status;
+function	hits
+read_query2	3
+select 'second' as info;
+info
+second
+select pload status;
+function	hits
+read_auth1	1
+read_auth_result1	1
+read_handshake1	1
+read_query2	5
+connect_server1	1
+select sleep(0.2);
+sleep(0.2)
+0
+select 'third' as info;
+info
+third
+select pload status;
+function	hits
+disconnect_client1	1
+read_auth1	2
+read_auth_result1	2
+read_handshake1	2
+read_query2	8
+connect_server1	2
+info
+module "<srcdir>/base/t/lm3.lua" loaded
+select 1000;
+result
+one thousand
+<srcdir>/base/t/lm3.lua
+unloaded
+select 1000;
+1000
+1000

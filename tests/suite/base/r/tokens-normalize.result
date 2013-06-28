@@ -1,0 +1,33 @@
+select 1;
+text
+<SELECT ? >
+select count(*) from mysql.user;
+text
+<SELECT COUNT( * ) FROM `mysql` . `user` >
+create table t1 (id int) engine = myisam;
+text
+<CREATE TABLE `t1` ( `id` INT ) `engine` = `myisam` >
+/* comment */select /*! 1 */;
+text
+<SELECT /*! 1 */ >
+select /*!50000 1 + */ 1;
+text
+<SELECT /*!50000 1 + */ ? >
+SELECT @i := 1;
+text
+<SELECT @i := ? >
+COMMIT;
+text
+<COMMIT >
+ROLLBACK;
+text
+<ROLLBACK >
+START TRANSACTION;
+text
+<START TRANSACTION >
+BEGIN;
+text
+<BEGIN >
+CREATE TABLE commit ( id int );
+text
+<CREATE TABLE `commit` ( `id` INT ) >

@@ -1,0 +1,530 @@
+/*
+  A layout of the internal structures of the proxy
+
+  You may use "dot" from graphviz to generate human consumable output
+  like PNG or PDF:
+ 
+    $ dot -T pdf -o lua-classes.pdf lua-classes.dot
+    $ dot -T png -o lua-classes.png lua-classes.dot
+
+  or you generate a image-map
+
+    $ dot -T cmapx -o lua-classes.map -Tpng -o lua-classes.png lua-classes.dot && \
+      echo '<img src="lua-classes.png" border="0" usemap="#g"/>' > lua-classes.html && \
+      cat lua-classes.map >> lua-classes.html
+*/
+digraph G {
+	node [
+		shape = "plaintext"
+		fontname = "Courier"
+		fontsize = 10
+	]
+
+	Proxy [
+		label = <
+			<table border="1" cellborder="1" href="http://dev.mysql.com/doc/refman/5.1/en/mysql-proxy-scripting-structures.html#mysql-proxy-scripting-structures">
+			 <tr><td bgcolor="black"><font color="white">
+			 	Proxy
+			 </font></td></tr>
+			 <tr><td align="left" border="0" cellpadding="0" port="connection">
+				r-- connection :  Connection
+			 </td></tr>
+			 <tr><td align="left" border="0" cellpadding="0" port="global">
+				r-- global :  Globals
+			 </td></tr>
+			 <tr><td align="left" border="0" cellpadding="0" port="queries">
+				r-- queries : Queries
+			 </td></tr>
+			 <tr><td align="left" border="0" cellpadding="0" port="response">
+				r-- response : Response
+			 </td></tr>
+			</table>
+			>
+	]
+
+	Connection [
+		label = <
+			<table border="1" cellborder="1" href="http://dev.mysql.com/doc/refman/5.1/en/mysql-proxy-scripting-structures.html#mysql-proxy-scripting-structures-connection">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+			 	Connection
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="client">
+				r-- client : Socket
+			 </td></tr>
+			 <tr><td align="left" border="0" port="server">
+				r-- server : Socket
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				rw- backend_ndx : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				-w connection_close : boolean
+			 </td></tr>
+			</table>
+			>
+
+	]
+
+	Socket [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+			 	Socket
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="src">
+				r-- src : Address
+			 </td></tr>
+			 <tr><td align="left" border="0" port="dst">
+				r-- dst : Address
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- default_db : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- mysqld_version : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- thread_id : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- scramble_buffer : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- username : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- scrambled_password : string
+			 </td></tr>
+			</table>
+			>
+
+	]
+
+	Address [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+			 	Address
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				r-- name : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- type : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- address : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- port : int
+			 </td></tr>
+			</table>
+			>
+
+	]
+
+	Globals [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+			 	Globals
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				rw- config : table
+			 </td></tr>
+			 <tr><td align="left" border="0" port="backends">
+				r-- backends : Backends
+			 </td></tr>
+			</table>
+			>
+
+	]
+	
+		Backends [
+			label = <
+				<table border="1" cellborder="1" href="http://dev.mysql.com/doc/refman/5.1/en/mysql-proxy-scripting-structures.html#mysql-proxy-scripting-structures-backends">
+				 <tr><td bgcolor="black" port="head"><font color="white">
+					Backends
+				 </font></td></tr>
+				 <tr><td align="left" border="0" port="index">
+					--x __index(int) : Backend
+				 </td></tr>
+				 <tr><td align="left" border="0">
+					--x __len() : int
+				 </td></tr>
+				</table>
+				>
+		]
+
+		Backend [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr><td bgcolor="black" port="head"><font color="white">
+					Backend
+				 </font></td></tr>
+				 <tr><td align="left" border="0">
+					r-- connected_clients : int
+				 </td></tr>
+				 <tr><td align="left" border="0" port="dst">
+					r-- dst : Address
+				 </td></tr>
+				 <tr><td align="left" border="0">
+					rw- state : int
+				 </td></tr>
+				 <tr><td align="left" border="0">
+					r-- type : int
+				 </td></tr>
+				 <tr><td align="left" border="0">
+					rw- uuid : string
+				 </td></tr>
+				 <tr><td align="left" border="0" port="pool">
+					r-- pool : ConnectionPool
+				 </td></tr>
+				</table>
+				>
+		]
+
+		ConnectionPool [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr><td bgcolor="black" port="head"><font color="white">
+					Connection Pool
+				 </font></td></tr>
+				 <tr><td align="left" border="0">
+					rw- max_idle_connections : int
+				 </td></tr>
+				 <tr><td align="left" border="0">
+					rw- min_idle_connections : int
+				 </td></tr>
+				 <tr><td align="left" border="0" port="users">
+					r-- users : Users
+				 </td></tr>
+				</table>
+				>
+		]
+
+		Users [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr><td bgcolor="black" port="head"><font color="white">
+					Users
+				 </font></td></tr>
+				 <tr><td align="left" border="0" port="index">
+					--x __index(string) : Queue
+				 </td></tr>
+				</table>
+				>
+		]
+
+		Queue [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr><td bgcolor="black" port="head"><font color="white">
+					Queue
+				 </font></td></tr>
+				 <tr><td align="left" border="0">
+					r-- cur_idle_connections : int
+				 </td></tr>
+				</table>
+				>
+
+		]
+	
+	Queries [
+		label = <
+			<table border="1" cellborder="1" href="http://dev.mysql.com/doc/refman/5.1/en/mysql-proxy-scripting-structures.html#mysql-proxy-scripting-structures-queries">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Queries
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				--x append(id, packet)
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				--x prepend(id, packet)
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				--x reset()
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				--x __len()
+			 </td></tr>
+			</table>
+		>
+	]
+
+	Response [
+		label = <
+			<table border="1" cellborder="1" href="http://dev.mysql.com/doc/refman/5.1/en/mysql-proxy-scripting-structures.html#mysql-proxy-scripting-structures-response">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Response
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				rw- type : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				rw- errmsg : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				rw- errcode : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				rw- sqlstate : string
+			 </td></tr>
+			 <tr><td align="left" border="0" port="resultset">
+				rw- resultset : Resultset
+			 </td></tr>
+			</table>
+		>
+	]
+
+	Resultset [
+		label = <
+			<table border="1" cellborder="1" href="http://dev.mysql.com/doc/refman/5.1/en/mysql-proxy-scripting-structures.html#mysql-proxy-scripting-structures-resultset">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Resultset
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="fields">
+				rw- fields : Fields
+			 </td></tr>
+			 <tr><td align="left" border="0" port="rows">
+				rw- rows : Rows
+			 </td></tr>
+			</table>
+		>
+	]
+
+	Fields [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Fields
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="index">
+				--x __newindex(int, Field)
+			 </td></tr>
+			</table>
+		>
+	]
+
+ 	Field [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Field
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				rw- name : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				rw- type : int
+			 </td></tr>
+			</table>
+		>
+	]
+
+	Rows [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Rows
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="index">
+				--x __newindex(int, value) 
+			 </td></tr>
+			</table>
+		>
+	]
+
+	Injection [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Injection
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="resultset">
+				r-- resultset : Resultset
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- id : int 
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- query : string 
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- query_time : number
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- response_time : number
+			 </td></tr>
+			</table>
+		>
+	]
+
+	InjectionResultset [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Resultset
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="fields">
+				r-- fields : Fields
+			 </td></tr>
+			 <tr><td align="left" border="0" port="rows">
+				r-- rows : Rows
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- row_count : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- bytes : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- raw : string
+			 </td></tr>
+			 <tr><td align="left" border="0" port="flags">
+				r-- flags : Flags
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- warning_count : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- affected_rows : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- insert_id : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- query_status : int
+			 </td></tr>
+			</table>
+		>
+	]
+
+	InjectionFlags [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Flags
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				r-- in_trans : boolean
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- auto_commit : boolean
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- no_good_index_used : boolean
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- no_index_used : boolean
+			 </td></tr>
+			</table>
+		>
+	]
+
+	InjectionField [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Field
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				r-- type : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- name : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- org_name : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- table : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- org_table : string
+			 </td></tr>
+			</table>
+		>
+	]
+
+	InjectionFields [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Fields
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="index">
+				--x __index(int) : Field 
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				--x __len() : int 
+			 </td></tr>
+			</table>
+		>
+	]
+
+	InjectionRow [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Row
+			 </font></td></tr>
+			 <tr><td align="left" border="0">
+				r-- type : int
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- name : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- org_name : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- table : string
+			 </td></tr>
+			 <tr><td align="left" border="0">
+				r-- org_table : string
+			 </td></tr>
+			</table>
+		>
+	]
+
+	InjectionRows [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr><td bgcolor="black" port="head"><font color="white">
+				Rows
+			 </font></td></tr>
+			 <tr><td align="left" border="0" port="iter">
+				--x __iter() : Row 
+			 </td></tr>
+			</table>
+		>
+	]
+
+Proxy:connection:w -> Connection:head;
+Connection:client:e -> Socket:head;
+Connection:server:e -> Socket:head;
+Socket:src:e -> Address:head;
+Socket:dst:e -> Address:head;
+Proxy:global:w -> Globals:head;
+Globals:backends:e -> Backends:head;
+Backends:index:e -> Backend:head;
+Backend:pool:e -> ConnectionPool:head;
+Backend:dst:e -> Address:head;
+ConnectionPool:users:e -> Users:head;
+Users:index:e -> Queue:head;
+Proxy:queries:e -> Queries:head;
+Proxy:response:e -> Response:head;
+Response:resultset:e -> Resultset:head;
+Resultset:fields:e -> Fields:head;
+Resultset:rows:e -> Rows:head;
+Fields:index:e -> Field:head;
+
+Injection:resultset:e -> InjectionResultset:head;
+InjectionResultset:fields:e -> InjectionFields:head;
+InjectionResultset:rows:e -> InjectionRows:head;
+InjectionResultset:flags:e -> InjectionFlags:head;
+InjectionFields:index:e -> InjectionField:head;
+InjectionRows:iter:e -> InjectionRow:head;
+}
+

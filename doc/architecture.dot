@@ -1,0 +1,202 @@
+/*
+  the building blocks of the proxy
+
+  You may use "dot" from graphviz to generate human consumable output
+  like PNG or PDF:
+ 
+    $ dot -T pdf -o architecture.pdf architecture.dot
+    $ dot -T png -o architecture.png architecture.dot
+
+  or you generate a image-map
+
+    $ dot -T cmapx -o architecture.map -Tpng -o architecture.png architecture.dot && \
+      echo '<img src="architecture.png" border="0" usemap="#g"/>' > architecture.html && \
+      cat architecture.map >> architecture.html
+*/
+digraph G {
+	node [
+		shape = "plaintext"
+		fontname = "Courier"
+		fontsize = 10
+	]
+
+	subgraph scripting {
+		rank = "min"
+		Script [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="blue" port="head" colspan="4">
+				   <font color="white">Script</font>
+				  </td>
+				 </tr>
+				 <tr>
+				  <td border="1">connect</td>
+				  <td border="1">auth</td>
+				  <td border="1">query</td>
+				  <td border="1">close</td>
+				 </tr>
+				 <tr>
+				  <td border="1" bgcolor="orange" colspan="4">liblua</td>
+				 </tr>
+
+				</table>
+				>
+		]
+	}
+
+	subgraph network {
+		rank = "same";
+		Blocks [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="black" port="head" colspan="4">
+				   <font color="white">Proxy</font>
+				  </td>
+				 </tr>
+				 <tr>
+				  <td border="0" colspan="2"></td>
+				  <td border="1" port="script" colspan="2">script</td>
+				 </tr>
+				 <tr>
+				  <td border="0" colspan="2"></td>
+				  <td border="1" port="admin" colspan="2">admin plugin</td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="script" colspan="2">script</td>
+				  <td border="0" colspan="2"></td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="proxy" colspan="2">proxy plugin</td>
+				  <td border="0" colspan="2"></td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="proxy" colspan="4">network core</td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="chassis">libchassis</td>
+				  <td border="1" port="socket">socket</td>
+				  <td border="1" port="protocol">protocol</td>
+				  <td border="1" bgcolor="orange">liblua</td>
+				 </tr>
+				</table>
+				>
+		]
+
+		Clients [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="grey" port="head">
+				   <font color="white">Clients</font>
+				  </td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="admin">admin</td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="app">app</td>
+				 </tr>
+				</table>
+				>
+		];
+
+		Backend [
+		];
+	}
+
+	subgraph lowend {
+		rank="same";
+		Chassis [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="blue" port="head" colspan="4">
+				   <font color="white">Chassis</font>
+				  </td>
+				 </tr>
+				 <tr>
+				  <td border="1" port="chassis">logging</td>
+				  <td border="1">getopt()</td>
+				  <td border="1">configfile</td>
+				  <td border="1">plugin</td>
+				 </tr>
+				 <tr>
+				  <td border="1" bgcolor="orange" colspan="4">glib-2.0</td>
+				 </tr>
+
+				</table>
+				>
+		]
+
+		Socket [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="blue" port="head" colspan="3">
+				   <font color="white">Socket</font>
+				  </td>
+				 </tr>
+				 <tr>
+				  <td border="1" bgcolor="orange">libevent</td>
+				  <td border="1" bgcolor="orange">libresolv</td>
+				  <td border="1">socket()</td>
+				 </tr>
+				</table>
+				>
+		]
+
+		Protocol [
+			label = <
+				<table border="1" cellborder="1">
+				 <tr>
+				  <td bgcolor="blue" port="head" colspan="4">
+				   <font color="white">Protocol</font>
+				  </td>
+				 </tr>
+				 <tr>
+				  <td border="1">mysql</td>
+				  <td border="1">binlog</td>
+				  <td border="1">frm</td>
+				  <td border="1">masterinfo</td>
+				 </tr>
+				</table>
+				>
+		]
+	}
+
+	Legend [
+		label = <
+			<table border="1" cellborder="1">
+			 <tr>
+			  <td bgcolor="grey" port="head">
+			   <font color="white">Legend</font>
+			  </td>
+			 </tr>
+			 <tr>
+			  <td border="1" bgcolor="orange">external lib</td>
+			 </tr>
+			 <tr>
+			  <td border="1" bgcolor="blue">internal lib</td>
+			 </tr>
+			</table>
+			>
+	]
+
+	Blocks:chassis:s -> Chassis:head:ne [ arrowhead = none ];
+	Blocks:chassis:s -> Chassis:head:nw [ arrowhead = none ];
+
+	Blocks:socket:s -> Socket:head:ne [ arrowhead = none ];
+	Blocks:socket:s -> Socket:head:nw [ arrowhead = none ];
+
+	Blocks:protocol:s -> Protocol:head:ne [ arrowhead = none ];
+	Blocks:protocol:s -> Protocol:head:nw [ arrowhead = none ];
+
+	Blocks:script:ne -> Script:head:se [ arrowhead = none ];
+	Blocks:script:nw -> Script:head:sw [ arrowhead = none ];
+
+	Clients:admin:e -> Blocks:admin:w [ label = ":4042" ];
+	Clients:app:e -> Blocks:proxy:w   [ label = ":4040" ];
+	Blocks:proxy:e -> Backend:w [ label = ":3306" ];
+}

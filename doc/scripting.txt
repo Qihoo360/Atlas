@@ -1,0 +1,8 @@
+==========================
+Scripting the proxy plugin
+==========================
+
+.. contents::
+
+.. include:: chapter/scripting.txt
+

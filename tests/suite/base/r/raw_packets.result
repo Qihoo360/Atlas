@@ -1,0 +1,11 @@
+SELECT 1;
+1
+1
+SELECT errmsg empty;
+ERROR 07000: (lua) proxy.response.errmsg is nil
+SELECT invalid type;
+ERROR 07000: (lua) handling proxy.response failed, check error-log
+SELECT errmsg;
+ERROR 07000: I'm a error
+SELECT errcode;
+ERROR 07000: I'm a error

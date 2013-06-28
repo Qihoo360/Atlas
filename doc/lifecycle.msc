@@ -1,0 +1,49 @@
+# 
+# mscgen -T png -o lifecycle.png < lifecycle.msc
+
+
+
+msc {
+	Client, Core, Plugin, Server;
+
+	# Core box Plugin [ label = "MySQL Proxy" ];
+
+	--- [ label = "connect" ];
+	Client -> Core [ label = "connect()" ];
+	Core => Plugin [ label = "connect_server()" ];
+	Core << Plugin [ label = "NO_DECISION" ];
+	Core -> Server [ label = "connect()" ];
+
+	--- [ label = "auth challenge" ];
+	Server -> Core [ label = "read(auth challenge packet)" ];
+	Core => Plugin [ label = "read_auth_handshake()" ];
+	Core << Plugin [ label = "NO_DECISION" ];
+	Core -> Client [ label = "write(auth challenge packet)" ];
+	--- [ label = "auth response" ];
+	Client -> Core [ label = "read(auth response packet)" ];
+	Core => Plugin [ label = "read_auth()" ];
+	Core << Plugin [ label = "NO_DECISION" ];
+	Core -> Server [ label = "write(auth response packet)" ];
+	--- [ label = "auth status" ];
+	Server -> Core [ label = "read(auth response packet)" ];
+	Core => Plugin [ label = "read_auth_result()" ];
+	Core << Plugin [ label = "NO_DECISION" ];
+	Core -> Client [ label = "write(auth response packet)" ];
+	--- [ label = "query" ];
+	Client -> Core [ label = "read(command packet)" ];
+	Core => Plugin [ label = "read_query()" ];
+	Core << Plugin [ label = "NO_DECISION" ];
+	Core -> Server [ label = "write(command packet)" ];
+	--- [ label = "query response" ];
+	Server -> Core [ label = "read(command response packet)" ];
+	Core => Plugin [ label = "read_query_result()" ];
+	Core << Plugin [ label = "NO_DECISION" ];
+	Core -> Client [ label = "write(command response packet)" ];
+
+	--- [ label = "disconnect" ];
+	Client -> Core [ label = "close()" ];
+	Core => Plugin [ label = "disconnect_client()" ];
+	Core << Plugin [ label = "ignored" ];
+	Core -> Server [ label = "close()" ];
+	
+}

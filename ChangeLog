@@ -1,0 +1,52 @@
+
+0.7.0 - 
+
+  chassis
+  * added a error-msg if trailing options without dashes are specified
+  * added config-file support that maps cmdline options to configfile options
+  * added support for SIGHUP to reopen logfiles
+  * added win32-service support
+  * added --basedir
+  * added experimental --log-backtrace-on-crash
+  * added DTrace probes
+  * added a angel to keep the chassis alive
+  * added --user option to change the system user the proxy runs as
+
+  proxy-core
+  * added buffered IO on unix
+  * added lua-scope that is shared between the plugins
+  * added a option to disable COM_CHANGE_USER on connection reuse
+  * added handling of the 4.0 auth packets
+  * added parser for master.info files
+  * replaced assertions in protocol decoders by proper error-codes
+  * fixed assertions when COM_TIME, COM_PROCESS_INFO or COM_DEBUG are received
+
+  lua layer
+  * added unit-testing for the lua scripts
+  * fixed tutorial-inject.lua to start indexing at 1 (#32088)
+  * expose chassis_log_* functions to lua
+  * added the posix and lpeg module from luaforge
+  * use the LPEG lua-module to parse statements
+  * added memory profiling
+  * added { resultset_is_needed = false } as default
+  * moved proxy.backends.* to proxy.global.backends.*
+  * added a lua-wrapper around some glib-2.0 functions
+  * added a script cache
+  * removed explicit call to lua_gc() to improve the speed
+
+  Proxy Plugin
+  * track rows and bytes of a resultset
+  * fixed quoting of SQL commands like COMMIT and ROLLBACK
+  * added test-cases for connection-pooling, fail-over, ...
+  * refactored the SQL tokenizer into a lua module
+  * fixed handling -- comments in the SQL tokenizer
+  * fixed backend state cache
+
+  Admin Plugin
+  * replaced the hardcoded admin commands by a lua script interface
+  * added authentication support
+
+  Debug Plugin
+  * return "number" as DOUBLE or INTs
+
+

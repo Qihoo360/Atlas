@@ -1,0 +1,37 @@
+select 1;
+id	name	text
+204	TK_SQL_SELECT	select
+11	TK_INTEGER	1
+select count(*) from mysql.user;
+id	name	text
+204	TK_SQL_SELECT	select
+10	TK_FUNCTION	count
+16	TK_OBRACE	(
+19	TK_STAR	*
+17	TK_CBRACE	)
+105	TK_SQL_FROM	from
+9	TK_LITERAL	mysql
+13	TK_DOT	.
+9	TK_LITERAL	user
+create table t1 (id int) engine = myisam;
+id	name	text
+59	TK_SQL_CREATE	create
+222	TK_SQL_TABLE	table
+9	TK_LITERAL	t1
+16	TK_OBRACE	(
+9	TK_LITERAL	id
+123	TK_SQL_INT	int
+17	TK_CBRACE	)
+9	TK_LITERAL	engine
+5	TK_EQ	=
+9	TK_LITERAL	myisam
+/* comment */select /*! 1 */;
+id	name	text
+8	TK_COMMENT	 comment 
+204	TK_SQL_SELECT	select
+261	TK_COMMENT_MYSQL	 1 
+select /*!50000 1 + */ 1;
+id	name	text
+204	TK_SQL_SELECT	select
+261	TK_COMMENT_MYSQL	50000 1 + 
+11	TK_INTEGER	1

@@ -1,0 +1,3 @@
+LIBRARY mysql.dll
+EXPORTS
+	luaopen_mysql_proto

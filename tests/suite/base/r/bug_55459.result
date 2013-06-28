@@ -1,0 +1,2 @@
+SELECT x;
+ERROR 42S22: Unknown column 'x' in 'field list'

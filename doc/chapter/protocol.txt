@@ -1,0 +1,1582 @@
+The MySQL protocol is used between the MySQL Clients and the MySQL Server. It is implemented by
+
+* the Connectors (Connector/C, ...)
+* MySQL Proxy
+* the MySQL Server itself for the slaves
+
+The documentation is sparse and is split between:
+
+  http://forge.mysql.com/wiki/MySQL_Internals_ClientServer_Protocol
+
+and the source files of the MySQL Server:
+
+* sql/sql_parse.cc for the protocol basics
+
+  * dispatch_command()
+
+* sql/sql_prepare.cc for the prepared statement protocol
+
+  * mysqld_stmt_prepare()
+  * mysqld_stmt_execute()
+  * mysqld_stmt_close()
+  * mysqld_stmt_reset()
+  * mysqld_stmt_fetch()
+  * mysql_stmt_get_longdata()
+
+* sql/sql_repl.cc for the binlog protocol
+
+  * mysql_binlog_send()
+
+* sql/protocol.cc for the value and type encoding
+
+Tracking the MySQL Protocol
+===========================
+
+All the examples here are captured with::
+
+  $ ngrep -x -q -d lo0 '' 'port 3306'
+
+A mysql client logs in
+----------------------
+
+Taking a look at the packet dump when a mysql-client logs in::
+
+  client -> server 
+    <connect>
+
+The client initiates the communication by connecting to the server.::
+
+  server -> client
+    36 00 00 00 0a 35 2e 35    2e 32 2d 6d 32 00 03 00    6....5.5.2-m2...
+    00 00 27 75 3e 6f 38 66    79 4e 00 ff f7 08 02 00    ..'u>o8fyN......
+    00 00 00 00 00 00 00 00    00 00 00 00 00 57 4d 5d    .............WM]
+    6a 7c 53 68 32 5c 59 2e    73 00                      j|Sh2\Y.s.      
+  
+which responds with a handshake packet which contains the version, some flags and a password challenge.::
+
+  client -> server
+    3a 00 00 01 05 a6 03 00    00 00 00 01 08 00 00 00    :...............
+    00 00 00 00 00 00 00 00    00 00 00 00 00 00 00 00    ................
+    00 00 00 00 72 6f 6f 74    00 14 cb b5 ea 68 eb 6b    ....root.....h.k
+    3b 03 cb ae fb 9b df 5a    cb 0f 6d b5 de fd          ;......Z..m...  
+
+The client answers with username, some flags and the response to the challenge.::
+
+  server -> client
+    07 00 00 02 00 00 00 02    00 00 00                   ...........     
+  
+As the client provided the right password and the flags are fine, the server responds with a `OK packet`_. That closes auth-phase
+and switches to the command-phase.::
+
+  client -> server
+    21 00 00 00 03 73 65 6c    65 63 74 20 40 40 76 65    !....select @@ve
+    72 73 69 6f 6e 5f 63 6f    6d 6d 65 6e 74 20 6c 69    rsion_comment li
+    6d 69 74 20 31                                        mit 1           
+ 
+The mysql client first checks the version string of the server and sends a `COM_QUERY`_ packet.::
+
+  server -> client
+    01 00 00 01 01 27 00 00    02 03 64 65 66 00 00 00    .....'....def...
+    11 40 40 76 65 72 73 69    6f 6e 5f 63 6f 6d 6d 65    .@@version_comme
+    6e 74 00 0c 08 00 1c 00    00 00 fd 00 00 1f 00 00    nt..............
+    05 00 00 03 fe 00 00 02    00 1d 00 00 04 1c 4d 79    ..............My
+    53 51 4c 20 43 6f 6d 6d    75 6e 69 74 79 20 53 65    SQL Community Se
+    72 76 65 72 20 28 47 50    4c 29 05 00 00 05 fe 00    rver (GPL)......
+    00 02 00                                              ...             
+
+The server responds with a resultset containing the version-string.::
+
+  client -> server
+    0e 00 00 00 03 73 65 6c    65 63 74 20 55 53 45 52    .....select USER
+    28 29                                                 ()              
+
+For the prompt (\u ...) the mysql client also asks for the current username.::
+
+  server -> client
+    01 00 00 01 01 1c 00 00    02 03 64 65 66 00 00 00    ..........def...
+    06 55 53 45 52 28 29 00    0c 08 00 4d 00 00 00 fd    .USER()....M....
+    01 00 1f 00 00 05 00 00    03 fe 00 00 02 00 0f 00    ................
+    00 04 0e 72 6f 6f 74 40    6c 6f 63 61 6c 68 6f 73    ...root@localhos
+    74 05 00 00 05 fe 00 00    02 00                      t.........      
+
+which is 'root@localhost' in this example.
+
+MySQL Packet header
+-------------------
+
+The packets that are exchanged between client and server look like::
+
+  ...
+  T 127.0.0.1:51656 -> 127.0.0.1:3306 [AP]
+    01 00 00 00 01 
+
+The example shows a COM_QUIT packet. It starts (like all packets) with a 4 byte packet header:
+
+* 3 byte length
+* 1 byte sequence-id
+
+The length is the length of the payload of the packet. If the payload is larger than 2^24-2 bytes the length is set to 2^24-1
+and a additional packets are sent with the rest of the payload until the payload of a packet is less than 2^24-2 bytes.
+
+The sequence-id is incremented with each packet for a sequence of packets. It is reset, when a new command begins.
+
+Basic Types
+===========
+
+Integer
+-------
+
+The MySQL Protocol has a set of possible encodings for integers:
+
+* fixed length intergers
+* length encoded integers
+
+fixed length integer
+....................
+
+The fixed length integers can be of a byte-length 1, 2, 3, 4 or 8 and send their first byte first. The packet length
+for example is::
+
+  01 00 00
+
+is a 3-byte fixed length integer with the value `1`.
+
+length encoded integer
+......................
+
+In other places integers have a variable size of 1, 3, 4 or 9 bytes depending on their value:
+
+==========================  ======
+value                       bytes
+==========================  ======
+``< 251``                   1
+``>= 251 < (2^16 - 1)``     3
+``>= (2^16) < (2^24 - 1)``  4
+``>= (2^24)``               9
+==========================  ======
+
+The 1-byte values from 251 to 255 have a special meaning and aren't used for integers. Instead they
+signal special packets or the 3 other variable length integer types:
+
+========  ===  ===========
+hex       dec  description
+========  ===  ===========
+``0xfb``  251  NULL in the `Text Resultset Row`_
+``0xfc``  252  indicator for a 2-byte integer
+``0xfd``  253  indicator for a 3-byte integer
+``0xfe``  254  indicator for a 8-byte integer or first byte of a `EOF packet`_
+``0xff``  255  first byte of a `ERR packet`_
+========  ===  ===========
+
+They also send least significant byte first.
+
+String
+------
+
+Strings appear in a few forms in the protocol:
+
+_`Fixed Length String`
+  Fixed length strings have a known, hardcoded length. An example is the `sql-state` of the `ERR packet`_ which is always 5 byte long.
+
+_`NUL-terminated String`
+  Strings that are terminated by a [00] byte.
+
+_`Length Encoded String`
+  A length encoded string is a string that is prefixed with `length encoded integer`_ describing the length of the string.
+
+_`End-of-packet String`
+  If a string is the last component of a packet, its length can be calculated from the overall-packet length minus the current position.
+
+Describing packets
+------------------
+
+In this document we describe the packets by first defining their payload and provide examples with packet header and payload as 
+you would see it on the wire.::
+
+  <packetname>
+    <description>
+
+    direction: client -> server
+    
+    payload:
+      <type>        <description>
+
+    Example:
+      01 00 00 00 01
+
+The `<type>` describes the sequence of bytes of the packet:
+
+============== ===========
+type           description
+============== ===========
+1              1 byte `fixed length integer`_
+2              2 byte `fixed length integer`_
+3              3 byte `fixed length integer`_
+4              4 byte `fixed length integer`_
+8              8 byte `fixed length integer`_
+lenenc-int     `length encoded integer`_
+string         `NUL-terminated string`_
+string[p]      `End-of-packet string`_
+string[`<n>`]  fixed length string with the length `<n>`
+lenenc-str     `length encoded string`_
+n              a byte sequence of any length
+============== ===========
+
+.. attention::
+  Some packets have optional fields or a different layout depending on the `capability flags`_ that are sent as part of the
+  `Auth Response Packet`_.
+
+If a field has a fixed value its description will show it as hex value in brackets like `[00]`.
+
+Generic Response Packets
+========================
+
+For most of the commands the client sends to the server one of two packets is returned as response:
+
+* `OK packet`_
+* `ERR packet`_
+
+OK packet
+---------
+
+::
+
+  OK
+    
+    direction: server -> client
+
+    payload:
+      1              [00] the OK header
+      lenenc-int     affected rows
+      lenenc-int     last-insert-id
+      2              status flags
+        if capabilities & PROTOCOL_41:
+      2              warnings 
+
+    example:
+      07 00 00 02 00 00 00 02    00 00 00                   ...........     
+
+Status Flags
+............
+ 
+The status flags are a bit-field:
+
+====== =============
+flag   constant name
+====== =============
+0x0001 SERVER_STATUS_IN_TRANS
+0x0002 SERVER_STATUS_AUTOCOMMIT
+0x0008 _`SERVER_MORE_RESULTS_EXISTS`
+0x0010 SERVER_STATUS_NO_GOOD_INDEX_USED
+0x0020 SERVER_STATUS_NO_INDEX_USED
+0x0040 SERVER_STATUS_CURSOR_EXISTS
+0x0080 SERVER_STATUS_LAST_ROW_SENT
+0x0100 SERVER_STATUS_DB_DROPPED
+0x0200 SERVER_STATUS_NO_BACKSLASH_ESCAPES
+0x0400 SERVER_STATUS_METADATA_CHANGED
+0x0800 SERVER_QUERY_WAS_SLOW
+0x1000 SERVER_PS_OUT_PARAMS
+====== =============
+
+ERR packet
+----------
+
+::
+
+  ERR
+    
+    direction: server -> client
+
+    payload:
+      1              [ff] the ERR header
+      2              error code 
+        if capabilities & PROTOCOL_41:
+      1              '#' the sql-state marker
+      string[5]      sql-state
+        all protocols:
+      string[p]      error-message
+
+    example:
+      17 00 00 01 ff 48 04 23    48 59 30 30 30 4e 6f 20    .....H.#HY000No 
+      74 61 62 6c 65 73 20 75    73 65 64                   tables used 
+
+
+The Auth Phase
+==============
+
+A simple MySQL 4.1+ auth starts with:
+
+1. the client connecting to the server
+2. the server responds with the `Auth Challenge Packet`_
+3. the client sends the `Auth Response Packet`_
+4. the server responds with `OK Packet`_
+
+If the auth fails, it sends a `ERR Packet`_ instead of a `OK Packet`_ and closes the connection:
+
+1. the client connecting to the server
+2. the server responds with the `Auth Challenge Packet`_
+3. the client sends the `Auth Response Packet`_
+4. the server responds with `ERR Packet`_ and closes connection
+
+or the server denies the client right away if for example its IP is deny:
+
+1. the client connecting to the server
+2. the server responds with the `ERR Packet`_ and closes connection
+
+MySQL 4.1+ server also may respond at step 4 with a `Old Password Auth Challenge Packet`_:
+
+1. the client connecting to the server
+2. the server responds with the `Auth Challenge Packet`_
+3. the client sends the `Auth Response Packet`_
+4. the server responds with the `Old Password Auth Challenge Packet`_
+5. the client sends the `Old Password Auth Response Packet`_
+6. the server responds with `OK Packet`_ or `ERR Packet`_ and closes the connection
+
+Auth Challenge Packet
+---------------------
+
+As first packet the server sends a Auth Challenge to the client. It contains several other fields:
+
+* the protocol version
+* the mysql-server version string
+* the server capabilities
+* the auth challenge
+
+The client answers with a `Auth Response Packet`_.
+
+::
+
+  Auth Challenge Packet
+    response: Auth Response Packet
+
+    payload:
+      1              [0a] protocol version
+      string         server version
+      4              connection id
+      string[8]      challenge-part-1
+      1              [00] filler
+      2              capability flags
+      1              character set
+      2              status flags
+      string[13]     reserved
+        if capabilities & SECURE_CONNECTION:
+      string[12]     challenge-part-2
+      1              [00] filler
+
+    example:
+      36 00 00 00 0a 35 2e 35    2e 32 2d 6d 32 00 0b 00    6....5.5.2-m2...
+      00 00 64 76 48 40 49 2d    43 4a 00 ff f7 08 02 00    ..dvH@I-CJ......
+      00 00 00 00 00 00 00 00    00 00 00 00 00 2a 34 64    .............*4d
+      7c 63 5a 77 6b 34 5e 5d    3a 00                      |cZwk4^]:.      
+
+`status flags` is defined as the `Status Flags`_ of the `OK packet`_.
+
+Capability flags
+................
+
+The capability flags are used by the client and server to indicate which features
+they support and want to use.
+
+====== ==============================  ==================================
+flags    constant name                   description
+====== ==============================  ==================================
+0x0001 CLIENT_LONG_PASSWORD            new more secure passwords
+0x0002 CLIENT_FOUND_ROWS               Found instead of affected rows
+0x0004 CLIENT_LONG_FLAG                Get all column flags
+0x0008 CLIENT_CONNECT_WITH_DB          One can specify db on connect
+0x0010 CLIENT_NO_SCHEMA                Don't allow database.table.column
+0x0020 CLIENT_COMPRESS                 Can use compression protocol
+0x0040 CLIENT_ODBC                     Odbc client
+0x0080 _`CLIENT_LOCAL_FILES`           Can use LOAD DATA LOCAL
+0x0100 CLIENT_IGNORE_SPACE             Ignore spaces before '('
+0x0200 _`CLIENT_PROTOCOL_41`           New 4.1 protocol
+0x0400 CLIENT_INTERACTIVE              This is an interactive client
+0x0800 CLIENT_SSL                      Switch to SSL after handshake
+0x1000 CLIENT_IGNORE_SIGPIPE           IGNORE sigpipes
+0x2000 CLIENT_TRANSACTIONS             Client knows about transactions
+0x4000 CLIENT_RESERVED                 Old flag for 4.1 protocol 
+0x8000 CLIENT_SECURE_CONNECTION        New 4.1 authentication
+====== ==============================  ==================================
+
+
+
+Auth Response Packet
+--------------------
+
+The client answers the `Auth Challenge Packet`_ with:
+
+* its capability flags
+* its password hashed with challenge
+
+If the capabilities have a `CLIENT_PROTOCOL_41`_ flag set the response packet is::
+
+  Auth Response Packet 4.1+
+    payload:
+      4              capability flags
+      4              max-packet size
+      1              character set
+      string[23]     reserved
+      string         username
+        if capabilities & SECURE_CONNECTION:
+      lenenc-str     auth-response
+        else:
+      string         auth-response
+        all:
+      string[p]      database       
+
+If not, it is::
+
+  Auth Response Packet pre-4.1
+    payload:
+      2              capability flags
+      3              max-packet size
+      string         username
+      string         auth-response
+
+`capability flags` are the same as defined in the `Capability flags`_ of the `Auth Challenge Packet`_ plus:
+
+========== ==============================  ==================================
+flags      constant name                   description
+========== ==============================  ==================================
+0x00010000 _`CLIENT_MULTI_STATEMENTS`      Enable/disable multi-stmt support
+0x00020000 _`CLIENT_MULTI_RESULTS`         Enable/disable multi-results
+0x00040000 _`CLIENT_PS_MULTI_RESULTS`      Multi-results in PS-protocol
+0x40000000 CLIENT_SSL_VERIFY_SERVER_CERT
+0x80000000 CLIENT_REMEMBER_OPTIONS
+========== ==============================  ==================================
+
+
+
+Old Password Auth Challenge Packet
+----------------------------------
+
+In case the server stored a password in the OLD_PASSWORD() fashion for this
+user the client has to use another hash for the password.
+
+::
+
+  Old Password Auth Challenge Packet
+    ask the client to send the password hashed with insecure hash-function
+
+    payload:
+      1              [fe]
+
+    example:
+      01 00 00 02 fe 
+
+Old Password Auth Response Packet
+---------------------------------
+
+::
+
+  Old Password Auth Response Packet
+    the password hashed with old, insecure hash-function
+
+    payload:
+      string         auth-response
+
+    example:
+      09 00 00 03 5c 49 4d 5e    4e 58 4f 47 00             ....\IM^NXOG.
+  
+
+
+The Command Phase
+=================
+
+In the command phase the client sends a command packet with the sequence-id [00]::
+
+   13 00 00 00 03 53 ... 
+   01 00 00 00 01 
+               ^^- command-byte
+            ^^---- sequence-id == 0
+
+The first byte of the payload describes the command-type like:
+
+===  ======================
+hex  constant name 
+===  ======================
+00   `COM_SLEEP`_
+01   `COM_QUIT`_
+02   `COM_INIT_DB`_
+03   `COM_QUERY`_
+04   `COM_FIELD_LIST`_
+05   `COM_CREATE_DB`_
+06   `COM_DROP_DB`_
+07   `COM_REFRESH`_
+08   `COM_SHUTDOWN`_
+09   `COM_STATISTICS`_
+0a   `COM_PROCESS_INFO`_
+0b   `COM_CONNECT`_
+0c   `COM_PROCESS_KILL`_
+0d   `COM_DEBUG`_
+0e   `COM_PING`_
+0f   `COM_TIME`_
+10   `COM_DELAYED_INSERT`_
+11   `COM_CHANGE_USER`_
+12   COM_BINLOG_DUMP
+13   `COM_TABLE_DUMP`_
+14   `COM_CONNECT_OUT`_
+15   COM_REGISTER_SLAVE
+16   `COM_STMT_PREPARE`_
+17   `COM_STMT_EXECUTE`_
+18   `COM_STMT_SEND_LONG_DATA`_
+19   `COM_STMT_CLOSE`_
+1a   `COM_STMT_RESET`_
+1b   `COM_SET_OPTION`_
+1c   `COM_STMT_FETCH`_
+1d   `COM_DAEMON`_
+===  ======================
+
+.. _COM_SLEEP: `unhandled commands`_
+.. _COM_CONNECT: `unhandled commands`_
+.. _COM_TIME: `unhandled commands`_
+.. _COM_DELAYED_INSERT: `unhandled commands`_
+.. _COM_CONNECT_OUT: `unhandled commands`_
+.. _COM_TABLE_DUMP: `unhandled commands`_
+.. _COM_DAEMON: `unhandled commands`_
+
+The commands belong to 
+
+* the `Old Commands`_
+* the `Prepared Statements`_ Commands
+* the `Stored Procedures`_ Commands
+* or the Replication Commands
+
+Old Commands
+============
+
+The old commands are supported for all MySQL Server versions from 3.23 upwards (and perhaps older).
+
+unhandled commands
+------------------
+
+* COM_SLEEP
+* COM_CONNECT
+* COM_TIME
+* COM_DELAYED_INSERT
+* COM_DAEMON
+
+These commands are only used internally by the server or are deprecated. Sending the to the server always results in a 
+`ERR packet`_.
+
+COM_QUIT
+--------
+
+::
+
+  COM_QUIT
+    tells the server that the client wants to close the connection
+
+    direction: client -> server
+    response: either a connection close or a OK packet
+    
+    payload:
+      1              [01] COM_QUIT
+
+    Example:
+      01 00 00 00 01
+
+COM_INIT_DB
+-----------
+
+::
+
+  COM_INIT_DB
+    change the default schema of the connection
+
+    direction: client -> server
+    response: OK or ERR
+
+    payload:
+      1              [02] COM_INIT_DB
+      string[p]      schema name
+
+    example:
+      05 00 00 00 02 74 65 73    74                         .....test     
+
+COM_QUERY
+---------
+
+A COM_QUERY is used to send the server a text-based query that is executed immediately.
+
+The server replies to a COM_QUERY packet with a `COM_QUERY Response`_.
+
+::
+
+  COM_QUERY
+    tells the server to execute a text-based query
+
+    direction: client -> server
+    
+    payload:
+      1              [03] COM_QUERY
+      string[p]      the query the server shall execute
+
+    Example:
+      21 00 00 00 03 73 65 6c    65 63 74 20 40 40 76 65    !....select @@ve
+      72 73 69 6f 6e 5f 63 6f    6d 6d 65 6e 74 20 6c 69    rsion_comment li
+      6d 69 74 20 31                                        mit 1           
+
+The length of the query-string is a taken from the packet length - 1.
+
+API call: `mysql_query() <http://dev.mysql.com/doc/refman/5.1/en/mysql-query.html>`_
+
+
+COM_QUERY Response
+..................
+
+The query-response packet is a meta packet which can be one of
+
+* a `ERR packet`_
+* a `OK packet`_
+* a `LOCAL INFILE request`_
+* a `Text Resultset`_
+
+The type of the packet is defined by the type-identifier::
+
+  COM_QUERY response
+    response to a COM_QUERY packet
+
+    payload
+      lenenc-int     number of columns in the resultset
+
+If the number of columns in the resultset is 0, this is a `OK packet`_.
+
+If it is not a valid `length encoded integer`_ it is a either a `ERR packet`_ or a `LOCAL INFILE request`_. 
+
+Text Resultset
+**************
+
+A Text Resultset is a possible `COM_QUERY Response`_. 
+
+It is made up of a two parts:
+
+* the column definition
+* the rows
+
+which consists of a sequence of packets.
+
+The column defintion is starts with a packet containing the column-count and is
+followed by as many `Column Definition`_ packets as we have columns and is terminated
+by a `EOF packet`.
+
+Each row is a packet too. The rows are terminated by another `EOF packet`_. In case 
+the query could generate the column-definition, but generating the rows afterwards
+failed a `ERR packet`_ may be sent instead of the last `EOF packet`_.
+
+* a packet containing a `length encoded integer`_ column-count
+* column-count * `Column Definition`_ packets
+* `EOF packet`_
+* row-count * packets as in `Text Resultset Row`_ format
+* `EOF packet`_
+
+In the example we use `|` to show the packet borders::
+  
+  01 00 00 01 01|27 00 00    02 03 64 65 66 00 00 00    .....'....def...
+  11 40 40 76 65 72 73 69    6f 6e 5f 63 6f 6d 6d 65    .@@version_comme
+  6e 74 00 0c 08 00 1c 00    00 00 fd 00 00 1f 00 00|   nt..............
+  05 00 00 03 fe 00 00 02    00|1d 00 00 04 1c 4d 79    ..............My
+  53 51 4c 20 43 6f 6d 6d    75 6e 69 74 79 20 53 65    SQL Community Se
+  72 76 65 72 20 28 47 50    4c 29|05 00 00 05 fe 00    rver (GPL)......
+  00 02 00                                              ...             
+
+It has one column (`01 00 00 01 01`) and a field named `@@version_comment` whichs is a `MYSQL_TYPE_VAR_STRING`_ [fd].
+It has one row and its one value is `MySQL Community Server (GPL)`.
+
+If the `SERVER_MORE_RESULTS_EXISTS`_ flag is set in the last `EOF packet`_ a `multi-resultset`_ is sent.
+
+
+It may also be resultset with an closing `ERR packet`_:
+
+* a packet containing a `length encoded integer`_ column-count
+* column-count * `Column Definition`_ packets
+* `EOF packet`_
+* `ERR packet`_
+
+which is generated for queries like `EXPLAIN SELECT * FROM dual`.
+
+Column Types
+,,,,,,,,,,,,
+
+===  ======================
+hex  constant name 
+===  ======================
+00   _`MYSQL_TYPE_DECIMAL`
+01   _`MYSQL_TYPE_TINY`
+02   _`MYSQL_TYPE_SHORT`
+03   _`MYSQL_TYPE_LONG`
+04   _`MYSQL_TYPE_FLOAT`
+05   _`MYSQL_TYPE_DOUBLE`
+06   _`MYSQL_TYPE_NULL`
+07   _`MYSQL_TYPE_TIMESTAMP`
+08   _`MYSQL_TYPE_LONGLONG`
+09   _`MYSQL_TYPE_INT24`
+0a   _`MYSQL_TYPE_DATE`
+0b   _`MYSQL_TYPE_TIME`
+0c   _`MYSQL_TYPE_DATETIME`
+0d   _`MYSQL_TYPE_YEAR`
+0e   _`MYSQL_TYPE_NEWDATE`
+0f   _`MYSQL_TYPE_VARCHAR`
+10   _`MYSQL_TYPE_BIT`
+f6   _`MYSQL_TYPE_NEWDECIMAL`
+f7   _`MYSQL_TYPE_ENUM`
+f8   _`MYSQL_TYPE_SET`
+f9   _`MYSQL_TYPE_TINY_BLOB`
+fa   _`MYSQL_TYPE_MEDIUM_BLOB`
+fb   _`MYSQL_TYPE_LONG_BLOB`
+fc   _`MYSQL_TYPE_BLOB`
+fd   _`MYSQL_TYPE_VAR_STRING`
+fe   _`MYSQL_TYPE_STRING`
+ff   _`MYSQL_TYPE_GEOMETRY`
+===  ======================
+
+Column Definition
+,,,,,,,,,,,,,,,,,
+
+If the PROTOCOL_41 capability is set::
+
+  Column Definition - 4.1+
+
+    payload:
+      lenenc-str     catalog
+      lenenc-str     schema
+      lenenc-str     table
+      lenenc-str     org_table
+      lenenc-str     name
+      lenenc-str     org_name
+      1              filler [00]
+      2              character set
+      4              column length
+      1              type
+      2              flags
+      1              decimals
+      2              filler [00] [00]
+
+If not ::
+
+  Column Definition - pre-4.1
+
+    payload:
+      lenenc-str     table
+      lenenc-str     name
+      1              [03]
+      3              column length
+      1              [01]
+      1              type
+      1              [02] or [03]
+        if above field == 02:
+      1              flags
+        if ... == 03:
+      2              flags
+        all:
+      1              decimals
+
+Text Resultset Row
+,,,,,,,,,,,,,,,,,,
+
+A row with the data for each column. 
+
+* Integers are sent as `length encoded integer`_.
+* everything else sent as `length encoded string`_. 
+
+If a field is NULL `0xfb` is sent as described in `length encoded integer`_.
+
+EOF packet
+,,,,,,,,,,
+
+::
+
+  EOF
+  
+    direction: server -> client
+
+    payload:
+      1              [fe] the EOF header
+        if capabilities & PROTOCOL_41:
+      2              warning count
+      2              status flags
+
+    example:
+      05 00 00 05 fe 00 00 02 00
+ 
+The status flags are a bit-field as defined in the `Status Flags`_ of the `OK packet`_.
+
+LOCAL INFILE request
+********************
+
+If the client wants to LOAD DATA from a LOCAL file into the server it sends::
+
+  LOAD DATA LOCAL INFILE '<filename>' INTO TABLE <table>;  
+
+The LOCAL keyword triggers the server to send a LOAD INFILE packet asks the client
+to send the file via a `LOCAL INFILE data`_ response.
+
+The client has to set the `CLIENT_LOCAL_FILES`_ capability.
+
+::
+
+  LOCAL INFILE packet
+
+    direction: server -> client
+    response: LOCAL INFILE data
+
+    payload:
+      1              [fb] LOCAL INFILE 
+      string[p]      filename the client shall send
+
+    example:
+      0c 00 00 01 fb 2f 65 74    63 2f 70 61 73 73 77 64    ...../etc/passwd
+
+LOCAL INFILE data
+,,,,,,,,,,,,,,,,,
+
+The client sends its file data AS IS to the server in response to a `LOCAL INFILE request`_.
+
+::
+
+   LOAD INFILE data
+
+     direction: client data
+
+     payload:
+       n             the filedata
+
+COM_FIELD_LIST
+--------------
+
+::
+
+  COM_FIELD_LIST
+    get the column definition of a tables
+
+    direction: client -> server
+    response: 
+
+    payload:
+      1              [04] COM_FIELD_LIST
+      string         table
+      string[p]      field wildcard
+
+API call: `mysql_list_fields() <http://dev.mysql.com/doc/refman/5.1/en/mysql-list-fields.html>`_
+
+COM_FIELD_LIST response
+.......................
+
+The response to a `COM_FIELD_LIST`_ can either be a
+
+* a `ERR packet`_ or the
+* first half of a `Text Resultset`_
+
+  * a packet containing a `length encoded integer`_ column-count
+  * column-count * `Column Definition`_ packets
+  * `EOF packet`_
+
+COM_CREATE_DB
+-------------
+
+::
+
+  COM_CREATE_DB
+    create a schema
+
+    direction: client -> server
+    response: OK or ERR
+
+    payload:
+      1              [05] COM_CREATE_DB
+      string[p]      schema name
+
+    example:
+      05 00 00 00 05 74 65 73    74                         .....test     
+
+COM_DROP_DB
+-----------
+
+::
+
+  COM_DROP_DB
+    drop a schema
+
+    direction: client -> server
+    response: OK or ERR
+
+    payload:
+      1              [06] COM_DROP_DB
+      string[p]      schema name
+
+    example:
+      05 00 00 00 06 74 65 73    74                         .....test     
+
+COM_REFRESH
+-----------
+
+a low-level version of several `FLUSH ...` and `RESET ...` commands.
+
+====  ===============  ===========
+flag  constant name    description
+====  ===============  ===========
+0x01  REFRESH_GRANT    Refresh grant tables `FLUSH PRIVILEGES`
+0x02  REFRESH_LOG      Start on new log file `FLUSH LOGS`
+0x04  REFRESH_TABLES   close all tables `FLUSH TABLES`
+0x08  REFRESH_HOSTS    Flush host cache `FLUSH HOSTS`
+0x10  REFRESH_STATUS   Flush status variables `FLUSH STATUS`
+0x20  REFRESH_THREADS  Flush thread cache
+0x40  REFRESH_SLAVE    Reset master info and restart slave thread `RESET SLAVE`
+0x80  REFRESH_MASTER   Remove all bin logs in the index and truncate the index `RESET MASTER`
+====  ===============  ===========
+
+::
+
+  COM_REFRESH
+    get a list of active threads
+
+    direction: client -> server
+    response: OK or ERR
+
+    payload:
+      1              [07] COM_REFRESH
+      1              flags
+
+COM_SHUTDOWN
+------------
+
+COM_SHUTDOWN is used to shutdown the mysql-server. 
+
+Even if several shutdown types are define, right now only one is use: SHUTDOWN_WAIT_ALL_BUFFERS
+
+==== ============================== ===========
+type constant name                  description
+==== ============================== ===========
+0x00 SHUTDOWN_DEFAULT               defaults to SHUTDOWN_WAIT_ALL_BUFFERS
+0x01 SHUTDOWN_WAIT_CONNECTIONS      wait for existing connections to finish
+0x02 SHUTDOWN_WAIT_TRANSACTIONS     wait for existing trans to finish
+0x08 SHUTDOWN_WAIT_UPDATES          wait for existing updates to finish (=> no partial MyISAM update)
+0x10 SHUTDOWN_WAIT_ALL_BUFFERS      flush InnoDB buffers and other storage engines' buffers
+0x11 SHUTDOWN_WAIT_CRITICAL_BUFFERS don't flush InnoDB buffers, flush other storage engines' buffers
+0xfe KILL_QUERY
+0xff KILL_CONNECTION
+==== ============================== ===========
+
+`SHUTDOWN` privilege is required.
+
+::
+
+  COM_SHUTDOWN
+    get a list of active threads
+
+    direction: client -> server
+    response: EOF or ERR
+
+    payload:
+      1              [08] COM_SHUTDOWN
+        if shutdown type != 0x00:
+      1              shutdown type
+
+Clients before 4.1.3 don't send the `shutdown type`. `0x00` is assumed in that case.
+
+COM_STATISTICS
+--------------
+
+Get a human readable string of internal statistics.
+
+::
+
+  COM_STATISTICS
+    get a list of active threads
+
+    direction: client -> server
+    response: string[p]
+
+    payload:
+      1              [09] COM_STATISTICS
+
+
+COM_PROCESS_INFO
+----------------
+
+The COM_PROCESS_INFO command is deprecated. `SHOW PROCESSLIST` should be used instead.
+
+It either returns a:
+
+* `Text Resultset`_ or
+* `ERR packet`_.
+
+::
+
+  COM_PROCESS_INFO
+    get a list of active threads
+
+    direction: client -> server
+    response: resultset or ERR
+
+    payload:
+      1              [0a] COM_PROCCESS_INFO
+
+COM_PROCESS_KILL
+----------------
+
+Same as `KILL <id>`.
+
+::
+
+  COM_PROCESS_KILL
+    ask the server to terminate a connection
+
+    direction: client -> server
+    response: OK or ERR
+
+    payload:
+      1              [0c] COM_PROCCESS_KILL
+      4              connection id
+
+
+COM_DEBUG
+---------
+
+COM_DEBUG triggers a dump on internal debug info to stdout of the mysql-server. 
+
+The `SUPER` privilege is required for this operation.
+
+::
+
+  COM_DEBUG
+    dump debug info to stdout
+
+    direction: client -> server
+    response: EOF or ERR
+
+    payload:
+      1              [0d] COM_DEBUG
+
+
+COM_PING
+--------
+
+::
+
+  COM_PING
+    check if the server is alive
+
+    direction: client -> server
+    response: OK
+
+    payload:
+      1              [0e] COM_PING
+
+COM_CHANGE_USER
+---------------
+
+COM_CHANGE_USER changes the user of the current connection and reset the connection state.
+
+* user variables
+* temp tables
+* prepared statemants
+* ... and others
+
+::
+
+  COM_CHANGE_USER
+    change the user of the current connection
+
+    direction: client -> server
+    response: EOF or ERR
+
+    payload:
+      1              [11] COM_CHANGE_USER
+      string         user
+        if capabilities & SECURE_CONNECTION:
+      lenenc-str     auth-response
+        else:
+      string         auth-response
+        all:
+      string         schema-name
+        if more bytes in packet:
+      2              character-set
+
+Prepared Statements
+===================
+
+The prepared statement protocol was introduced in MySQL 4.1 and adds a few new commands:
+
+* `COM_STMT_PREPARE`_
+* `COM_STMT_EXECUTE`_
+* `COM_STMT_CLOSE`_
+* `COM_STMT_RESET`_
+* `COM_STMT_SEND_LONG_DATA`_
+
+It also defines a more compact resultset format that is used instead of the `Text Resultset`_ to
+return resultsets.
+
+Keep in mind that not all statements can be prepared:
+
+  http://forge.mysql.com/worklog/task.php?id=2871
+
+Binary Protocol Resultset
+-------------------------
+
+Binary Protocol Resultset is similar the `Text Resultset`_. It just contains the rows in 
+`Binary Protocol Resultset Row`_ format.
+
+* lenenc column-count
+* column-count * `Column Definition`_
+* `EOF packet`_
+* n * rows as in `Binary Protocol Resultset Row`_
+* `EOF packet`_
+
+Example::
+
+    01 00 00 01 01|1a 00 00    02 03 64 65 66 00 00 00    ..........def...
+    04 63 6f 6c 31 00 0c 08    00 06 00 00 00 fd 00 00    .col1...........
+    1f 00 00|05 00 00 03 fe    00 00 02 00|09 00 00 04    ................
+    00 00 06 66 6f 6f 62 61    72|05 00 00 05 fe 00 00    ...foobar.......
+    02 00                                                 ..     
+
+Binary Protocol Resultset Row
+-----------------------------
+
+A Binary Protocol Resultset Row is made up of the bit-mask containing as many bits as we have columns in the
+resultset + 2 and the values for columns that are not NULL in the `Binary Protocol Value`_ format.
+
+::
+
+  Binary Protocol Resultset Row
+    row of a binary resultset (COM_STMT_EXECUTE)
+
+    payload:
+      1              packet header [00]
+      n              nul-bit-mask if length (column-count + 7 + 2) / 8
+      n              values
+
+    example:
+      09 00 00 04 00 00 06 66 6f 6f 62 61 72
+
+Binary Protocol Value 
+----------------------
+
+* Strings like `MYSQL_TYPE_STRING`_ `MYSQL_TYPE_BLOB`_ and `MYSQL_TYPE_DECIMAL`_::
+
+    lenenc-str       string
+
+    example:
+      03 66 6f 6f -- string = "foo"
+
+* `MYSQL_TYPE_LONGLONG`_::
+
+    8                integer least significant byte first
+
+    example:
+      01 00 00 00 00 00 00 00 -- int64 = 1
+
+* `MYSQL_TYPE_LONG`_ and `MYSQL_TYPE_INT24`_::
+
+    4                integer least significant byte first
+
+    example:
+      01 00 00 00 -- int32 = 1
+
+* `MYSQL_TYPE_SHORT`_::
+
+    2                integer least significant byte first
+
+    example:
+      01 00 -- int16 = 1
+
+* `MYSQL_TYPE_TINY`_::
+
+    1                integer
+
+    example:
+      01 -- int8 = 1
+
+* `MYSQL_TYPE_DOUBLE`_::
+
+    8                double
+
+    example:
+      66 66 66 66 66 66 24 40 -- double = 10.2
+
+* `MYSQL_TYPE_FLOAT`_::
+
+    4                float
+
+    example:
+      33 33 23 41 -- float = 10.2
+
+* `MYSQL_TYPE_DATE`_::
+
+    1               [04] length of the encoded value
+    2               year
+    1               month
+    1               day
+  
+    example: 
+      04 da 07 0a 11 -- date = 2010-10-17
+
+* `MYSQL_TYPE_DATETIME`_::
+
+    1               [0b] length of the encoded value
+    2               year
+    1               month
+    1               day
+    1               hour
+    1               minutes
+    1               seconds
+    4               nseconds
+  
+    example: 
+      0b da 07 0a 11 13 1b 1e 01 00 00 00 -- datetime 2010-10-17 19:27:30.000 000 001
+
+* `MYSQL_TYPE_TIME`_::
+
+    1               [0c] length of the encoded value
+    1               sign (1 if minus, 0 for plus)
+    4               days
+    1               hour
+    1               minutes
+    1               seconds
+    4               nseconds
+  
+    example: 
+      0c 01 78 00 00 00 13 1b 1e 01 00 00 00 -- time  -120d 19:27:30.000 000 001
+
+* `MYSQL_TYPE_TIMESTAMP`_::
+
+     1               [0b] length of the encoded value
+     2               year
+     1               month
+     1               day
+     1               hour
+     1               minutes
+     1               seconds
+     4               nseconds
+
+     example: 
+       0b da 07 0a 11 13 1b 1e 01 00 00 00 -- timestamp 
+  
+
+
+COM_STMT_PREPARE
+----------------
+
+COM_STMT_PREPARE creates a prepared statement from the passed query string.
+
+The server returns a `COM_STMT_PREPARE Response`_ which contains a statement-id which is
+used to identify the prepared statement.
+
+::
+
+  COM_STMT_PREPARE
+    create a prepared statement 
+
+    direction: client -> server
+    response: COM_STMT_PREPARE response
+
+    payload:
+      1              [16] the COM_STMT_PREPARE command
+      string[p]      the query to prepare
+
+    example:
+      1c 00 00 00 16 53 45 4c    45 43 54 20 43 4f 4e 43    .....SELECT CONC
+      41 54 28 3f 2c 20 3f 29    20 41 53 20 63 6f 6c 31    AT(?, ?) AS col1
+
+
+COM_STMT_PREPARE response
+.........................
+
+If the `COM_STMT_PREPARE`_ succeeded, it sends:
+
+* `COM_STMT_PREPARE OK packet`_
+* if num-params > 0
+
+  * num-params * `Column Definition`_
+  * `EOF packet`_
+
+* if num-columns > 0
+
+  * num-colums * `Column Definition`_
+  * `EOF packet`_
+
+Example::
+  
+   0c 00 00 01 00 01 00 00    00 01 00 02 00 00 00 00|   ................
+   17 00 00 02 03 64 65 66    00 00 00 01 3f 00 0c 3f    .....def....?..?
+   00 00 00 00 00 fd 80 00    00 00 00|17 00 00 03 03    ................
+   64 65 66 00 00 00 01 3f    00 0c 3f 00 00 00 00 00    def....?..?.....
+   fd 80 00 00 00 00|05 00    00 04 fe 00 00 02 00|1a    ................
+   00 00 05 03 64 65 66 00    00 00 04 63 6f 6c 31 00    ....def....col1.
+   0c 3f 00 00 00 00 00 fd    80 00 1f 00 00|05 00 00    .?..............
+   06 fe 00 00 02 00                                     ...... 
+  
+for a query without parameters and resultset like "DO 1" it is::
+  
+   0c 00 00 01 00 01 00 00    00 00 00 00 00 00 00 00
+
+If it failed, a `ERR packet`_ is sent.
+
+As LOAD DATA isn't supported by `COM_STMT_PREPARE`_ yet, no is `LOCAL INFILE request`_ expected here.
+Compare this to `COM_QUERY response`_.
+
+COM_STMT_PREPARE OK packet
+**************************
+
+The `COM_STMT_PREPARE response`_ starts a packet which contains the meta-information for the following packets::
+
+  COM_STMT_PREPARE OK
+    OK response to a COM_STMT_PREPARE packet 
+
+    direction: server -> client
+
+    payload:
+      1              [00] OK
+      4              statement-id
+      2              num-columns
+      2              num-params
+      1              [00] filler
+      2              warning count
+
+
+COM_STMT_EXECUTE
+----------------
+
+COM_STMT_EXECUTE asks the server to execute a prepared statement as identified by `stmt-id`.
+
+It sends the values for the placeholders of the prepared statement (if it contained any) in
+`Binary Protocol Value`_ form. The type of each parameter is made up of two bytes:
+
+* the type as in `Column Types`_
+* a flag byte which has the highest bit set if the type is unsigned [80]
+
+The `num-params` used for this packet has to match the `num-params` of the `COM_STMT_PREPARE OK packet`_
+of the corresponding prepared statement.
+
+The server returns a `COM_STMT_EXECUTE Response`_.
+
+::
+ 
+  COM_STMT_EXECUTE
+    execute a prepared statement
+
+    direction: client -> server
+    response: COM_STMT_EXECUTE Response
+
+    payload:
+      1              [17] COM_STMT_EXECUTE
+      4              stmt-id
+      1              flags
+      4              iteration-count
+        if num-params > 0:
+      n              nul-bit-map, length: (num-params+7)/8
+      1              new-params-bound-flag
+        if new-params-bound-flag == 1:
+      n              type of each parameter, length: num-params * 2
+      n              value of each parameter
+ 
+    example: 
+      12 00 00 00 17 01 00 00    00 00 01 00 00 00 00 01    ................
+      0f 00 03 66 6f 6f                                     ...foo
+
+The `iteration-count` is always `1`.
+
+The `flags` are:
+
+===== =============
+flags constant name
+===== =============
+0x00  CURSOR_TYPE_NO_CURSOR
+0x01  CURSOR_TYPE_READ_ONLY
+0x02  CURSOR_TYPE_FOR_UPDATE
+0x04  CURSOR_TYPE_SCROLLABLE
+===== =============
+
+
+COM_STMT_EXECUTE Response
+.........................
+
+Similar to the `COM_QUERY Response`_ a `COM_STMT_EXECUTE`_ either returns:
+
+* a `OK packet`_
+* a `ERR packet`_
+* or a resultset: `Binary Protocol Resultset`_
+
+COM_STMT_SEND_LONG_DATA
+-----------------------
+
+COM_STMT_SEND_LONG_DATA sends the data for a column. Repeating to send it, appends the data to the parameter.
+
+No response is sent back to the client.
+
+::
+
+  COM_STMT_SEND_LONG_DATA
+    direction: client -> server
+    response: none
+
+    payload:
+      1              [18] COM_STMT_SEND_LONG_DATA
+      4              statement-id
+      2              param-id
+      n              data
+ 
+
+COM_STMT_CLOSE
+--------------
+
+a COM_STMT_CLOSE deallocates a prepared statement
+
+No response is sent back to the client.
+
+::
+
+  COM_STMT_CLOSE
+    direction: client -> server
+    response: none
+
+    payload:
+      1              [19] COM_STMT_CLOSE
+      4              statement-id
+ 
+    example: 
+      05 00 00 00 19 01 00 00    00                         ......... 
+
+  
+COM_STMT_RESET
+--------------
+
+a COM_STMT_RESET resets the data of a prepared statement. Useful in together with `COM_STMT_SEND_LONG_DATA`_.
+
+The server will send a `OK packet`_ if the statement could be reset, a `ERR packet`_ if not.
+
+::
+
+  COM_STMT_RESET
+    direction: client -> server
+    response: OK or ERR
+
+    payload:
+      1              [1a] COM_STMT_RESET
+      4              statement-id
+ 
+    example: 
+      05 00 00 00 1a 01 00 00    00                         ......... 
+
+  
+Stored Procedures
+=================
+
+In MySQL 5.0 the protocol was extended to handle:
+
+* `multi-resultset`_
+* `multi-statement`_
+
+Multi-resultset
+---------------
+
+Multi-resultsets are sent up stored procedures if more than one resultset was generated inside of it::
+
+  CREATE TEMPORARY TABLE ins ( id INT );
+  DROP PROCEDURE IF EXISTS multi;
+  DELIMITER $$
+  CREATE PROCEDURE multi() BEGIN
+    SELECT 1;
+    SELECT 1;
+    INSERT INTO ins VALUES (1);
+    INSERT INTO ins VALUES (2);
+  END$$
+  DELIMITER ;
+
+  CALL multi();
+  DROP TABLE ins; 
+
+results in:
+
+* a resultset::
+
+    01 00 00 01 01 17 00 00    02 03 64 65 66 00 00 00    ..........def...
+    01 31 00 0c 3f 00 01 00    00 00 08 81 00 00 00 00    .1..?...........
+    05 00 00 03 fe 00 00 0a    00 02 00 00 04 01 31 05    ..............1.
+    00 00 05 fe 00 00 0a 00                               ........        
+
+  * see the `EOF packet`_: `05 00 00 03 fe 00 00 0a 00` with its status-flag being `0a`
+
+* the 2nd resultset::
+
+    01 00 00 06 01 17 00 00    07 03 64 65 66 00 00 00    ..........def...
+    01 31 00 0c 3f 00 01 00    00 00 08 81 00 00 00 00    .1..?...........
+    05 00 00 08 fe 00 00 0a    00 02 00 00 09 01 31 05    ..............1.
+    00 00 0a fe 00 00 0a 00                               ........        
+
+  * see the `EOF packet`_: `05 00 00 0a fe 00 00 0a 00` with its status-flag being `0a`
+
+* ... and a closing empty resultset, a `OK packet`_::
+
+    07 00 00 0b 00 01 00 02    00 00 00                   ...........     
+
+`SERVER_MORE_RESULTS_EXISTS`_ is set to indicate that more resultsets will follow.
+
+The trailing `OK packet`_ is the response to the CALL statement and contains the affected rows of
+the last statement. In our case we INSERTed 2 rows, but only the `affected_rows` of the 
+last INSERT statement is returned as part of the `OK packet`_. If the last statement is a SELECT
+the affected rows is 0.
+
+The client has to announce that it wants multi-resultsets by either setting the `CLIENT_MULTI_RESULTS`_ or 
+`CLIENT_PS_MULTI_RESULTS`_ capability.
+
+Multi-statement
+---------------
+
+A multi-statement is allowing COM_QUERY to send more than one query to the server, separated by a ';'.
+
+The client has to announce that it wants multi-statements by either setting the `CLIENT_MULTI_STATEMENTS`_ capability
+or by using `COM_SET_OPTION`_.
+
+COM_SET_OPTION
+--------------
+
+Allows to enable and disable:
+
+* `CLIENT_MULTI_STATEMENTS`_
+
+for the current connection. The option operation is one of:
+
+=== =============
+op  constant name
+=== =============
+0   MYSQL_OPTION_MULTI_STATEMENTS_ON
+1   MYSQL_OPTION_MULTI_STATEMENTS_OFF
+=== =============
+
+On success it returns a `EOF packet`_ otherwise a `ERR packet`_.
+
+::
+
+  COM_SET_OPTION
+    set options for the current connection
+
+    response: EOF or ERR
+
+    payload:
+      1              [1b] COM_SET_OPTION
+      2              option operation
+
+COM_STMT_FETCH
+--------------
+
+::
+
+  COM_STMT_FETCH
+
+    response: binary rows or ERR
+
+    payload:
+      1              [1c] COM_STMT_FETCH
+      4              stmt-id
+      4              num rows
+
+COM_STMT_FETCH response
+.......................
+
+A fetch may result:
+
+* a `multi-resultset`_
+* a `ERR packet`_
+

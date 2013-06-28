@@ -1,0 +1,8 @@
+msc {
+	client, proxy, server;
+
+	client->proxy [ label = "COMMIT" ];
+	proxy->server [ label = "ROLLBACK" ];
+	server->proxy [ label = "OK" ];
+	proxy->client [ label = "ERR: deadlock" ];
+}

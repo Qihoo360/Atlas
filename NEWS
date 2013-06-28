@@ -1,0 +1,159 @@
+0.8.2 - 
+
+  * added support for binlog checksums
+  * added support for decoding _all_ datatypes of the RBR protocol
+  * added support for OUT params in prepared statements in SPs with MySQL 5.5.x
+  * fixed handling of SPs with cursors with MySQL 5.5.x (#61998)
+  * fixed handling a "used columns" in the RBR protocol
+  * fixed possible crash if run under valgrind
+  * fixed crash if --defaults-file doesn't exist (#59790)
+  * fixed stripping first characters of log-messages (#58941)
+  * fixed mem-leak if connection-pooling is used (#56620)
+  * removed bogus timestamp log if state-tracking isn't compiled in
+  * removed the "admin" plugin from the list of plugins loaded by default
+
+0.8.1 - 
+
+  * remove unix-socket on shutdown
+  * fixed handling of LOAD DATA LOCAL INFILE (#51864)
+  * fixed mem-leak on connect for pre-4.1 clients
+  * fixed initial error-packet sent to client if all backends are down (#45417)
+  * don't try to set a fd-limit if the user didn't explicitly tried to raise it
+  * fixed hard-limit in case the fdlimit is set (#48120)
+  * fixed traversing a resultset in Lua if it contained NULL fields
+  * strip the top_srcdir from the leading source filenames in log-messages
+
+  SQL Tokenizer
+  * fixed parsing of literals that start with a digit (#49716)
+  * added parsing of floats in scientific notation
+
+  Proxy Plugin
+  * fixed query forwarding of time goes backwards (#50806)
+  * allow to intercept LOAD DATA and SHOW ERROR commands
+
+  Admin Plugin
+  * removed the default values for --admin-username and --admin-password
+  * enforce --admin-username, --admin-password and --admin-lua-script to be set
+    if the admin plugin is loaded (#53429)
+  
+  API
+  * deprecated a unused network_mysqld_com_query_result_track_state()
+  * deprecated chassis_set_fdlimit() in favour of chassis_fdlimit_set()
+  * fixed thread-safety for network_address_set_address() (#49099)
+  * split the chassis.c into chassis_frontend_*.c to allow custom frontends
+  * added shutdown hooks to free the global memory of 3rd party libs like openssl
+  * removed con->in_load_data_local
+
+0.8.0 - 2010-01-21
+
+  * added a threaded event handling layer
+  * added support to change the auth-response on the way to the backend
+  * added timing infrastruture
+  * added out-of-tree plugins builds and pkg-config support
+  * fixed handling of broken length encoded data in resultsets
+  * fixed version encoding in win32 (#45996)
+  * fixed too small listen backlog() (#43278)
+  * fixed configure check if flex is really installed (#45766)
+  * fixed handling of >16M packets (#35202)
+  * fixed parsing of invalid IP-addresses (#47273)
+  * fixed off-by-one line-numbers in Lua stackstraces (#47348)
+
+0.7.2 - 2009-06-30
+
+  * fixed memory leak proxy plugin (#45272)
+  * fixed ro-balance.lua (#45408)
+  * added CMake build files
+  * fixed portability issues for Win32
+  * added mysql-proxy-svc on Win32
+  * updated INSTALL file to cover all the build steps on win32
+
+0.7.1 - 2009-05-15
+
+  * fixed connection close at COM_REFRESH
+  * moved plugins to lib/mysql-proxy/plugins
+  * moved lua modules to lib/mysql-proxy/lua
+  * moved libs to lib/
+  * fixed detection of the base-dir for relative execs
+  * fixed decoding of binlog.event_type on sparc
+  * fixed build on freebsd and hpux
+
+0.7.0 - 
+
+  We changed the code-structure in 0.7.0:
+
+  * split the code into a command-line interface (chassis) and 
+    a library (proxy-core)
+  * moved the proxy and the admin code into plugins
+  * added a library and cmdline interface to dump binlogs incl. MySQL 5.1 RBR
+  * added mysql-myisam-dump to dump the content of a .FRM files and .MYD files
+
+  Details on the different sections are in the ChangeLog
+
+0.6.1 - 
+
+  * added new features to run-tests.lua (see README.TESTS)
+  * fixed error handling for socket functions on win32
+  * fixed sending fake server-greetings in connect_server()
+  * fixed assert()ions on write-errors 
+
+0.6.0 - 2007-09-11
+
+  * added --no-daemon and --pid-file
+  * added --no-proxy to disable the proxy 
+  * added testcases 
+  * added support for proxy.response.packets
+  * added hooks for read_auth(), read_handshake() and read_auth_result()
+  * added support in read_query_result() to overwrite the result-set
+  * added connection pooling
+  * added a global lua-scope proxy.global.* 
+  * added support for listening UNIX sockets
+  * added handling of proxy.connection.backend_ndx in connect_server() 
+    and read_query() aka read/write splitting
+  * added tokenizer for the SQL syntax
+
+  * fixed decoding of len-encoded ints for 3-byte notation
+  * fixed check for glib2 to require at least 2.6.0
+  * fixed mem-leak with proxy.response.* is used
+  * fixed handling of (SQL) NULL in result-sets
+  * fixed inj.resultset.affected_rows on SELECT queries
+  * fixed len-encoding on proxy.resulsets
+  * fixed assertion when all backends are down and we try to connect
+  * fixed assertion when connection to the MySQL 6.0.1
+  * fixed crash if proxy.connection is used in connect_server()
+  * fixed connection-stalling if read_query_result() throws an assert()ion
+  * fixed assertion at COM_SHUTDOWN (#29719)
+  * fixed assertion at login with empty password + empty default db (#29719)
+  * fixed assertion on result-packets like 
+    [ field-len | fields | EOF | ERR ] (#29732)
+  * fixed compilation on win32
+  * fixed assertion on COM_BINLOG_DUMP (#29764)
+  
+
+0.5.1 - 2007-06-30
+
+  * added script examples for rewriting and injection
+  * added support for UNIX sockets
+  * added protection against duplicate resultsets from a script
+  * added missing dependency to libmysqlclient-dev to the INSTALL file
+  * added support for pre-4.1 passwords in a 4.1 connection
+  * added inj.query_time and inj.response_time into the lua scripts
+  * added resultset.affected_rows and resultset.insert_id
+  * added proxy.VERSION
+
+  * changed --proxy.profiling to --proxy-skip-profiling
+
+  * fixed assertion when read_query_result() is not provided 
+    when PROXY_SEND_QUERY is used
+  * fixed warning if connect_server() is not provided
+  * fixed handling of duplicate ERR on COM_CHANGE_USER in MySQL 5.1.18+
+  * fixed compile error with MySQL 4.1.x on missing COM_STMT_*
+  * fixed mysql check in configure to die when mysql.h isn't detected
+  * fixed crash on fields > 250 bytes when the resultset is inspected
+  * fixed assertion when a error occurs at initial script exec time
+
+0.5.0 - 2007-06-19
+
+  * added GPLv2 headers to the build
+  * added automake/autoconf support
+  * added cmake support
+

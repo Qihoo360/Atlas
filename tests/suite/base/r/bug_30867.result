@@ -1,0 +1,7 @@
+select count(*) from test.t1;
+count(*)
+0
+insert into test.t1 values (1);
+drop table test.t1;
+drop user user1@localhost;
+drop user user2@localhost;

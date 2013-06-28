@@ -1,0 +1,26 @@
+SELECT 1;
+1
+1
+SELECT ;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '' at line 1
+test_res_blob;
+300x
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+INSERT INTO test.t1 VALUES ( 1 );
+affected_rows	insert_id
+2	10
+SELECT error_msg();
+errcode	errmsg	sqlstate
+1064	returning SQL-state 42000 and error-code 1064	42000
+SELECT row_count(1), bytes();
+row_count	bytes
+2	16
+SELECT 5.0;
+row_count	bytes
+1	6
+SELECT 4.1;
+row_count	bytes
+1	6
+SELECT "1", NULL, "1";
+test_result
+1,nil,1

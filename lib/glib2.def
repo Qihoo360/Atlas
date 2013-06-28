@@ -1,0 +1,3 @@
+LIBRARY glib2.dll
+EXPORTS
+	luaopen_glib2

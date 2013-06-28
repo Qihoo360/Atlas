@@ -1,0 +1,3 @@
+LIBRARY lfs.dll
+EXPORTS
+	luaopen_lfs

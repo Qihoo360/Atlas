@@ -1,0 +1,447 @@
+#                                               -*- Autoconf -*-
+# Process this file with autoconf to produce a configure script.
+AC_PREREQ(2.57)
+AC_INIT(mysql-proxy, 0.8.2, mysql-proxy-discuss@lists.launchpad.net)
+AC_CONFIG_SRCDIR([src/mysql-proxy-cli.c])
+
+AC_CANONICAL_TARGET
+
+dnl require 1.10 to get abs_top_builddir and docdir
+AM_INIT_AUTOMAKE(1.10 gnits)
+
+AC_CONFIG_HEADER([config.h])
+
+AM_MAINTAINER_MODE
+
+dnl check environment
+AC_AIX
+AC_ISC_POSIX
+
+AC_EXEEXT
+
+
+# Checks for programs.
+AC_PROG_CC
+AC_PROG_LD
+AC_PROG_INSTALL
+AC_PROG_AWK
+dnl we need flex
+AC_PROG_LEX
+
+dnl AC_PROG_LEX returns LEX=: in case it didn't found flex or lex
+dnl we replace it by 'missing' to give the user a useful errormsg
+if test x$LEX = x:; then
+	AM_MISSING_PROG(LEXMISSING, flex)
+	LEX=$LEXMISSING
+fi
+
+
+AC_PROG_CPP
+dnl AC_PROG_CXX
+AC_PROG_LN_S
+AC_PROG_SED
+AC_PROG_MAKE_SET
+AM_PROG_CC_C_O
+
+if test x$RST2HTML = x; then
+	AM_MISSING_PROG(RST2HTMLMISSING, rst2html.py)
+	RST2HTML=$RST2HTMLMISSING
+fi
+AC_SUBST(RST2HTML)
+
+
+dnl more automake stuff
+AM_C_PROTOTYPES
+AC_C_BIGENDIAN
+
+dnl libtool
+
+dnl we don't want to get static libs of the lua-libs
+AC_DISABLE_STATIC	
+dnl AC_ENABLE_SHARED
+
+dnl AC_LIBTOOL_DLOPEN
+AC_PROG_LIBTOOL
+
+dnl keep theses tests close to AC_PROC_LIBTOOL and hope that we are still in the directory where libtool was created
+AC_MSG_CHECKING([shared library path variable])
+DYNLIB_PATH_VAR="$shlibpath_var"
+AS_IF([test "x$DYNLIB_PATH_VAR" != x],
+      [AC_MSG_RESULT([$DYNLIB_PATH_VAR])],
+      [AC_MSG_ERROR([eval "libtool --config | grep ^shlibpath_var" failed])])
+AC_SUBST(DYNLIB_PATH_VAR)
+
+dnl "so" is the default on all platforms, even on OS X as we build lua-c stuff as loadable modules.
+dnl however HP/UX 11.31 is behaving differently, so we need to use "sl" there. This should get fixed in a more general way.
+AC_MSG_CHECKING([lua module suffix])
+module=yes
+eval "DYNLIB_LUA_SUFFIX=$shrext_cmds"
+AS_IF([test "x$DYNLIB_LUA_SUFFIX" != x],
+      [DYNLIB_LUA_SUFFIX=`echo $DYNLIB_LUA_SUFFIX | sed 's/^\.//'`
+       AC_MSG_RESULT([$DYNLIB_LUA_SUFFIX])],
+      [AC_MSG_ERROR([eval "DYNLIB_LUA_SUFFIX=$shrext_cmds" failed])])
+AC_SUBST(DYNLIB_LUA_SUFFIX)
+
+dnl we have to hack around some glib distributions that
+dnl don't set the correct G_MODULE_SUFFIX, notably MacPorts
+AC_MSG_CHECKING([plugin suffix])
+module=no
+eval "SHARED_LIBRARY_SUFFIX=$shrext_cmds"
+AS_IF([test "x$SHARED_LIBRARY_SUFFIX" != x],
+      [SHARED_LIBRARY_SUFFIX=`echo $SHARED_LIBRARY_SUFFIX | sed 's/^\.//'`
+       AC_MSG_RESULT([$SHARED_LIBRARY_SUFFIX])],
+      [AC_MSG_ERROR([eval "SHARED_LIBRARY_SUFFIX=$shrext_cmds" failed])])
+
+AC_DEFINE_UNQUOTED([SHARED_LIBRARY_SUFFIX], ["$SHARED_LIBRARY_SUFFIX"], [shared library extension on this platform])
+
+
+dnl Checks for header files.
+AC_HEADER_STDC
+AC_HEADER_SYS_WAIT
+AC_CHECK_HEADERS([\
+	arpa/inet.h  \
+	netinet/in.h \
+	sys/filio.h  \
+	sys/socket.h \
+	sys/param.h \
+	sys/time.h \
+	sys/un.h \
+	sys/uio.h \
+	sys/ioctl.h \
+	sys/resource.h \
+	pwd.h \
+	signal.h \
+	fcntl.h \
+	libproc.h \
+	valgrind/valgrind.h ])
+
+AC_CHECK_HEADERS([syslog.h])
+
+dnl my_rdtsc.h
+AC_CHECK_HEADERS([\
+	sys/time.h \
+	time.h \
+	asm/msr.h \
+	sys/timeb.h \
+	sys/times.h \
+	ia64intrin.h ])
+AC_CHECK_FUNCS([\
+	rdtscll \
+	ftime \
+	times \
+	clock_gettime \
+	get_hrtime \
+	read_real_time \
+	gettimeofday \
+	time \
+	wait4
+	])
+
+
+# When compiling with Sun Studio C / C++ we need to include
+# my_timer_cycles.il, an "inline templates" separate file,
+# on the command line. It has assembly code, "rd %tick" for
+# SPARC or "rdtsc" for x86.
+
+# sun cc output the version info on stderr
+AC_MSG_CHECKING([cc is Sun CC])
+IS_SUNCC=no
+SUNCC_VERSION=`$CC -V 2>&1 | grep '^cc: Sun C'`
+if test $? -eq "0"; then
+	IS_SUNCC=yes
+fi
+AM_CONDITIONAL(USE_SUNCC_ASSEMBLY, test x$IS_SUNCC = xyes)
+AC_MSG_RESULT([$IS_SUNCC $SUNCC_VERSION])
+
+DARWIN_HAS_LIBPROC_H=
+if test $ac_cv_header_libproc_h = yes; then
+	DARWIN_HAS_LIBPROC_H="-DDARWIN_HAS_LIBPROC_H=1"
+fi
+
+AC_SUBST(DARWIN_HAS_LIBPROC_H)
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_C_INLINE
+AC_C_CHAR_UNSIGNED
+
+# Checks for library functions.
+AC_TYPE_SIGNAL
+AC_FUNC_STAT
+AC_FUNC_STRFTIME
+
+# 
+AC_SEARCH_LIBS(socket,socket)
+AC_SEARCH_LIBS(gethostbyname,nsl socket)
+AC_SEARCH_LIBS(hstrerror,resolv)
+
+AC_CHECK_TYPES(socklen_t,,,[#include <sys/types.h>
+			    #include <sys/socket.h>])
+
+AC_CHECK_TYPES([ulong, ulong_t])
+
+dnl Checks for database.
+MYSQL_CFLAGS=""
+MYSQL_LIBS=""
+
+AC_MSG_CHECKING(for MySQL support)
+AC_ARG_WITH(mysql,
+    AC_HELP_STRING([--with-mysql@<:@=PATH@:>@],[Include MySQL support. PATH is the path to 'mysql_config']),
+    [WITH_MYSQL=$withval],[WITH_MYSQL=yes])
+
+if test "$WITH_MYSQL" = "no"; then
+  AC_MSG_ERROR([mysql support is required, don't use --with-mysql=no or --without-mysql])
+fi
+
+AC_MSG_RESULT(yes)  
+if test "$WITH_MYSQL" = "yes"; then
+  AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
+else
+  MYSQL_CONFIG=$WITH_MYSQL
+fi
+
+if test "$MYSQL_CONFIG" = ""; then
+  AC_MSG_ERROR([mysql_config is not found, use $ ./configure --with-mysql=/path/to/mysql_config])
+fi
+
+if test -d $MYSQL_CONFIG; then
+  MYSQL_CONFIG="$MYSQL_CONFIG/bin/mysql_config"
+fi
+
+if test \! -x $MYSQL_CONFIG; then
+  AC_MSG_ERROR([mysql_config not exists or not executable, use $ ./configure --with-mysql=/path/to/mysql_config])
+fi
+
+if $MYSQL_CONFIG | grep -- '--include' > /dev/null ; then
+  MYSQL_CFLAGS="`$MYSQL_CONFIG --include | sed s/\'//g`"
+else
+  MYSQL_CFLAGS="`$MYSQL_CONFIG --cflags | sed s/\'//g`"
+fi
+
+AC_MSG_CHECKING(for MySQL includes at)
+AC_MSG_RESULT($MYSQL_CFLAGS)
+
+dnl check for errmsg.h, which isn't installed by some versions of 3.21
+old_CPPFLAGS="$CPPFLAGS"
+CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS"
+AC_CHECK_HEADERS(errmsg.h mysql.h)
+CPPFLAGS="$old_CPPFLAGS"
+
+if test x"$ac_cv_header_mysql_h" = xno; then
+	AC_MSG_ERROR([mysql.h is required, please install the mysql header package])
+fi
+
+AC_DEFINE([HAVE_MYSQL], [1], [mysql support])
+
+AC_MSG_CHECKING(for mysqltest binary)
+if test x"$MYSQL_TEST_BIN" = x; then
+  MYSQL_TEST_BIN=`dirname "$MYSQL_CONFIG"`/mysqltest
+fi
+if test -x "$MYSQL_TEST_BIN"; then
+  AC_MSG_RESULT([$MYSQL_TEST_BIN])
+else
+  MYSQL_TEST_BIN=mysqltest
+  AC_MSG_RESULT([$MYSQL_TEST_BIN])
+fi
+AC_MSG_CHECKING(for mysql libs)
+if test x"$MYSQL_LIBS" = x; then
+  MYSQL_LIBS="`$MYSQL_CONFIG --libs | sed s/\'//g`"
+fi
+AC_MSG_RESULT([$MYSQL_LIBS])
+
+AC_SUBST(MYSQL_TEST_BIN)
+AC_SUBST(MYSQL_LIBS)
+AC_SUBST(MYSQL_CFLAGS)
+
+dnl Check for pkg-config
+if test -z "$PKG_CONFIG"; then
+  AC_PATH_PROG(PKG_CONFIG, pkg-config, AC_MSG_ERROR([pkg-config wasn't found. Pass it's path via $ ./configure PKG_CONFIG=/path/to/pkg-config]))
+fi
+ 
+dnl Check if we are to build with bundled shared libraries,
+dnl in non standard location (just unpack a TAR anywhere).
+AC_MSG_CHECKING(if build will be self-contained)
+AC_ARG_ENABLE(self-contained,
+	AC_HELP_STRING([--enable-self-contained],[use wrapper script (default=no)])
+	)
+AS_IF([test "x$enable_self_contained" = xyes],
+		[WITH_WRAPPER_SCRIPT=yes],
+		[WITH_WRAPPER_SCRIPT=no]
+	)
+AC_MSG_RESULT($WITH_WRAPPER_SCRIPT)
+AM_CONDITIONAL(USE_WRAPPER_SCRIPT, test x$WITH_WRAPPER_SCRIPT = xyes)
+
+dnl Check for lua
+AC_MSG_CHECKING(which pkg-config file to use to find Lua)
+AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[lua]),
+[WITH_LUA=$withval],[WITH_LUA=yes])
+
+if test "$WITH_LUA" != "no"; then
+ ## if WITH_LUA is give, use that as .pc file
+ ## if not, prove lua.pc and lua5.1.pc
+ if test "$WITH_LUA" = "yes"; then
+  AC_MSG_RESULT(lua.pc and lua5.1.pc)
+  PKG_CHECK_MODULES(LUA, lua >= 5.1, [
+   AC_DEFINE([HAVE_LUA], [1], [liblua])
+   AC_DEFINE([HAVE_LUA_H], [1], [lua.h])
+  ],[
+   AC_MSG_RESULT([... checked for Lua via pkg-config: $LUA_PKG_ERRORS. retrying with lua5.1])
+   if test x"$LUA_PKG_ERROR" != "x"; then
+    PKG_CHECK_MODULES(LUA, lua5.1 >= 5.1, [
+     AC_DEFINE([HAVE_LUA], [1], [liblua])
+     AC_DEFINE([HAVE_LUA_H], [1], [lua.h])
+    ],[
+     AC_MSG_ERROR([checked for Lua via pkg-config: $LUA_PKG_ERRORS. Make sure lua and its devel-package, which includes the lua5.1.pc (debian and friends) or lua.pc (all others) file, is installed])]) 
+   fi
+  ])
+ else
+  AC_MSG_RESULT($WITH_LUA.pc)
+
+  PKG_CHECK_MODULES(LUA, $WITH_LUA >= 5.1, [
+    AC_DEFINE([HAVE_LUA], [1], [liblua])
+    AC_DEFINE([HAVE_LUA_H], [1], [lua.h])
+  ],[AC_MSG_ERROR([checked for Lua via pkg-config: $LUA_PKG_ERRORS. Make sure lua and its devel-package, which includes the $WITH_LUA.pc file, is installed])])
+ fi
+
+ AC_SUBST(LUA_CFLAGS)
+ AC_SUBST(LUA_LIBS)
+else
+ AC_MSG_ERROR([MySQL Proxy can't be built using --without-lua, lua 5.1 is required])
+fi
+
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.16.0, [
+  AC_DEFINE([HAVE_GLIB], [1], [libglib])
+  AC_DEFINE([HAVE_GLIB_H], [1], [glib.h])
+])
+
+PKG_CHECK_MODULES(GMODULE, gmodule-2.0 >= 2.16.0, [
+  AC_DEFINE([HAVE_GMODULE], [1], [libgmodule])
+  AC_DEFINE([HAVE_GMODULE_H], [1], [gmodule.h])
+])
+
+PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16.0, [
+  AC_DEFINE([HAVE_GTHREAD], [1], [libgthread])
+  AC_DEFINE([HAVE_GTHREAD_H], [1], [gthread.h])
+])
+
+case $host_os in
+	*mingw* )
+		LIBS="$LIBS -lwsock32"
+		ARCH=win32
+		;;
+	*darwin* )
+		ARCH=macosx
+		;;
+	*linux* )
+		ARCH=linux
+		;;
+	*freebsd* )
+		ARCH=freebsd
+		;;
+	*aix* )
+		ARCH=aix
+		;;
+	*hpux* )
+		ARCH=hpux
+		;;
+	*solaris* )
+		ARCH=solaris
+		;;
+	* ) AC_MSG_ERROR([we havn't mapped $host_os to sigar-architecture yet, please report it to mysql-proxy-discuss@lists.launchpad.net]);;
+esac
+
+AM_CONDITIONAL(OS_WIN32, test x$ARCH = xwin32)
+AM_CONDITIONAL(OS_MACOSX, test x$ARCH = xmacosx)
+AM_CONDITIONAL(OS_LINUX, test x$ARCH = xlinux)
+AM_CONDITIONAL(OS_FREEBSD, test x$ARCH = xfreebsd)
+AM_CONDITIONAL(OS_HPUX, test x$ARCH = xhpux)
+AM_CONDITIONAL(OS_AIX, test x$ARCH = xaix)
+AM_CONDITIONAL(OS_SOLARIS, test x$ARCH = xsolaris)
+
+dnl on windows we need wsock32 to get socket support
+AC_CHECK_FUNCS([inet_ntoa inet_ntop strerror getcwd chdir writev gmtime_r sigaction getaddrinfo])
+
+dnl make sure we off_t is 64bit
+dnl CPPFLAGS="$CPPFLAGS -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES"
+
+dnl has to be checked _after_ any large-file-support flags are set for solaris 8
+AC_CHECK_SIZEOF([rlim_t])
+
+EVENT_LIBS=
+AC_CHECK_LIB(event, event_init, EVENT_LIBS="-levent",AC_MSG_ERROR([libevent is required]))
+AC_CHECK_LIB(event, event_base_new, AC_DEFINE(HAVE_EVENT_BASE_NEW,[],[event_base_new()]),AC_MSG_ERROR([event_base_new() wasn't found in libevent. we need at least libevent 1.4]))
+AC_CHECK_LIB(event, event_base_free, AC_DEFINE(HAVE_EVENT_BASE_FREE,[],[having event_base_free()]))
+AC_CHECK_HEADERS([event.h])
+AC_SUBST(EVENT_LIBS)
+
+dnl check for DTrace support on this platform and
+dnl whether it should be used if it's there
+AC_CHECK_PROGS([DTRACE], [dtrace])
+AC_CHECK_HEADERS([sys/sdt.h], [have_sdt_h=yes], [have_sdt_h=no])
+AC_MSG_CHECKING(if dtrace probes are enabled)
+
+AC_ARG_ENABLE(dtrace,
+	AC_HELP_STRING([--enable-dtrace], [enable static DTrace probes (default is NO)]),
+	[],
+	[enable_dtrace=no])
+
+AS_IF([test "x$enable_dtrace" != xno],
+	[	AS_IF([test "x$have_sdt_h" != xno],
+			[	AC_DEFINE([ENABLE_DTRACE], [1], [DTrace support])
+				AM_CONDITIONAL(ENABLE_DTRACE, true)
+				AC_MSG_RESULT(yes)
+			],
+			[	AM_CONDITIONAL(ENABLE_DTRACE, false)
+				AC_MSG_RESULT(no)
+				AC_MSG_WARN(--enable-dtrace used, but sys/sdt.h header not present. Continuing without DTrace support)
+			])
+	],
+	[	AM_CONDITIONAL(ENABLE_DTRACE, false)
+		AC_MSG_RESULT(no)
+	])
+
+
+dnl build version-id
+PACKAGE_VERSION_ID=`echo $PACKAGE_VERSION | $AWK -F '.' '{print "(" $1 " << 16 | " $2 " << 8 | " $3 ")"}'`
+AC_DEFINE_UNQUOTED([PACKAGE_VERSION_ID], [$PACKAGE_VERSION_ID], [lpackage-version-id])
+
+AC_CONFIG_FILES([Makefile \
+		 cmake/Makefile \
+		 m4/Makefile \
+		 src/Makefile \
+		 plugins/Makefile \
+		 examples/Makefile \
+		 lib/Makefile \
+		 lib/proxy/Makefile \
+		 tests/Makefile \
+		 tests/suite/Makefile \
+		 tests/suite/base/Makefile \
+		 tests/suite/base/t/Makefile \
+		 tests/suite/base/r/Makefile \
+		 tests/suite/bugs/Makefile \
+		 tests/suite/bugs/t/Makefile \
+		 tests/suite/bugs/r/Makefile \
+		 tests/unit/Makefile \
+		 tests/unit/lua/Makefile \
+		 mysql-proxy.spec \
+		 ])
+
+AC_CONFIG_FILES([plugins/admin/Makefile])
+AC_CONFIG_FILES([plugins/proxy/Makefile])
+AC_CONFIG_FILES([plugins/replicant/Makefile])
+dnl cli plugin requires readline, so we disable it for now
+dnl AC_CONFIG_FILES([plugins/cli/Makefile])
+AC_CONFIG_FILES([plugins/debug/Makefile])
+
+dnl Create the wrapper script for starting mysql-proxy in self-contained builds
+AC_CONFIG_FILES([scripts/Makefile])
+AC_CONFIG_FILES([scripts/mysql-myisam-dump:scripts/mysql-proxy-binwrapper.in], [chmod +x scripts/mysql-myisam-dump])
+AC_CONFIG_FILES([scripts/mysql-binlog-dump:scripts/mysql-proxy-binwrapper.in], [chmod +x scripts/mysql-binlog-dump])
+AC_CONFIG_FILES([scripts/mysql-proxy:scripts/mysql-proxy-binwrapper.in], [chmod +x scripts/mysql-proxy])
+AC_CONFIG_FILES([mysql-proxy.pc])
+AC_CONFIG_FILES([mysql-chassis.pc])
+AC_CONFIG_FILES([doc/Makefile])
+AC_CONFIG_FILES([doc/chapter/Makefile])
+AC_OUTPUT
+
+

@@ -1,0 +1,78 @@
+#  $%BEGINLICENSE%$
+#  Copyright (c) 2009, Oracle and/or its affiliates. All rights reserved.
+# 
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; version 2 of the
+#  License.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+#  02110-1301  USA
+# 
+#  $%ENDLICENSE%$
+
+
+##
+# test for packets >16M which get split across multiple mysql-packets 
+#
+# all the tests are about handling >16M packets and their packet-ids
+# as there is a proxy in between the client's packet-id sequence might
+# be different than the servers:
+# - client sends a >16M query (2 packets), proxy replaces it by a small
+#   query (1 packet), the server will reply with packet-id 1 which has
+#   to be mapped to packet-id 2 when it hits the client (see 3.)
+# - the same the other way around (see 4.)
+#
+# 1. generate >16M string 
+# 2. send >16M to the backend
+#  2.1. return length of the fieldname as result
+# 3. send >16M, let proxy replace it with <16M packet
+#  3.1. return length
+# 4. send <16M, let proxy replcae it with >16M packet
+#  4.1. return length
+# ... repeat the same with replacing the resultset
+#
+# implementation detail
+# - we use let and eval here to get around some mysqltest limitations
+# - it works with .result files which contain all the text
+# - we don't want to store all the plain-text of the >16M packets 
+#   in the .result files
+# - instead we let the proxy process the LENGTH() queries and eval
+#   the result to only have a simple queries in the .result files
+
+# get a 16M string
+let $overlong = `SELECT LONG_STRING`;
+let $length = `SELECT LENGTH($overlong)`;
+eval SELECT $length;
+
+# send the >16M query and let it be replace by a smaller query and forward it
+let $replaced = `SELECT REPLACE($overlong)`;
+let $length = `SELECT LENGTH($replaced)`;
+eval SELECT $length;
+
+# send the small query and let it be replace by a >16M query and forward it
+let $replaced = `SELECT SMALL_QUERY`;
+let $length = `SELECT LENGTH($replaced)`;
+eval SELECT $length;
+
+# send the >16M query and through the proxy encoders/decoders
+let $bounce = `SELECT $overlong`;
+let $length = `SELECT LENGTH($bounce)`;
+eval SELECT $length;
+
+# send the >16M query and replace the result on the way back
+let $replace = `SELECT RESULT($overlong)`;
+eval SELECT $replace;
+
+# send the small query, let it be replaced by a >16M query and replace the result on the way back
+let $replace = `SELECT SMALL_RESULT`;
+eval SELECT $replace;
+
+

@@ -1,0 +1,10 @@
+SELECT 1;
+1
+1
+SELECT affected_rows;
+rows
+NULL
+SET @a = 1;
+SELECT affected_rows;
+rows
+0

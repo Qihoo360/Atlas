@@ -1,0 +1,96 @@
+#!/bin/sh
+
+name="MySQL-Proxy of $1"
+proxydir=/usr/local/mysql-proxy
+binfile="$proxydir/bin/mysql-proxy"
+pidfile="$proxydir/log/$1.pid"
+confile="$proxydir/conf/$1.cnf"
+
+function start()
+{
+	if test -s "$pidfile" ; then
+		echo "error: PID file already exists"
+		exit 2
+	fi
+
+	$binfile --defaults-file=$confile 2>/dev/null
+	if [ "$?" != "0" ]; then
+		echo "error: failed to start $name"
+		exit 2
+	fi
+
+	echo "OK: $name is started"
+}
+
+function stop()
+{
+	if test -s "$pidfile" ; then
+		read proxy_pid < $pidfile
+		if kill -0 $proxy_pid 2>/dev/null ; then
+			kill $proxy_pid
+			if [ "$?" != "0" ]; then
+				echo "error: failed to kill $name"
+				exit 3
+			fi
+
+			sleep 2s
+
+			if [ "$?" != "0" ]; then
+				echo "error: failed to delete $pidfile"
+				exit 3
+			fi
+			
+			echo "OK: $name is stopped"
+		else
+			echo "$name is NOT running, but PID file exists"
+			exit 3
+		fi
+	else
+		echo "error: $name is NOT running"
+		exit 3
+	fi
+}
+
+function restart()
+{
+	stop
+	start
+}
+
+function status()
+{
+	if test -s "$pidfile" ; then
+		read proxy_pid < $pidfile
+		if kill -0 $proxy_pid 2>/dev/null ; then
+			echo "$name is running ($proxy_pid)"
+		else
+			echo "$name is NOT running, but PID file exists"
+			exit 5
+		fi
+	else
+		echo "$name is NOT running"
+	fi
+}
+
+case $2 in
+	"start")
+		start
+		;;  
+
+	"stop")
+		stop
+		;;
+
+	"restart")
+		restart
+		;;
+
+	"status")
+		status
+		;;
+	*)
+		echo "Usage: $0 instance {start|stop|restart|status}"
+		exit 1 
+esac
+
+exit 0

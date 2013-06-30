@@ -16,3 +16,30 @@
 
 附名字来源：
     Atlas['?tl?s]，希腊神话中双肩撑天的巨人，普罗米修斯的兄弟，最高大强壮的神之一，因反抗宙斯失败而被罚顶天。我们期望这个系统能够脚踏后端DB，为前端应用撑起一片天。
+
+配置文件示例：
+[mysql-proxy]	#不需要改
+plugins = admin, proxy	#Atlas加载的模块名称，不需要改
+
+admin-username = user	#管理接口的用户名
+admin-password = pwd	#管理接口的密码
+admin-lua-script = /usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua	#实现管理接口的Lua脚本所在路径
+
+proxy-backend-addresses = 127.0.0.1:3306	#Atlas后端连接的MySQL主库的IP和端口，可设置多项，用逗号分隔
+proxy-read-only-backend-addresses = 220.181.127.222:3306	#Atlas后端连接的MySQL从库的IP和端口，可设置多项，用逗号分隔
+
+daemon = false	#设置Atlas的运行方式，设为true时为守护进程方式，设为false时为前台方式，一般开发调试时设为false，线上运行时设为true
+keepalive = false	#设置Atlas的运行方式，设为true时Atlas会启动两个进程，一个为monitor，一个为worker，monitor在worker意外退出后会自动将其重启，设为false时只有worker，没有monitor，一般开发调试时设为false，线上运行时设为true
+
+event-threads = 4	#工作线程数，推荐设置与系统的CPU核数相等
+log-level = message	#日志级别，分为message、warning、critical、error、debug五个级别
+log-path = /usr/local/mysql-proxy/log	#日志存放的路径
+instance = test	#实例名称，用于同一台机器上多个Atlas实例间的区分
+
+proxy-address = 0.0.0.0:1234	#Atlas监听的工作接口IP和端口
+admin-address = 0.0.0.0:2345	#Atlas监听的管理接口IP和端口
+
+min-idle-connections = 128	#连接池的最小空闲连接数，可根据业务请求量大小适当调大或调小
+tables = person.mt.id.3	#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔
+pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#用户名与其对应的加密过的密码，密码使用加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
+charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1

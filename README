@@ -1,3 +1,4 @@
+一、简介
     Atlas是由奇虎360公司Web平台部基础架构组开发维护的一个基于MySQL协议的数据中间层项目。它在MySQL官方推出的MySQL-Proxy 0.8.2版本的基础上，修改了大量bug，添加了很多功能特性。目前该项目在360公司内部得到了广泛应用，3/4以上的MySQL业务已经接入了Atlas平台，每天承载的读写请求数达20亿条以上。
 
 主要功能特性：
@@ -17,7 +18,7 @@
 附名字来源：
     Atlas['?tl?s]，希腊神话中双肩撑天的巨人，普罗米修斯的兄弟，最高大强壮的神之一，因反抗宙斯失败而被罚顶天。我们期望这个系统能够脚踏后端DB，为前端应用撑起一片天。
 
-配置文件示例：
+二、配置文件示例
 [mysql-proxy]	#不需要改
 plugins = admin, proxy	#Atlas加载的模块名称，不需要改
 
@@ -43,3 +44,25 @@ min-idle-connections = 128	#连接池的最小空闲连接数，可根据业务请求量大小适当调大
 tables = person.mt.id.3	#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔
 pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#用户名与其对应的加密过的密码，密码使用加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
 charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1
+
+三、编译安装
+依赖：glib、libevent、Lua、OpenSSL
+
+./bootstrap.sh	#可能需要修改其中的路径
+make
+sudo make install
+
+四、启动与停止
+进入PREFIX/conf目录，编辑instance.conf，此处instance的实际名称应与其中instance设置项相同，其他设置项含义见第二节。
+
+启动：
+PREFIX/bin/mysql-proxyd instance start
+
+停止：
+PREFIX/bin/mysql-proxyd instance stop
+
+重启：
+PREFIX/bin/mysql-proxyd instance restart
+
+查看运行状态：
+PREFIX/bin/mysql-proxyd instance status

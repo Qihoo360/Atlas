@@ -8,8 +8,7 @@ EXTRA_DIST = \
 		winbuild.bat \
 		doxygen-scripts \
 		CMakeLists.txt \
-		deps \
-		internal
+		deps
 
 ACLOCAL_AMFLAGS = -I m4
 

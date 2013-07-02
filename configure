@@ -18382,7 +18382,7 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
-ac_config_files="$ac_config_files Makefile cmake/Makefile m4/Makefile src/Makefile plugins/Makefile examples/Makefile lib/Makefile lib/proxy/Makefile tests/Makefile tests/suite/Makefile tests/suite/base/Makefile tests/suite/base/t/Makefile tests/suite/base/r/Makefile tests/suite/bugs/Makefile tests/suite/bugs/t/Makefile tests/suite/bugs/r/Makefile tests/unit/Makefile tests/unit/lua/Makefile mysql-proxy.spec"
+ac_config_files="$ac_config_files Makefile cmake/Makefile m4/Makefile src/Makefile plugins/Makefile examples/Makefile lib/Makefile lib/proxy/Makefile"
 
 
 ac_config_files="$ac_config_files plugins/admin/Makefile"
@@ -19402,16 +19402,6 @@ do
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;
     "lib/proxy/Makefile") CONFIG_FILES="$CONFIG_FILES lib/proxy/Makefile" ;;
-    "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
-    "tests/suite/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/Makefile" ;;
-    "tests/suite/base/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/base/Makefile" ;;
-    "tests/suite/base/t/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/base/t/Makefile" ;;
-    "tests/suite/base/r/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/base/r/Makefile" ;;
-    "tests/suite/bugs/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/bugs/Makefile" ;;
-    "tests/suite/bugs/t/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/bugs/t/Makefile" ;;
-    "tests/suite/bugs/r/Makefile") CONFIG_FILES="$CONFIG_FILES tests/suite/bugs/r/Makefile" ;;
-    "tests/unit/Makefile") CONFIG_FILES="$CONFIG_FILES tests/unit/Makefile" ;;
-    "tests/unit/lua/Makefile") CONFIG_FILES="$CONFIG_FILES tests/unit/lua/Makefile" ;;
     "mysql-proxy.spec") CONFIG_FILES="$CONFIG_FILES mysql-proxy.spec" ;;
     "plugins/admin/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/admin/Makefile" ;;
     "plugins/proxy/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/proxy/Makefile" ;;

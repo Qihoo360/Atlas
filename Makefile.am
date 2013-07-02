@@ -1,4 +1,4 @@
-SUBDIRS =	cmake src lib plugins examples scripts tests m4 doc
+SUBDIRS =	cmake src lib plugins examples scripts m4 doc
 
 EXTRA_DIST = \
 		config.h.cmake \

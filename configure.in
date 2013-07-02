@@ -413,16 +413,6 @@ AC_CONFIG_FILES([Makefile \
 		 examples/Makefile \
 		 lib/Makefile \
 		 lib/proxy/Makefile \
-		 tests/Makefile \
-		 tests/suite/Makefile \
-		 tests/suite/base/Makefile \
-		 tests/suite/base/t/Makefile \
-		 tests/suite/base/r/Makefile \
-		 tests/suite/bugs/Makefile \
-		 tests/suite/bugs/t/Makefile \
-		 tests/suite/bugs/r/Makefile \
-		 tests/unit/Makefile \
-		 tests/unit/lua/Makefile \
 		 mysql-proxy.spec \
 		 ])
 

@@ -1,4 +1,0 @@
-SELECT backtrace;
-backtrace
-stack traceback:
-	[string "/tmp/dummy.lua"]:48: in function <[string "/tmp/dummy.lua"]:32>

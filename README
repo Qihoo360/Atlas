@@ -53,7 +53,7 @@ admin-password = pwd	#管理接口的密码
 admin-lua-script = /usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua	#实现管理接口的Lua脚本所在路径
 
 proxy-backend-addresses = 127.0.0.1:3306	#Atlas后端连接的MySQL主库的IP和端口，可设置多项，用逗号分隔
-proxy-read-only-backend-addresses = 127.0.0.1:3305	#Atlas后端连接的MySQL从库的IP和端口，可设置多项，用逗号分隔
+proxy-read-only-backend-addresses = 127.0.0.1:3305@2	#Atlas后端连接的MySQL从库的IP和端口，2代表权重，用来作负载均衡，若省略则默认为1，可设置多项，用逗号分隔
 
 daemon = false	#设置Atlas的运行方式，设为true时为守护进程方式，设为false时为前台方式，一般开发调试时设为false，线上运行时设为true
 keepalive = false	#设置Atlas的运行方式，设为true时Atlas会启动两个进程，一个为monitor，一个为worker，monitor在worker意外退出后会自动将其重启，设为false时只有worker，没有monitor，一般开发调试时设为false，线上运行时设为true
@@ -73,7 +73,7 @@ charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1
 
 三、编译安装
 -------------------
-依赖：glib、libevent、Lua、OpenSSL
+依赖：glib(2.32.0以上)、libevent(1.4以上)、Lua(5.1以上)、OpenSSL(0.9.8以上)
 
 ./bootstrap.sh	#可能需要修改其中的路径
 make

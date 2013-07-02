@@ -1,24 +1,50 @@
 Ò»¡¢¼ò½é
-    AtlasÊÇÓÉÆæ»¢360¹«Ë¾WebÆ½Ì¨²¿»ù´¡¼Ü¹¹×é¿ª·¢Î¬»¤µÄÒ»¸ö»ùÓÚMySQLÐ­ÒéµÄÊý¾ÝÖÐ¼ä²ãÏîÄ¿¡£ËüÔÚMySQL¹Ù·½ÍÆ³öµÄMySQL-Proxy 0.8.2°æ±¾µÄ»ù´¡ÉÏ£¬ÐÞ¸ÄÁË´óÁ¿bug£¬Ìí¼ÓÁËºÜ¶à¹¦ÄÜÌØÐÔ¡£Ä¿Ç°¸ÃÏîÄ¿ÔÚ360¹«Ë¾ÄÚ²¿µÃµ½ÁË¹ã·ºÓ¦ÓÃ£¬3/4ÒÔÉÏµÄMySQLÒµÎñÒÑ¾­½ÓÈëÁËAtlasÆ½Ì¨£¬Ã¿Ìì³ÐÔØµÄ¶ÁÐ´ÇëÇóÊý´ï20ÒÚÌõÒÔÉÏ¡£
+-------------------
+    AtlasÊÇÓÉ Qihoo 360,  WebÆ½Ì¨²¿»ù´¡¼Ü¹¹ÍÅ¶Ó¿ª·¢Î¬»¤µÄÒ»¸ö»ùÓÚMySQLÐ­ÒéµÄÊý¾ÝÖÐ¼ä²ãÏîÄ¿¡£ËüÔÚMySQL¹Ù·½ÍÆ³öµÄMySQL-Proxy 0.8.2°æ±¾µÄ»ù´¡ÉÏ£¬ÐÞ¸ÄÁË´óÁ¿bug£¬Ìí¼ÓÁËºÜ¶à¹¦ÄÜÌØÐÔ¡£Ä¿Ç°¸ÃÏîÄ¿ÔÚ360¹«Ë¾ÄÚ²¿µÃµ½ÁË¹ã·ºÓ¦ÓÃ£¬3/4ÒÔÉÏµÄMySQLÒµÎñÒÑ¾­½ÓÈëÁËAtlasÆ½Ì¨£¬Ã¿Ìì³ÐÔØµÄ¶ÁÐ´ÇëÇóÊý´ï20ÒÚÌõÒÔÉÏ¡£
 
-Ö÷Òª¹¦ÄÜÌØÐÔ£º
-1.  ×Ô¶¯¶ÁÐ´·ÖÀë£¬¶ÔÓ¦ÓÃÍ¸Ã÷
-2.  ×Ô¶¯·Ö±í
-3.  IP¹ýÂË£¬°üÀ¨Ö¸¶¨¾ßÌåIPºÍÍø¶ÎIP
-4.  SQLÓï¾äºÚ°×Ãûµ¥
-5.  ×Ö·û¼¯ºÍÄ¬ÈÏÊý¾Ý¿âµÄ×Ô¶¯ÐÞÕý
-6.  ¿ÉÇ¿ÖÆ¶ÁÖ÷¿â£¬±ÜÃâ´Ó¿âµÄÍ¬²½ÑÓ³Ù
-7.  Ö÷¿âå´»úµÄÇé¿öÏÂ¶Á²Ù×÷²»ÊÜÓ°Ïì
-8.  ÔÚ¹Ò½ÓLVSµÄÇé¿öÏÂ¿ÉÆ½»¬ÖØÆô£¬Ó¦ÓÃ²»¸ÐÖª
-9.  ×Ô¶¯¼ì²âDB×´Ì¬£¬¹ÊÕÏ»òÁ¬½Ó²»ÉÏµÄDB×Ô¶¯Õª³ý£¬²»ÔÙµ¼ÈëÇëÇó£¬ÔÚ¹ÊÕÏ»òÍøÂç»Ö¸´ºó×Ô¶¯ÖØÐÂµ¼ÈëÇëÇó
-10. ¿ÉÔÚÏßÊÖ¶¯½«Ä³Ì¨DBÉèÖÃÎªÉÏÏß»òÏÂÏß×´Ì¬
-11. ¿ÉÔÚÏßÊÖ¶¯Ôö¼Ó»ò¼õÉÙÒ»Ì¨DB
-12. ´Ó¿â¼ä¼ÓÈ¨µÄ¸ºÔØ¾ùºâ
+Ö÷Òª¹¦ÄÜ£º
+* ¶ÁÐ´·ÖÀë
+* ´Ó¿â¸ºÔØ¾ùºâ
+* IP¹ýÂË
+* SQLÓï¾äºÚ°×Ãûµ¥
+* ×Ô¶¯·Ö±í
+
+Q & A
+-------------------
+Q: ÊÇ·ñÖ§³Ö¶à×Ö·û¼¯£¿
+A: ÕâÊÇÎÒÃÇ¶ÔÔ­°æMySQL-ProxyµÄµÚÒ»Ïî¸Ä½ø£¬·ûºÏ¹úÇéÊÇ±ØÐëµÄ
+
+Q: ×Ô¶¯¶ÁÐ´·ÖÀëÍ¦ºÃ£¬µ«ÓÐÊ±ºòÎÒÐ´ÍêÂíÉÏ¾ÍÏë¶Á£¬ÍòÒ»Ö÷´ÓÍ¬²½ÑÓ³ÙÔõÃ´°ì?
+A: SQLÓï¾äÇ°Ôö¼Ó /*master*/ ¾Í¿ÉÒÔ½«¶ÁÇëÇóÇ¿ÖÆ·¢ÍùÖ÷¿â
+
+Q: Ö÷¿âå´»ú£¬¶Á²Ù×÷ÊÜÓ°ÏìÃ´£¿
+A: ÔÚatlasÖÐÊÇ²»»áµÄ! ÄÜÎÊÕâÑùµÄÎÊÌâ, ËµÃ÷ÄãÓÃ¹ý¹Ù·½µÄmysql-proxy, ºÜÒÅº¶¹Ù·½°æ±¾²¢Î´½â¾öÕâ¸öÎÊÌâ
+
+Q: ¼ì²âºó¶ËDB×´Ì¬»á×èÈûÕý³£ÇëÇóÃ´£¿
+A: ²»»á, atlasÖÐ¼ì²âÏß³ÌÊÇÒì²½½øÐÐ¼ì²âµÄ£¬¼´Ê¹ÓÐdbå´»ú£¬Ò²²»»á×èÈûÖ÷Á÷³Ì¡£ÔÚatlasÖÐÃ»ÓÐÊ²Ã´Òì³£»áÈÃÖ÷Á÷³Ì×èÈû! Í¬ÉÏ£¬¹Ù·½°æ±¾Ò²»áÈÃÄãÊ§Íû
+
+Q: ÏëÏÂÏßÒ»Ì¨DB, ÓÖ²»ÏëÍ£µômysql server, ÔõÃ´°ì£¿
+A: ¿ÉÒÔÍ¨¹ý¹ÜÀí½Ó¿ÚÊÖ¶¯ÉÏÏÂÏßºó¶Ëdb, atlas»áÓÅÏÈ¿¼ÂÇ¹ÜÀíÔ±µÄÒâÔ¸
+
+Q: Ïë¸ø¼¯ÈºÖÐÔö¼ÓÒ»Ì¨DB, ²»ÏëÓ°ÏìÏßÉÏÕý³£·ÃÎÊ¿ÉÒÔÂð£¿
+A: Í¨¹ý¹ÜÀí½Ó¿Ú¿ÉÒÔÇáËÉÊµÏÖ
+
+Q: Ïà±È¹Ù·½mysql-proxy, atlas»¹ÓÐÄÄÐ©¸Ä½ø£¿
+A: ÕâÊµÔÚÊÇ¸öÄÑÒÔ»Ø´ðµÄÎÊÌâ£¬ÐÔÄÜ£¬ÎÈ¶¨ÐÔ£¬¿É¿¿ÐÔ£¬Ò×Î¬»¤ÐÔ£¬ÎÒÃÇ×ö¹ý¼¸Ê®ÏîµÄ¸Ä½ø£¬ÏÂÃæ»á¾¡Á¿ÁÐÒ»Ð©½Ï´óµÄ¸Ä¶¯
+
+VS ¹Ù·½MySQL-Proxy
+-------------------
+1. ½«Ö÷Á÷³ÌÖÐËùÓÐLua´úÂë¸ÄÎª´¿CÊµÏÖ£¬Lua½öÓÃÔÚ¹ÜÀí½Ó¿Ú
+2. ÖØÐ´ÍøÂçÄ£ÐÍ¡¢Ïß³ÌÄ£ÐÍ
+3. ÊµÏÖÁËÕæÕýÒâÒåµÄÁ¬½Ó³Ø
+4. ÓÅ»¯ÁËËø»úÖÆ£¬ÐÔÄÜÌá¸ßÊýÊ®±¶
+......
 
 ¸½Ãû×ÖÀ´Ô´£º
-    Atlas['?tl?s]£¬Ï£À°Éñ»°ÖÐË«¼ç³ÅÌìµÄ¾ÞÈË£¬ÆÕÂÞÃ×ÐÞË¹µÄÐÖµÜ£¬×î¸ß´óÇ¿×³µÄÉñÖ®Ò»£¬Òò·´¿¹ÖæË¹Ê§°Ü¶ø±»·£¶¥Ìì¡£ÎÒÃÇÆÚÍûÕâ¸öÏµÍ³ÄÜ¹»½ÅÌ¤ºó¶ËDB£¬ÎªÇ°¶ËÓ¦ÓÃ³ÅÆðÒ»Æ¬Ìì¡£
+    Atlas£¬Ï£À°Éñ»°ÖÐË«¼ç³ÅÌìµÄ¾ÞÈË£¬ÆÕÂÞÃ×ÐÞË¹µÄÐÖµÜ£¬×î¸ß´óÇ¿×³µÄÉñÖ®Ò»£¬Òò·´¿¹ÖæË¹Ê§°Ü¶ø±»·£¶¥Ìì¡£ÎÒÃÇÆÚÍûÕâ¸öÏµÍ³ÄÜ¹»½ÅÌ¤ºó¶ËDB£¬ÎªÇ°¶ËÓ¦ÓÃ³ÅÆðÒ»Æ¬Ìì¡£
 
 ¶þ¡¢ÅäÖÃÎÄ¼þÊ¾Àý
+-------------------
 [mysql-proxy]	#²»ÐèÒª¸Ä
 plugins = admin, proxy	#Atlas¼ÓÔØµÄÄ£¿éÃû³Æ£¬²»ÐèÒª¸Ä
 
@@ -27,7 +53,7 @@ admin-password = pwd	#¹ÜÀí½Ó¿ÚµÄÃÜÂë
 admin-lua-script = /usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua	#ÊµÏÖ¹ÜÀí½Ó¿ÚµÄLua½Å±¾ËùÔÚÂ·¾¶
 
 proxy-backend-addresses = 127.0.0.1:3306	#Atlasºó¶ËÁ¬½ÓµÄMySQLÖ÷¿âµÄIPºÍ¶Ë¿Ú£¬¿ÉÉèÖÃ¶àÏî£¬ÓÃ¶ººÅ·Ö¸ô
-proxy-read-only-backend-addresses = 220.181.127.222:3306	#Atlasºó¶ËÁ¬½ÓµÄMySQL´Ó¿âµÄIPºÍ¶Ë¿Ú£¬¿ÉÉèÖÃ¶àÏî£¬ÓÃ¶ººÅ·Ö¸ô
+proxy-read-only-backend-addresses = 127.0.0.1:3305	#Atlasºó¶ËÁ¬½ÓµÄMySQL´Ó¿âµÄIPºÍ¶Ë¿Ú£¬¿ÉÉèÖÃ¶àÏî£¬ÓÃ¶ººÅ·Ö¸ô
 
 daemon = false	#ÉèÖÃAtlasµÄÔËÐÐ·½Ê½£¬ÉèÎªtrueÊ±ÎªÊØ»¤½ø³Ì·½Ê½£¬ÉèÎªfalseÊ±ÎªÇ°Ì¨·½Ê½£¬Ò»°ã¿ª·¢µ÷ÊÔÊ±ÉèÎªfalse£¬ÏßÉÏÔËÐÐÊ±ÉèÎªtrue
 keepalive = false	#ÉèÖÃAtlasµÄÔËÐÐ·½Ê½£¬ÉèÎªtrueÊ±Atlas»áÆô¶¯Á½¸ö½ø³Ì£¬Ò»¸öÎªmonitor£¬Ò»¸öÎªworker£¬monitorÔÚworkerÒâÍâÍË³öºó»á×Ô¶¯½«ÆäÖØÆô£¬ÉèÎªfalseÊ±Ö»ÓÐworker£¬Ã»ÓÐmonitor£¬Ò»°ã¿ª·¢µ÷ÊÔÊ±ÉèÎªfalse£¬ÏßÉÏÔËÐÐÊ±ÉèÎªtrue
@@ -46,6 +72,7 @@ pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#ÓÃ»§ÃûÓëÆä¶ÔÓ¦µÄ¼ÓÃÜ¹ýµÄÃÜÂë£¬ÃÜÂ
 charset = utf8	#Ä¬ÈÏ×Ö·û¼¯£¬Èô²»ÉèÖÃ¸ÃÏî£¬ÔòÄ¬ÈÏ×Ö·û¼¯Îªlatin1
 
 Èý¡¢±àÒë°²×°
+-------------------
 ÒÀÀµ£ºglib¡¢libevent¡¢Lua¡¢OpenSSL
 
 ./bootstrap.sh	#¿ÉÄÜÐèÒªÐÞ¸ÄÆäÖÐµÄÂ·¾¶
@@ -53,6 +80,7 @@ make
 sudo make install
 
 ËÄ¡¢Æô¶¯ÓëÍ£Ö¹
+-------------------
 ½øÈëPREFIX/confÄ¿Â¼£¬±à¼­instance.conf£¬´Ë´¦instanceµÄÊµ¼ÊÃû³ÆÓ¦ÓëÆäÖÐinstanceÉèÖÃÏîÏàÍ¬£¬ÆäËûÉèÖÃÏîº¬Òå¼ûµÚ¶þ½Ú¡£
 
 Æô¶¯£º

@@ -1,7 +1,6 @@
-SUBDIRS =	cmake src lib plugins examples scripts m4 doc
+SUBDIRS = src lib plugins examples scripts m4 doc
 
 EXTRA_DIST = \
-		config.h.cmake \
 		Doxyfile \
 		README.TESTS \
 		autogen.sh \
@@ -9,8 +8,6 @@ EXTRA_DIST = \
 		winbuild.bat \
 		doxygen-scripts \
 		CMakeLists.txt \
-		mysql-chassis.pc.cmake \
-		mysql-proxy.pc.cmake \
 		deps \
 		internal
 

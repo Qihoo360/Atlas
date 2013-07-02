@@ -18382,7 +18382,7 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
-ac_config_files="$ac_config_files Makefile cmake/Makefile m4/Makefile src/Makefile plugins/Makefile examples/Makefile lib/Makefile lib/proxy/Makefile"
+ac_config_files="$ac_config_files Makefile m4/Makefile src/Makefile plugins/Makefile examples/Makefile lib/Makefile lib/proxy/Makefile"
 
 
 ac_config_files="$ac_config_files plugins/admin/Makefile"
@@ -19395,7 +19395,6 @@ do
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
-    "cmake/Makefile") CONFIG_FILES="$CONFIG_FILES cmake/Makefile" ;;
     "m4/Makefile") CONFIG_FILES="$CONFIG_FILES m4/Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "plugins/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/Makefile" ;;

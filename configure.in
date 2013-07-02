@@ -406,7 +406,6 @@ PACKAGE_VERSION_ID=`echo $PACKAGE_VERSION | $AWK -F '.' '{print "(" $1 " << 16 |
 AC_DEFINE_UNQUOTED([PACKAGE_VERSION_ID], [$PACKAGE_VERSION_ID], [lpackage-version-id])
 
 AC_CONFIG_FILES([Makefile \
-		 cmake/Makefile \
 		 m4/Makefile \
 		 src/Makefile \
 		 plugins/Makefile \

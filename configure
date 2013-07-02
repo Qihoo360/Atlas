@@ -16831,12 +16831,12 @@ if test -n "$GLIB_CFLAGS"; then
     pkg_cv_GLIB_CFLAGS="$GLIB_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 >= 2.16.0\"") >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 >= 2.16.0") 2>&5
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 >= 2.32.0\"") >&5
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 >= 2.32.0") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_GLIB_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 >= 2.16.0" 2>/dev/null`
+  pkg_cv_GLIB_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 >= 2.32.0" 2>/dev/null`
 else
   pkg_failed=yes
 fi
@@ -16847,12 +16847,12 @@ if test -n "$GLIB_LIBS"; then
     pkg_cv_GLIB_LIBS="$GLIB_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 >= 2.16.0\"") >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 >= 2.16.0") 2>&5
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"glib-2.0 >= 2.32.0\"") >&5
+  ($PKG_CONFIG --exists --print-errors "glib-2.0 >= 2.32.0") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_GLIB_LIBS=`$PKG_CONFIG --libs "glib-2.0 >= 2.16.0" 2>/dev/null`
+  pkg_cv_GLIB_LIBS=`$PKG_CONFIG --libs "glib-2.0 >= 2.32.0" 2>/dev/null`
 else
   pkg_failed=yes
 fi
@@ -16870,14 +16870,14 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        GLIB_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "glib-2.0 >= 2.16.0" 2>&1`
+	        GLIB_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "glib-2.0 >= 2.32.0" 2>&1`
         else
-	        GLIB_PKG_ERRORS=`$PKG_CONFIG --print-errors "glib-2.0 >= 2.16.0" 2>&1`
+	        GLIB_PKG_ERRORS=`$PKG_CONFIG --print-errors "glib-2.0 >= 2.32.0" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$GLIB_PKG_ERRORS" >&5
 
-	{ { $as_echo "$as_me:$LINENO: error: Package requirements (glib-2.0 >= 2.16.0) were not met:
+	{ { $as_echo "$as_me:$LINENO: error: Package requirements (glib-2.0 >= 2.32.0) were not met:
 
 $GLIB_PKG_ERRORS
 
@@ -16888,7 +16888,7 @@ Alternatively, you may set the environment variables GLIB_CFLAGS
 and GLIB_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details.
 " >&5
-$as_echo "$as_me: error: Package requirements (glib-2.0 >= 2.16.0) were not met:
+$as_echo "$as_me: error: Package requirements (glib-2.0 >= 2.32.0) were not met:
 
 $GLIB_PKG_ERRORS
 
@@ -16952,12 +16952,12 @@ if test -n "$GMODULE_CFLAGS"; then
     pkg_cv_GMODULE_CFLAGS="$GMODULE_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gmodule-2.0 >= 2.16.0\"") >&5
-  ($PKG_CONFIG --exists --print-errors "gmodule-2.0 >= 2.16.0") 2>&5
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gmodule-2.0 >= 2.32.0\"") >&5
+  ($PKG_CONFIG --exists --print-errors "gmodule-2.0 >= 2.32.0") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_GMODULE_CFLAGS=`$PKG_CONFIG --cflags "gmodule-2.0 >= 2.16.0" 2>/dev/null`
+  pkg_cv_GMODULE_CFLAGS=`$PKG_CONFIG --cflags "gmodule-2.0 >= 2.32.0" 2>/dev/null`
 else
   pkg_failed=yes
 fi
@@ -16968,12 +16968,12 @@ if test -n "$GMODULE_LIBS"; then
     pkg_cv_GMODULE_LIBS="$GMODULE_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gmodule-2.0 >= 2.16.0\"") >&5
-  ($PKG_CONFIG --exists --print-errors "gmodule-2.0 >= 2.16.0") 2>&5
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gmodule-2.0 >= 2.32.0\"") >&5
+  ($PKG_CONFIG --exists --print-errors "gmodule-2.0 >= 2.32.0") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_GMODULE_LIBS=`$PKG_CONFIG --libs "gmodule-2.0 >= 2.16.0" 2>/dev/null`
+  pkg_cv_GMODULE_LIBS=`$PKG_CONFIG --libs "gmodule-2.0 >= 2.32.0" 2>/dev/null`
 else
   pkg_failed=yes
 fi
@@ -16991,14 +16991,14 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "gmodule-2.0 >= 2.16.0" 2>&1`
+	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "gmodule-2.0 >= 2.32.0" 2>&1`
         else
-	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --print-errors "gmodule-2.0 >= 2.16.0" 2>&1`
+	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --print-errors "gmodule-2.0 >= 2.32.0" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$GMODULE_PKG_ERRORS" >&5
 
-	{ { $as_echo "$as_me:$LINENO: error: Package requirements (gmodule-2.0 >= 2.16.0) were not met:
+	{ { $as_echo "$as_me:$LINENO: error: Package requirements (gmodule-2.0 >= 2.32.0) were not met:
 
 $GMODULE_PKG_ERRORS
 
@@ -17009,7 +17009,7 @@ Alternatively, you may set the environment variables GMODULE_CFLAGS
 and GMODULE_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details.
 " >&5
-$as_echo "$as_me: error: Package requirements (gmodule-2.0 >= 2.16.0) were not met:
+$as_echo "$as_me: error: Package requirements (gmodule-2.0 >= 2.32.0) were not met:
 
 $GMODULE_PKG_ERRORS
 
@@ -17073,12 +17073,12 @@ if test -n "$GTHREAD_CFLAGS"; then
     pkg_cv_GTHREAD_CFLAGS="$GTHREAD_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gthread-2.0 >= 2.16.0\"") >&5
-  ($PKG_CONFIG --exists --print-errors "gthread-2.0 >= 2.16.0") 2>&5
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gthread-2.0 >= 2.32.0\"") >&5
+  ($PKG_CONFIG --exists --print-errors "gthread-2.0 >= 2.32.0") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_GTHREAD_CFLAGS=`$PKG_CONFIG --cflags "gthread-2.0 >= 2.16.0" 2>/dev/null`
+  pkg_cv_GTHREAD_CFLAGS=`$PKG_CONFIG --cflags "gthread-2.0 >= 2.32.0" 2>/dev/null`
 else
   pkg_failed=yes
 fi
@@ -17089,12 +17089,12 @@ if test -n "$GTHREAD_LIBS"; then
     pkg_cv_GTHREAD_LIBS="$GTHREAD_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gthread-2.0 >= 2.16.0\"") >&5
-  ($PKG_CONFIG --exists --print-errors "gthread-2.0 >= 2.16.0") 2>&5
+    { ($as_echo "$as_me:$LINENO: \$PKG_CONFIG --exists --print-errors \"gthread-2.0 >= 2.32.0\"") >&5
+  ($PKG_CONFIG --exists --print-errors "gthread-2.0 >= 2.32.0") 2>&5
   ac_status=$?
   $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; then
-  pkg_cv_GTHREAD_LIBS=`$PKG_CONFIG --libs "gthread-2.0 >= 2.16.0" 2>/dev/null`
+  pkg_cv_GTHREAD_LIBS=`$PKG_CONFIG --libs "gthread-2.0 >= 2.32.0" 2>/dev/null`
 else
   pkg_failed=yes
 fi
@@ -17112,14 +17112,14 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        GTHREAD_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "gthread-2.0 >= 2.16.0" 2>&1`
+	        GTHREAD_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "gthread-2.0 >= 2.32.0" 2>&1`
         else
-	        GTHREAD_PKG_ERRORS=`$PKG_CONFIG --print-errors "gthread-2.0 >= 2.16.0" 2>&1`
+	        GTHREAD_PKG_ERRORS=`$PKG_CONFIG --print-errors "gthread-2.0 >= 2.32.0" 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
 	echo "$GTHREAD_PKG_ERRORS" >&5
 
-	{ { $as_echo "$as_me:$LINENO: error: Package requirements (gthread-2.0 >= 2.16.0) were not met:
+	{ { $as_echo "$as_me:$LINENO: error: Package requirements (gthread-2.0 >= 2.32.0) were not met:
 
 $GTHREAD_PKG_ERRORS
 
@@ -17130,7 +17130,7 @@ Alternatively, you may set the environment variables GTHREAD_CFLAGS
 and GTHREAD_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details.
 " >&5
-$as_echo "$as_me: error: Package requirements (gthread-2.0 >= 2.16.0) were not met:
+$as_echo "$as_me: error: Package requirements (gthread-2.0 >= 2.32.0) were not met:
 
 $GTHREAD_PKG_ERRORS
 

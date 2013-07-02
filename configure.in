@@ -423,10 +423,6 @@ dnl AC_CONFIG_FILES([plugins/cli/Makefile])
 AC_CONFIG_FILES([plugins/debug/Makefile])
 
 dnl Create the wrapper script for starting mysql-proxy in self-contained builds
-AC_CONFIG_FILES([scripts/Makefile])
-AC_CONFIG_FILES([scripts/mysql-myisam-dump:scripts/mysql-proxy-binwrapper.in], [chmod +x scripts/mysql-myisam-dump])
-AC_CONFIG_FILES([scripts/mysql-binlog-dump:scripts/mysql-proxy-binwrapper.in], [chmod +x scripts/mysql-binlog-dump])
-AC_CONFIG_FILES([scripts/mysql-proxy:scripts/mysql-proxy-binwrapper.in], [chmod +x scripts/mysql-proxy])
 AC_CONFIG_FILES([mysql-proxy.pc])
 AC_CONFIG_FILES([mysql-chassis.pc])
 AC_CONFIG_FILES([doc/Makefile])

@@ -1,4 +1,4 @@
-SUBDIRS = src lib plugins examples scripts m4 doc
+SUBDIRS = src lib plugins examples m4 doc
 
 EXTRA_DIST = \
 		Doxyfile \

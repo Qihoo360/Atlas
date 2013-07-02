@@ -18393,15 +18393,6 @@ ac_config_files="$ac_config_files plugins/replicant/Makefile"
 
 ac_config_files="$ac_config_files plugins/debug/Makefile"
 
-
-ac_config_files="$ac_config_files scripts/Makefile"
-
-ac_config_files="$ac_config_files scripts/mysql-myisam-dump:scripts/mysql-proxy-binwrapper.in"
-
-ac_config_files="$ac_config_files scripts/mysql-binlog-dump:scripts/mysql-proxy-binwrapper.in"
-
-ac_config_files="$ac_config_files scripts/mysql-proxy:scripts/mysql-proxy-binwrapper.in"
-
 ac_config_files="$ac_config_files mysql-proxy.pc"
 
 ac_config_files="$ac_config_files mysql-chassis.pc"
@@ -19406,10 +19397,6 @@ do
     "plugins/proxy/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/proxy/Makefile" ;;
     "plugins/replicant/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/replicant/Makefile" ;;
     "plugins/debug/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/debug/Makefile" ;;
-    "scripts/Makefile") CONFIG_FILES="$CONFIG_FILES scripts/Makefile" ;;
-    "scripts/mysql-myisam-dump") CONFIG_FILES="$CONFIG_FILES scripts/mysql-myisam-dump:scripts/mysql-proxy-binwrapper.in" ;;
-    "scripts/mysql-binlog-dump") CONFIG_FILES="$CONFIG_FILES scripts/mysql-binlog-dump:scripts/mysql-proxy-binwrapper.in" ;;
-    "scripts/mysql-proxy") CONFIG_FILES="$CONFIG_FILES scripts/mysql-proxy:scripts/mysql-proxy-binwrapper.in" ;;
     "mysql-proxy.pc") CONFIG_FILES="$CONFIG_FILES mysql-proxy.pc" ;;
     "mysql-chassis.pc") CONFIG_FILES="$CONFIG_FILES mysql-chassis.pc" ;;
     "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
@@ -20838,9 +20825,6 @@ _LT_EOF
   chmod +x "$ofile"
 
  ;;
-    "scripts/mysql-myisam-dump":F) chmod +x scripts/mysql-myisam-dump ;;
-    "scripts/mysql-binlog-dump":F) chmod +x scripts/mysql-binlog-dump ;;
-    "scripts/mysql-proxy":F) chmod +x scripts/mysql-proxy ;;
 
   esac
 done # for ac_tag

@@ -27,26 +27,22 @@ function stop()
 	if test -s "$pidfile" ; then
 		read proxy_pid < $pidfile
 		if kill -0 $proxy_pid 2>/dev/null ; then
-			kill $proxy_pid
-			if [ "$?" != "0" ]; then
-				echo "error: failed to kill $name"
-				exit 3
-			fi
+			ppid=`ps -ef| grep $proxy_pid | grep -v grep | awk '{print $3}'`
+			kill -9 $ppid
+			sleep 0.1s
 
-			sleep 2s
+			kill -9 $proxy_pid
+			sleep 0.1s
 
-			if [ "$?" != "0" ]; then
-				echo "error: failed to delete $pidfile"
-				exit 3
-			fi
-			
+			rm -f $pidfile
+
 			echo "OK: $name is stopped"
 		else
 			echo "$name is NOT running, but PID file exists"
 			exit 3
 		fi
 	else
-		echo "error: $name is NOT running"
+		echo "error: $pidfile is NOT exist"
 		exit 3
 	fi
 }

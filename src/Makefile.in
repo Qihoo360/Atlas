@@ -1369,9 +1369,10 @@ installdirs:
 	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(logdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-	cp -f $(top_srcdir)/script/mysql-proxyd "$(DESTDIR)$(bindir)"
+installscript:
+	cd $(top_srcdir)/script;make;cp -f encrypt mysql-proxyd "$(DESTDIR)$(bindir)"
 install: $(BUILT_SOURCES)
-	$(MAKE) $(AM_MAKEFLAGS) install-am installdirs
+	$(MAKE) $(AM_MAKEFLAGS) install-am installdirs installscript
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -1404,7 +1405,10 @@ clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
 	clean-libexecPROGRAMS clean-libtool clean-noinstPROGRAMS \
-	mostlyclean-am
+	mostlyclean-am clean-script
+
+clean-script:
+	cd $(top_srcdir)/script;make clean
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)

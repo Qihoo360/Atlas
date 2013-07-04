@@ -94,3 +94,6 @@ PREFIX/bin/mysql-proxyd instance restart
 
 查看运行状态：
 PREFIX/bin/mysql-proxyd instance status
+
+五、联系方式
+    有各种问题或建议，欢迎发邮件至zhuchao[AT]360.cn或g-infra[AT]360.cn交流，谢谢支持！

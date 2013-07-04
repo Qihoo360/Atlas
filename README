@@ -12,7 +12,7 @@
 Q & A
 -------------------
 Q: 是否支持多字符集？
-A: 这是我们对原版MySQL-Proxy的第一项改进，符合国情是必须的
+A: 对多字符集的支持是我们对原版MySQL-Proxy的第一项改进，符合国情是必须的
 
 Q: 自动读写分离挺好，但有时候我写完马上就想读，万一主从同步延迟怎么办?
 A: SQL语句前增加 /*master*/ 就可以将读请求强制发往主库
@@ -45,7 +45,7 @@ VS 官方MySQL-Proxy
 
 二、配置文件示例
 -------------------
-[mysql-proxy]	#不需要改
+[mysql-proxy]
 plugins = admin, proxy	#Atlas加载的模块名称，不需要改
 
 admin-username = user	#管理接口的用户名
@@ -67,8 +67,8 @@ proxy-address = 0.0.0.0:1234	#Atlas监听的工作接口IP和端口
 admin-address = 0.0.0.0:2345	#Atlas监听的管理接口IP和端口
 
 min-idle-connections = 128	#连接池的最小空闲连接数，可根据业务请求量大小适当调大或调小
-tables = person.mt.id.3	#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔
-pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#用户名与其对应的加密过的密码，密码使用加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
+tables = person.mt.id.3	#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
+pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#用户名与其对应的加密过的MySQL密码，密码使用PREFIX/bin目录下的加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
 charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1
 
 三、编译安装
@@ -96,4 +96,4 @@ PREFIX/bin/mysql-proxyd instance restart
 PREFIX/bin/mysql-proxyd instance status
 
 五、联系方式
-    有各种问题或建议，欢迎发邮件至zhuchao[AT]360.cn或g-infra[AT]360.cn交流，谢谢支持！
+有各种问题或建议，欢迎发邮件至zhuchao[AT]360.cn或g-infra[AT]360.cn交流，谢谢支持！

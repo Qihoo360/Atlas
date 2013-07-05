@@ -73,7 +73,7 @@ charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1
 
 三、编译安装
 -------------------
-依赖：glib(2.32.0以上)、libevent(1.4以上)、Lua(5.1以上)、OpenSSL(0.9.8以上)
+依赖：glib(2.32.0以上)、libevent(1.4以上)、Lua(5.1.x)、OpenSSL(0.9.8以上)
 
 ./bootstrap.sh	#可能需要修改其中的路径
 make

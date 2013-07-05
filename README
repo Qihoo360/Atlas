@@ -81,7 +81,7 @@ sudo make install
 
 四、启动与停止
 -------------------
-进入PREFIX/conf目录，编辑instance.conf，此处instance的实际名称应与其中instance设置项相同，其他设置项含义见第二节。
+进入PREFIX/conf目录，编辑instance.cnf，此处instance的实际名称应与其中instance设置项相同，其他设置项含义见第二节。
 
 启动：
 PREFIX/bin/mysql-proxyd instance start

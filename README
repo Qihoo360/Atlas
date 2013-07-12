@@ -66,11 +66,12 @@ instance = test	#实例名称，用于同一台机器上多个Atlas实例间的区分
 proxy-address = 0.0.0.0:1234	#Atlas监听的工作接口IP和端口
 admin-address = 0.0.0.0:2345	#Atlas监听的管理接口IP和端口
 
-min-idle-connections = 128	#连接池的最小空闲连接数，可根据业务请求量大小适当调大或调小
+min-idle-connections = 128	#连接池的最小空闲连接数，应设为event-threads的整数倍，可根据业务请求量大小适当调大或调小
 tables = person.mt.id.3	#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
 pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#用户名与其对应的加密过的MySQL密码，密码使用PREFIX/bin目录下的加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
 charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1
 client-ips = 127.0.0.1, 192.168.1	#允许连接Atlas的客户端的IP，可以是精确IP，也可以是IP段，以逗号分隔，若不设置该项则允许所有IP连接，否则只允许列表中的IP连接
+lvs-ips = 192.168.1.1	#Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
 
 三、编译安装
 -------------------

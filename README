@@ -46,32 +46,66 @@ VS 官方MySQL-Proxy
 二、配置文件示例
 -------------------
 [mysql-proxy]
-plugins = admin, proxy	#Atlas加载的模块名称，不需要改
 
-admin-username = user	#管理接口的用户名
-admin-password = pwd	#管理接口的密码
-admin-lua-script = /usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua	#实现管理接口的Lua脚本所在路径
+#Atlas加载的模块名称，不需要改
+plugins = admin, proxy
 
-proxy-backend-addresses = 127.0.0.1:3306	#Atlas后端连接的MySQL主库的IP和端口，可设置多项，用逗号分隔
-proxy-read-only-backend-addresses = 127.0.0.1:3305@2	#Atlas后端连接的MySQL从库的IP和端口，2代表权重，用来作负载均衡，若省略则默认为1，可设置多项，用逗号分隔
+#管理接口的用户名
+admin-username = user
 
-daemon = false	#设置Atlas的运行方式，设为true时为守护进程方式，设为false时为前台方式，一般开发调试时设为false，线上运行时设为true
-keepalive = false	#设置Atlas的运行方式，设为true时Atlas会启动两个进程，一个为monitor，一个为worker，monitor在worker意外退出后会自动将其重启，设为false时只有worker，没有monitor，一般开发调试时设为false，线上运行时设为true
+#管理接口的密码
+admin-password = pwd
 
-event-threads = 4	#工作线程数，推荐设置与系统的CPU核数相等
-log-level = message	#日志级别，分为message、warning、critical、error、debug五个级别
-log-path = /usr/local/mysql-proxy/log	#日志存放的路径
-instance = test	#实例名称，用于同一台机器上多个Atlas实例间的区分
+#实现管理接口的Lua脚本所在路径
+admin-lua-script = /usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua
 
-proxy-address = 0.0.0.0:1234	#Atlas监听的工作接口IP和端口
-admin-address = 0.0.0.0:2345	#Atlas监听的管理接口IP和端口
+#Atlas后端连接的MySQL主库的IP和端口，可设置多项，用逗号分隔
+proxy-backend-addresses = 127.0.0.1:3306
 
-min-idle-connections = 128	#连接池的最小空闲连接数，应设为event-threads的整数倍，可根据业务请求量大小适当调大或调小
-tables = person.mt.id.3	#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
-pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=	#用户名与其对应的加密过的MySQL密码，密码使用PREFIX/bin目录下的加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
-charset = utf8	#默认字符集，若不设置该项，则默认字符集为latin1
-client-ips = 127.0.0.1, 192.168.1	#允许连接Atlas的客户端的IP，可以是精确IP，也可以是IP段，以逗号分隔，若不设置该项则允许所有IP连接，否则只允许列表中的IP连接
-lvs-ips = 192.168.1.1	#Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
+#Atlas后端连接的MySQL从库的IP和端口，@后面的数字代表权重，用来作负载均衡，若省略则默认为1，可设置多项，用逗号分隔
+proxy-read-only-backend-addresses = 127.0.0.1:3305@1
+
+#设置Atlas的运行方式，设为true时为守护进程方式，设为false时为前台方式，一般开发调试时设为false，线上运行时设为true
+daemon = false
+
+#设置Atlas的运行方式，设为true时Atlas会启动两个进程，一个为monitor，一个为worker，monitor在worker意外退出后会自动将其重启，设为false时只有worker，没有monitor，一般开发调试时设为false，线上运行时设为true
+keepalive = false
+
+#工作线程数，推荐设置与系统的CPU核数相等
+event-threads = 4
+
+#日志级别，分为message、warning、critical、error、debug五个级别
+log-level = message
+
+#日志存放的路径
+log-path = /usr/local/mysql-proxy/log
+
+#实例名称，用于同一台机器上多个Atlas实例间的区分
+instance = test
+
+#Atlas监听的工作接口IP和端口
+proxy-address = 0.0.0.0:1234
+
+#Atlas监听的管理接口IP和端口
+admin-address = 0.0.0.0:2345
+
+#连接池的最小空闲连接数，应设为event-threads的整数倍，可根据业务请求量大小适当调大或调小
+min-idle-connections = 128
+
+#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
+tables = person.mt.id.3
+
+#用户名与其对应的加密过的MySQL密码，密码使用PREFIX/bin目录下的加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
+pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=
+
+#默认字符集，若不设置该项，则默认字符集为latin1
+charset = utf8
+
+#允许连接Atlas的客户端的IP，可以是精确IP，也可以是IP段，以逗号分隔，若不设置该项则允许所有IP连接，否则只允许列表中的IP连接
+client-ips = 127.0.0.1, 192.168.1
+
+#Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
+lvs-ips = 192.168.1.1
 
 三、编译安装
 -------------------

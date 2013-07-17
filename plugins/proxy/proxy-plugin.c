@@ -2576,7 +2576,7 @@ void* check_state(network_backends_t* bs) {
 			mysql_options(&mysql, MYSQL_OPT_CONNECT_TIMEOUT, &tm);
 			mysql_real_connect(&mysql, ip, NULL, NULL, NULL, port, NULL, 0);
 
-			if (mysql_errno(&mysql) == 1045) backend->state = BACKEND_STATE_UP;
+			if (mysql_errno(&mysql) == 1045 || mysql_errno(&mysql) == 0) backend->state = BACKEND_STATE_UP;
 			else backend->state = BACKEND_STATE_DOWN;
 
 			mysql_close(&mysql);

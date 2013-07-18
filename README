@@ -1,136 +1,136 @@
-һ�����
+一、简介
 -------------------
-    Atlas���� Qihoo 360,  Webƽ̨�������ܹ��Ŷӿ���ά����һ������MySQLЭ��������м����Ŀ������MySQL�ٷ��Ƴ���MySQL-Proxy 0.8.2�汾�Ļ����ϣ��޸��˴���bug�������˺ܶ๦�����ԡ�Ŀǰ����Ŀ��360��˾�ڲ��õ��˹㷺Ӧ�ã��ܶ�MySQLҵ���Ѿ�������Atlasƽ̨��ÿ����صĶ�д�������Ｘʮ������
+    Atlas是由 Qihoo 360,  Web平台部基础架构团队开发维护的一个基于MySQL协议的数据中间层项目。它在MySQL官方推出的MySQL-Proxy 0.8.2版本的基础上，修改了大量bug，添加了很多功能特性。目前该项目在360公司内部得到了广泛应用，很多MySQL业务已经接入了Atlas平台，每天承载的读写请求数达几十亿条。
 
-��Ҫ���ܣ�
-* ��д����
-* �ӿ⸺�ؾ���
-* IP����
-* SQL���ڰ�����
-* �Զ��ֱ�
+主要功能：
+* 读写分离
+* 从库负载均衡
+* IP过滤
+* SQL语句黑白名单
+* 自动分表
 
 Q & A
 -------------------
-Q: �Ƿ�֧�ֶ��ַ�����
-A: �Զ��ַ�����֧�������Ƕ�ԭ��MySQL-Proxy�ĵ�һ��Ľ������Ϲ����Ǳ����
+Q: 是否支持多字符集？
+A: 对多字符集的支持是我们对原版MySQL-Proxy的第一项改进，符合国情是必须的
 
-Q: �Զ���д����ͦ�ã�����ʱ����д�����Ͼ��������һ����ͬ���ӳ���ô��?
-A: SQL���ǰ���� /*master*/ �Ϳ��Խ�������ǿ�Ʒ�������
+Q: 自动读写分离挺好，但有时候我写完马上就想读，万一主从同步延迟怎么办?
+A: SQL语句前增加 /*master*/ 就可以将读请求强制发往主库
 
-Q: ����崻�����������Ӱ��ô��
-A: ��atlas���ǲ����! ��������������, ˵�����ù��ٷ���mysql-proxy, ���ź��ٷ��汾��δ����������
+Q: 主库宕机，读操作受影响么？
+A: 在atlas中是不会的! 能问这样的问题, 说明你用过官方的mysql-proxy, 很遗憾官方版本并未解决这个问题
 
-Q: �����DB״̬��������������ô��
-A: ����, atlas�м���߳����첽���м��ģ���ʹ��db崻���Ҳ�������������̡���atlas��û��ʲô�쳣��������������! ͬ�ϣ��ٷ��汾Ҳ������ʧ��
+Q: 检测后端DB状态会阻塞正常请求么？
+A: 不会, atlas中检测线程是异步进行检测的，即使有db宕机，也不会阻塞主流程。在atlas中没有什么异常会让主流程阻塞! 同上，官方版本也会让你失望
 
-Q: ������һ̨DB, �ֲ���ͣ��mysql server, ��ô�죿
-A: ����ͨ�������ӿ��ֶ������ߺ��db, atlas�����ȿ��ǹ���Ա����Ը
+Q: 想下线一台DB, 又不想停掉mysql server, 怎么办？
+A: 可以通过管理接口手动上下线后端db, atlas会优先考虑管理员的意愿
 
-Q: �����Ⱥ������һ̨DB, ����Ӱ�������������ʿ�����
-A: ͨ�������ӿڿ�������ʵ��
+Q: 想给集群中增加一台DB, 不想影响线上正常访问可以吗？
+A: 通过管理接口可以轻松实现
 
-Q: ��ȹٷ�mysql-proxy, atlas������Щ�Ľ���
-A: ��ʵ���Ǹ����Իش�����⣬���ܣ��ȶ��ԣ��ɿ��ԣ���ά���ԣ�����������ʮ��ĸĽ�������ᾡ����һЩ�ϴ�ĸĶ�
+Q: 相比官方mysql-proxy, atlas还有哪些改进？
+A: 这实在是个难以回答的问题，性能，稳定性，可靠性，易维护性，我们做过几十项的改进，下面会尽量列一些较大的改动
 
-VS �ٷ�MySQL-Proxy
+VS 官方MySQL-Proxy
 -------------------
-1. ��������������Lua�����Ϊ��Cʵ�֣�Lua�����ڹ����ӿ�
-2. ��д����ģ�͡��߳�ģ��
-3. ʵ����������������ӳ�
-4. �Ż��������ƣ����������ʮ��
+1. 将主流程中所有Lua代码改为纯C实现，Lua仅用在管理接口
+2. 重写网络模型、线程模型
+3. 实现了真正意义的连接池
+4. 优化了锁机制，性能提高数十倍
 ......
 
-��������Դ��
-    Atlas��ϣ������˫�����ľ��ˣ���������˹���ֵܣ���ߴ�ǿ׳����֮һ���򷴿���˹ʧ�ܶ��������졣�����������ϵͳ�ܹ���̤���DB��Ϊǰ��Ӧ�ó���һƬ�졣
+附名字来源：
+    Atlas，希腊神话中双肩撑天的巨人，普罗米修斯的兄弟，最高大强壮的神之一，因反抗宙斯失败而被罚顶天。我们期望这个系统能够脚踏后端DB，为前端应用撑起一片天。
 
-���������ļ�ʾ��
+二、配置文件示例
 -------------------
 [mysql-proxy]
 
-#Atlas���ص�ģ�����ƣ�����Ҫ��
+#Atlas加载的模块名称，不需要改
 plugins = admin, proxy
 
-#�����ӿڵ��û���
+#管理接口的用户名
 admin-username = user
 
-#�����ӿڵ�����
+#管理接口的密码
 admin-password = pwd
 
-#ʵ�ֹ����ӿڵ�Lua�ű�����·��
+#实现管理接口的Lua脚本所在路径
 admin-lua-script = /usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua
 
-#Atlas������ӵ�MySQL�����IP�Ͷ˿ڣ������ö���ö��ŷָ�
+#Atlas后端连接的MySQL主库的IP和端口，可设置多项，用逗号分隔
 proxy-backend-addresses = 127.0.0.1:3306
 
-#Atlas������ӵ�MySQL�ӿ��IP�Ͷ˿ڣ�@��������ִ���Ȩ�أ����������ؾ��⣬��ʡ����Ĭ��Ϊ1�������ö���ö��ŷָ�
+#Atlas后端连接的MySQL从库的IP和端口，@后面的数字代表权重，用来作负载均衡，若省略则默认为1，可设置多项，用逗号分隔
 proxy-read-only-backend-addresses = 127.0.0.1:3305@1
 
-#����Atlas�����з�ʽ����ΪtrueʱΪ�ػ����̷�ʽ����ΪfalseʱΪǰ̨��ʽ��һ�㿪������ʱ��Ϊfalse����������ʱ��Ϊtrue
+#设置Atlas的运行方式，设为true时为守护进程方式，设为false时为前台方式，一般开发调试时设为false，线上运行时设为true
 daemon = false
 
-#����Atlas�����з�ʽ����ΪtrueʱAtlas�������������̣�һ��Ϊmonitor��һ��Ϊworker��monitor��worker�����˳�����Զ�������������Ϊfalseʱֻ��worker��û��monitor��һ�㿪������ʱ��Ϊfalse����������ʱ��Ϊtrue
+#设置Atlas的运行方式，设为true时Atlas会启动两个进程，一个为monitor，一个为worker，monitor在worker意外退出后会自动将其重启，设为false时只有worker，没有monitor，一般开发调试时设为false，线上运行时设为true
 keepalive = false
 
-#�����߳������Ƽ�������ϵͳ��CPU�������
+#工作线程数，推荐设置与系统的CPU核数相等
 event-threads = 4
 
-#��־���𣬷�Ϊmessage��warning��critical��error��debug�������
+#日志级别，分为message、warning、critical、error、debug五个级别
 log-level = message
 
-#��־��ŵ�·��
+#日志存放的路径
 log-path = /usr/local/mysql-proxy/log
 
-#ʵ�����ƣ�����ͬһ̨�����϶��Atlasʵ���������
+#实例名称，用于同一台机器上多个Atlas实例间的区分
 instance = test
 
-#Atlas�����Ĺ����ӿ�IP�Ͷ˿�
+#Atlas监听的工作接口IP和端口
 proxy-address = 0.0.0.0:1234
 
-#Atlas�����Ĺ����ӿ�IP�Ͷ˿�
+#Atlas监听的管理接口IP和端口
 admin-address = 0.0.0.0:2345
 
-#���ӳص���С������������Ӧ��Ϊevent-threads�����������ɸ���ҵ����������С�ʵ�������С
+#连接池的最小空闲连接数，应设为event-threads的整数倍，可根据业务请求量大小适当调大或调小
 min-idle-connections = 128
 
-#�ֱ����ã�������personΪ������mtΪ������idΪ�ֱ��ֶΣ�3Ϊ�ӱ������������ö���Զ��ŷָ��������ֱ�����Ҫ���ø���
+#分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
 tables = person.mt.id.3
 
-#�û��������Ӧ�ļ��ܹ���MySQL���룬����ʹ��PREFIX/binĿ¼�µļ��ܳ���encrypt���ܣ������������ڶ���û���ͬʱ����ͬһ��Atlasʵ�����������ֻ��һ���û�������Ҫ���ø���
+#用户名与其对应的加密过的MySQL密码，密码使用PREFIX/bin目录下的加密程序encrypt加密，此设置项用于多个用户名同时访问同一个Atlas实例的情况，若只有一个用户名则不需要设置该项
 pwds = user1:+jKsgB3YAG8=, user2:GS+tr4TPgqc=
 
-#Ĭ���ַ������������ø����Ĭ���ַ���Ϊlatin1
+#默认字符集，若不设置该项，则默认字符集为latin1
 charset = utf8
 
-#��������Atlas�Ŀͻ��˵�IP�������Ǿ�ȷIP��Ҳ������IP�Σ��Զ��ŷָ����������ø�������������IP���ӣ�����ֻ�����б��е�IP����
+#允许连接Atlas的客户端的IP，可以是精确IP，也可以是IP段，以逗号分隔，若不设置该项则允许所有IP连接，否则只允许列表中的IP连接
 client-ips = 127.0.0.1, 192.168.1
 
-#Atlasǰ��ҽӵ�LVS������������IP(ע�ⲻ����IP)������LVS��������client-ips�����������ã�������Բ�����
+#Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
 lvs-ips = 192.168.1.1
 
-�������밲װ
+三、编译安装
 -------------------
-������glib(2.32.x)��libevent(1.4����)��Lua(5.1.x)��OpenSSL(0.9.8����)
+依赖：glib(2.32.x)、libevent(1.4以上)、Lua(5.1.x)、OpenSSL(0.9.8以上)
 
-./bootstrap.sh	#������Ҫ�޸����е�·��
+./bootstrap.sh	#可能需要修改其中的路径
 make
 sudo make install
 
-�ġ�������ֹͣ
+四、启动与停止
 -------------------
-����PREFIX/confĿ¼���༭instance.cnf���˴�instance��ʵ������Ӧ������instance��������ͬ���������������ڶ��ڣ�����instance.cnf��mode������0660����͡�
+进入PREFIX/conf目录，编辑instance.cnf，此处instance的实际名称应与其中instance设置项相同，其他设置项含义见第二节，另外instance.cnf的mode必须是0660或更低。
 
-������
+启动：
 PREFIX/bin/mysql-proxyd instance start
 
-ֹͣ��
+停止：
 PREFIX/bin/mysql-proxyd instance stop
 
-������
+重启：
 PREFIX/bin/mysql-proxyd instance restart
 
-�鿴����״̬��
+查看运行状态：
 PREFIX/bin/mysql-proxyd instance status
 
-�塢��ϵ��ʽ
+五、联系方式
 -------------------
-�и���������飬��ӭ���ʼ���zhuchao[AT]360.cn��g-infra[AT]360.cn������лл֧�֣�
+有各种问题或建议，欢迎发邮件至zhuchao[AT]360.cn或g-infra[AT]360.cn交流，谢谢支持！

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 name="MySQL-Proxy of $1"
 proxydir=/usr/local/mysql-proxy
@@ -8,41 +8,39 @@ confile="$proxydir/conf/$1.cnf"
 
 function start()
 {
-	if test -s "$pidfile" ; then
-		echo "error: PID file already exists"
-		exit 2
-	fi
+	ps -ef | grep "mysql-proxy --defaults-file=.*$1.cnf" | grep -v grep >/dev/null 2>&1
 
-	$binfile --defaults-file=$confile 2>/dev/null
-	if [ "$?" != "0" ]; then
-		echo "error: failed to start $name"
+	if [ "$?" == "0" ]; then
+		echo "error: $name is running now"
 		exit 2
-	fi
+	else
+		$binfile --defaults-file=$confile >/dev/null 2>&1
 
-	echo "OK: $name is started"
+		if [ "$?" == "0" ]; then
+			echo "OK: $name is started"
+		else
+			echo "error: failed to start $name"
+			exit 2
+		fi
+	fi
 }
 
 function stop()
 {
-	if test -s "$pidfile" ; then
-		read proxy_pid < $pidfile
-		if kill -0 $proxy_pid 2>/dev/null ; then
-			ppid=`ps -ef| grep $proxy_pid | grep -v grep | awk '{print $3}'`
-			kill -9 $ppid
-			sleep 0.1s
+	ps -ef | grep "mysql-proxy --defaults-file=.*$1.cnf" | grep -v grep >/dev/null 2>&1
 
-			kill -9 $proxy_pid
-			sleep 0.1s
+	if [ "$?" == "0" ]; then
+		ps -ef |  grep "mysql-proxy --defaults-file=.*$1.cnf" | grep -v grep | awk '{print $2}' | xargs kill -9 >/dev/null 2>&1
 
+		if [ "$?" == "0" ]; then
 			rm -f $pidfile
-
 			echo "OK: $name is stopped"
 		else
-			echo "$name is NOT running, but PID file exists"
+			echo "error: failed to stop $name"
 			exit 3
 		fi
 	else
-		echo "error: $pidfile is NOT exist"
+		echo "error: $name is NOT running"
 		exit 3
 	fi
 }
@@ -55,14 +53,12 @@ function restart()
 
 function status()
 {
-	if test -s "$pidfile" ; then
-		read proxy_pid < $pidfile
-		if kill -0 $proxy_pid 2>/dev/null ; then
+	ps -ef | grep "mysql-proxy --defaults-file=.*$1.cnf" | grep -v grep >/dev/null 2>&1
+
+	if [ "$?" == "0" ]; then
+		ps -ef | grep "mysql-proxy --defaults-file=.*$1.cnf" | grep -v grep | awk '{print $2}' | while read proxy_pid; do
 			echo "$name is running ($proxy_pid)"
-		else
-			echo "$name is NOT running, but PID file exists"
-			exit 5
-		fi
+		done
 	else
 		echo "$name is NOT running"
 	fi

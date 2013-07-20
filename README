@@ -1,4 +1,5 @@
-详细文档见https://github.com/Qihoo360/Atlas/wiki，仍在完善中，给您造成的不便敬请谅解！
+详细文档见https://github.com/Qihoo360/Atlas/wiki
+仍在完善中，给您造成的不便敬请谅解！
 
 一、简介
 -------------------
@@ -111,11 +112,15 @@ lvs-ips = 192.168.1.1
 
 三、编译安装
 -------------------
+1. 源码方式
 依赖：glib(2.32.x)、libevent(1.4以上)、Lua(5.1.x)、OpenSSL(0.9.8以上)
 
 ./bootstrap.sh	#可能需要修改其中的路径
 make
 sudo make install
+
+2. RPM包(推荐)
+见https://github.com/Qihoo360/Atlas/releases
 
 四、启动与停止
 -------------------

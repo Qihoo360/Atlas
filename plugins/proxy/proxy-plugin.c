@@ -2740,7 +2740,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 
 	if (!config->charset) config->charset = g_strdup("LATIN1");
 
-	config->min_idle_connections /= chas->event_thread_count;
+	config->min_idle_connections = ceil(config->min_idle_connections * 1.0 / chas->event_thread_count);
 
 	/* load the script and setup the global tables */
 	network_mysqld_lua_setup_global(chas->priv->sc->L, g, chas);

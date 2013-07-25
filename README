@@ -125,7 +125,7 @@ sudo make install
 四、启动与停止
 -------------------
 进入PREFIX/conf目录，编辑xxx.cnf，此处xxx的实际名称应与其中instance设置项相同，其他设置项含义见第二节，另外xxx.cnf的mode必须是0660或更低。
-安装目录下自带一个示例test.cnf，可基于它进行修改。
+RPM包里自带一个示例test.cnf，可基于它进行修改。
 
 启动：
 PREFIX/bin/mysql-proxyd instance start

@@ -64,9 +64,6 @@ struct chassis_plugin_config {
 
 	FILE *sql_log;
 
-	gint latency;
-	FILE *latency_log;
-
 	gchar *charset;
 };
 

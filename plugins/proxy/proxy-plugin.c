@@ -1743,27 +1743,6 @@ void log_sql(network_mysqld_con* con, injection* inj) {
 
 	fwrite(message->str, message->len, 1, config->sql_log);
 
-	if (latency > config->latency) {
-		FILE* latency_log = config->latency_log;
-		fwrite(message->str, message->len, 1, latency_log);
-
-		guint i, nptrs;
-		void* buffer[100];
-		gchar** strings;
-
-		nptrs = backtrace(buffer, 100);
-		strings = backtrace_symbols(buffer, nptrs);
-
-		if (strings != NULL) {
-			for (i = 0; i < nptrs; ++i) {
-				fwrite(strings[i], strlen(strings[i]), 1, latency_log);
-				fwrite("\n", 1, 1, latency_log);
-			}
-			g_free(strings);
-			fwrite("\n", 1, 1, latency_log);
-		}
-	}
-
 	g_string_free(message, TRUE);
 }
 
@@ -2361,8 +2340,6 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->dt_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	config->pwd_table = g_hash_table_new(g_str_hash, g_str_equal);
 	config->sql_log = NULL;
-	config->latency = G_MAXINT;
-	config->latency_log = NULL;
 	config->charset = NULL;
 
 	//g_mutex_init(&mutex);
@@ -2433,7 +2410,6 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *config) {
 	g_hash_table_destroy(config->pwd_table);
 
 	if (config->sql_log) fclose(config->sql_log);
-	if (config->latency_log) fclose(config->latency_log);
 
 	if (config->charset) g_free(config->charset);
 
@@ -2474,8 +2450,6 @@ static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_con
 		{ "tables", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "sub-table settings", NULL },
 	
 		{ "pwds", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "password settings", NULL },
-
-		{ "latency", 0, 0, G_OPTION_ARG_INT, NULL, "", NULL },
 		
 		{ "charset", 0, 0, G_OPTION_ARG_STRING, NULL, "original charset(default: LATIN1)", NULL },
 
@@ -2498,7 +2472,6 @@ static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_con
 	config_entries[i++].arg_data = &(config->lvs_ips);
 	config_entries[i++].arg_data = &(config->tables);
 	config_entries[i++].arg_data = &(config->pwds);
-	config_entries[i++].arg_data = &(config->latency);
 	config_entries[i++].arg_data = &(config->charset);
 
 	return config_entries;
@@ -2728,15 +2701,6 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 			return -1;
 		}
 	}
-
-	gchar* latency_log_filename = g_strdup_printf("%s/latency_%s.log", chas->log_path, chas->instance_name);
-	config->latency_log = fopen(latency_log_filename, "a");
-	if (config->latency_log == NULL) {
-		g_critical("Failed to open %s", latency_log_filename);
-		g_free(latency_log_filename);
-		return -1; 
-	}
-	g_free(latency_log_filename);
 
 	if (!config->charset) config->charset = g_strdup("LATIN1");
 

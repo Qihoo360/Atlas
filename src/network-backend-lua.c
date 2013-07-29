@@ -145,7 +145,7 @@ static int proxy_backends_get(lua_State *L) {
  * @return nil or the backend
  */
 static int proxy_backends_set(lua_State *L) {
-	network_backend_t *bs = *(network_backend_t **)luaL_checkself(L);
+	network_backends_t *bs = *(network_backends_t **)luaL_checkself(L);
 	gsize keysize = 0;
 	const char *key = luaL_checklstring(L, 2, &keysize);
 

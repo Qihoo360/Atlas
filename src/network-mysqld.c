@@ -204,7 +204,7 @@ network_mysqld_con *network_mysqld_con_new() {
 	con = g_new0(network_mysqld_con, 1);
 	con->parse.command = -1;
 
-	con->is_in_transaction = con->is_in_select_calc_found_rows = con->is_insert_id = FALSE;
+	con->is_in_transaction = con->is_in_select_calc_found_rows = con->is_insert_id = con->is_not_autocommit = FALSE;
 
 	con->charset_client     = g_string_new(NULL);
 	con->charset_results    = g_string_new(NULL);

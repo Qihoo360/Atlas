@@ -353,8 +353,8 @@ struct network_mysqld_con {
 
 	gboolean is_in_transaction;
 	gboolean is_in_select_calc_found_rows;
-	gboolean is_in_lock;
 	gboolean is_insert_id;
+	gboolean is_not_autocommit;
 
 	GString* charset_client;
 	GString* charset_results;

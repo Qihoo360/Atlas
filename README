@@ -1,4 +1,4 @@
-详细文档见https://github.com/Qihoo360/Atlas/wiki
+ 详细文档见https://github.com/Qihoo360/Atlas/wiki
 仍在完善中，给您造成的不便敬请谅解！
 
 一、简介
@@ -49,9 +49,6 @@ VS 官方MySQL-Proxy
 二、配置文件示例
 -------------------
 [mysql-proxy]
-
-#Atlas加载的模块名称，不需要改
-plugins = admin, proxy
 
 #管理接口的用户名
 admin-username = user
@@ -119,7 +116,7 @@ lvs-ips = 192.168.1.1
 make
 sudo make install
 
-2. RPM包(推荐)
+2. (推荐)RPM包和DEB包
 见https://github.com/Qihoo360/Atlas/releases
 
 四、启动与停止

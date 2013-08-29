@@ -115,7 +115,7 @@
 #define C(x) x, sizeof(x) - 1
 #define S(x) x->str, x->len
 
-static GMutex con_mutex;
+//static GMutex con_mutex;
 
 /**
  * call the cleanup callback for the current connection
@@ -145,20 +145,18 @@ chassis_private *network_mysqld_priv_init(guint event_thread_count) {
 
 	priv = g_new0(chassis_private, 1);
 
-	priv->cons = g_ptr_array_new();
+//	priv->cons = g_ptr_array_new();
 	priv->sc = lua_scope_new();
 	priv->backends = network_backends_new(event_thread_count);
 
 	return priv;
 }
-
+/*
 void network_mysqld_priv_shutdown(chassis *chas, chassis_private *priv) {
 	if (!priv) return;
 
-	/* network_mysqld_con_free() changes the priv->cons directly
-	 *
-	 * always free the first element until all are gone 
-	 */
+	// network_mysqld_con_free() changes the priv->cons directly
+	// always free the first element until all are gone 
 	while (0 != priv->cons->len) {
 		network_mysqld_con *con = priv->cons->pdata[0];
 
@@ -166,11 +164,11 @@ void network_mysqld_priv_shutdown(chassis *chas, chassis_private *priv) {
 		network_mysqld_con_free(con);
 	}
 }
-
+*/
 void network_mysqld_priv_free(chassis G_GNUC_UNUSED *chas, chassis_private *priv) {
 	if (!priv) return;
 
-	g_ptr_array_free(priv->cons, TRUE);
+//	g_ptr_array_free(priv->cons, TRUE);
 
 	network_backends_free(priv->backends);
 
@@ -182,7 +180,7 @@ void network_mysqld_priv_free(chassis G_GNUC_UNUSED *chas, chassis_private *priv
 int network_mysqld_init(chassis *srv) {
 	lua_State *L;
 	srv->priv_free = network_mysqld_priv_free;
-	srv->priv_shutdown = network_mysqld_priv_shutdown;
+//	srv->priv_shutdown = network_mysqld_priv_shutdown;
 	srv->priv      = network_mysqld_priv_init(srv->event_thread_count);
 
 	/* store the pointer to the chassis in the Lua registry */
@@ -220,9 +218,11 @@ network_mysqld_con *network_mysqld_con_new() {
 
 void network_mysqld_add_connection(chassis *srv, network_mysqld_con *con) {
 	con->srv = srv;
+/*
 	g_mutex_lock(&con_mutex);
 	g_ptr_array_add(srv->priv->cons, con);
 	g_mutex_unlock(&con_mutex);
+*/
 }
 
 /**
@@ -243,10 +243,11 @@ void network_mysqld_con_free(network_mysqld_con *con) {
 	if (con->client) network_socket_free(con->client);
 
 	/* we are still in the conns-array */
+/*
 	g_mutex_lock(&con_mutex);
 	g_ptr_array_remove_fast(con->srv->priv->cons, con);
 	g_mutex_unlock(&con_mutex);
-
+*/
 	g_string_free(con->charset_client, TRUE);
 	g_string_free(con->charset_results, TRUE);
 	g_string_free(con->charset_connection, TRUE);

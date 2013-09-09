@@ -1124,7 +1124,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 }
 
 int rw_split(GPtrArray* tokens, network_mysqld_con* con) {
-	if (tokens->len < 2 || g_hash_table_size(con->locks) > 0 || con->is_insert_id) return idle_rw(con);
+	if (tokens->len < 2 || g_hash_table_size(con->locks) > 0) return idle_rw(con);
 
 	sql_token* first_token = tokens->pdata[1];
 	sql_token_id token_id = first_token->token_id;
@@ -1300,7 +1300,7 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 }
 
 void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
-	con->is_in_select_calc_found_rows = con->is_insert_id = FALSE;
+	con->is_in_select_calc_found_rows = FALSE;
 
 	sql_token** ts = (sql_token**)(tokens->pdata);
 	guint len = tokens->len;
@@ -1325,13 +1325,10 @@ void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
 	guint i;
 	for (i = 1; i < len; ++i) {
 		sql_token* token = ts[i];
-		if (token->token_id == TK_SQL_SQL_CALC_FOUND_ROWS) {
+		if (ts[i]->token_id == TK_SQL_SQL_CALC_FOUND_ROWS) {
 			con->is_in_select_calc_found_rows = TRUE;
-		} else {
-			char* str = token->text->str;
-			if (strcasecmp(str, "LAST_INSERT_ID") == 0 || strcasecmp(str, "@@INSERT_ID") == 0 || strcasecmp(str, "@@LAST_INSERT_ID") == 0) con->is_insert_id = TRUE;
+			break;
 		}
-		if (con->is_in_select_calc_found_rows && con->is_insert_id) break;
 	}
 }
 

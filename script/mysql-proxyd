@@ -47,8 +47,8 @@ function stop()
 
 function restart()
 {
-	stop
-	start
+	stop $1
+	start $1
 }
 
 function status()
@@ -66,19 +66,19 @@ function status()
 
 case $2 in
 	"start")
-		start
+		start $1
 		;;  
 
 	"stop")
-		stop
+		stop $1
 		;;
 
 	"restart")
-		restart
+		restart $1
 		;;
 
 	"status")
-		status
+		status $1
 		;;
 	*)
 		echo "Usage: $0 instance {start|stop|restart|status}"

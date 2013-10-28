@@ -102,7 +102,8 @@ network_socket *network_connection_pool_get(network_connection_pool *pool) {
 	network_connection_pool_entry *entry = NULL;
 
 	if (pool->length > 0) {
-		entry = g_queue_pop_head(pool);
+	//	entry = g_queue_pop_head(pool);
+		entry = g_queue_pop_tail(pool);
 	}
 
 	/**

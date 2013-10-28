@@ -890,135 +890,24 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 
 	g_string_assign_len(con->client->default_db, S(auth->database));
 
-	/**
-	 * looks like we finished parsing, call the lua function
-	 */
-	switch (proxy_lua_read_auth(con)) {
-	case PROXY_SEND_RESULT:
-		con->state = CON_STATE_SEND_AUTH_RESULT;
+	con->state = CON_STATE_SEND_AUTH_RESULT;
 
-		break;
-	case PROXY_SEND_INJECTION: {
-		injection *inj;
-
-		/* replace the client challenge that is sent to the server */
-		inj = g_queue_pop_head(st->injected.queries);
-
-		network_mysqld_queue_append(send_sock, send_sock->send_queue, S(inj->query));
-
-		injection_free(inj);
-
-		con->state = CON_STATE_SEND_AUTH;
-
-		break; }
-	case PROXY_NO_DECISION:
-		/* if we don't have a backend (con->server), we just ack the client auth
-		 */
-		if (!con->server) {
-			con->state = CON_STATE_SEND_AUTH_RESULT;
-
+	GString *hashed_password = g_hash_table_lookup(con->config->pwd_table, auth->username->str);
+	if (hashed_password) {
+		GString *expected_response = g_string_sized_new(20);
+		network_mysqld_proto_password_scramble(expected_response, S(con->challenge), S(hashed_password));
+		if (g_string_equal(expected_response, auth->response)) {
 			network_mysqld_con_send_ok(recv_sock);
-
-			break;
-		}
-		/* if the server-side of the connection is already up and authed
-		 * we send a COM_CHANGE_USER to reauth the connection and remove
-		 * all temp-tables and session-variables
-		 *
-		 * for performance reasons this extra reauth can be disabled. But
-		 * that leaves temp-tables on the connection.
-		 */
-		if (con->server->is_authed) {
-			if (config->pool_change_user) {
-				GString *com_change_user = g_string_new(NULL);
-
-				/* copy incl. the nul */
-				g_string_append_c(com_change_user, COM_CHANGE_USER);
-				g_string_append_len(com_change_user, con->client->response->username->str, con->client->response->username->len + 1); /* nul-term */
-
-				g_assert_cmpint(con->client->response->response->len, <, 250);
-
-				g_string_append_c(com_change_user, (con->client->response->response->len & 0xff));
-				g_string_append_len(com_change_user, S(con->client->response->response));
-
-				g_string_append_len(com_change_user, con->client->default_db->str, con->client->default_db->len + 1);
-				
-				network_mysqld_queue_append(
-						send_sock,
-						send_sock->send_queue, 
-						S(com_change_user));
-
-				/**
-				 * the server is already authenticated, the client isn't
-				 *
-				 * transform the auth-packet into a COM_CHANGE_USER
-				 */
-
-				g_string_free(com_change_user, TRUE);
-			
-				con->state = CON_STATE_SEND_AUTH;
-			} else {
-				GString *auth_resp;
-
-				/* check if the username and client-scramble are the same as in the previous authed
-				 * connection */
-
-				auth_resp = g_string_new(NULL);
-
-				con->state = CON_STATE_SEND_AUTH_RESULT;
-
-				if (!g_string_equal(con->client->response->username, con->server->response->username) ||
-				    !g_string_equal(con->client->response->response, con->server->response->response)) {
-					network_mysqld_err_packet_t *err_packet;
-
-					err_packet = network_mysqld_err_packet_new();
-					g_string_assign_len(err_packet->errmsg, C("(proxy-pool) login failed"));
-					g_string_assign_len(err_packet->sqlstate, C("28000"));
-					err_packet->errcode = ER_ACCESS_DENIED_ERROR;
-
-					network_mysqld_proto_append_err_packet(auth_resp, err_packet);
-
-					network_mysqld_err_packet_free(err_packet);
-				} else {
-					network_mysqld_ok_packet_t *ok_packet;
-
-					ok_packet = network_mysqld_ok_packet_new();
-					ok_packet->server_status = SERVER_STATUS_AUTOCOMMIT;
-
-					network_mysqld_proto_append_ok_packet(auth_resp, ok_packet);
-					
-					network_mysqld_ok_packet_free(ok_packet);
-				}
-
-				network_mysqld_queue_append(recv_sock, recv_sock->send_queue, 
-						S(auth_resp));
-
-				g_string_free(auth_resp, TRUE);
-
-
-                // modify , add for packet_id sync 
-	            network_mysqld_queue_reset(send_sock);
-	            network_mysqld_queue_reset(recv_sock);
-			}
 		} else {
-			packet.data->str[6] = 0x03;
-			network_mysqld_queue_append_raw(send_sock, send_sock->send_queue, packet.data);
-			con->state = CON_STATE_SEND_AUTH;
-
-			free_client_packet = FALSE; /* the packet.data is now part of the send-queue, don't free it further down */
+			GString *error = g_string_sized_new(64);
+			g_string_printf(error, "Access denied for user '%s'@'%s' (using password: YES)", auth->username->str, recv_sock->src->name->str);
+			network_mysqld_con_send_error_full(recv_sock, S(error), ER_ACCESS_DENIED_ERROR, "28000");
 		}
-
-		break;
-	default:
-		g_assert_not_reached();
-		break;
-	}
-
-	if (free_client_packet) {
-		g_string_free(g_queue_pop_tail(recv_sock->recv_queue->chunks), TRUE);
+		
 	} else {
-		/* just remove the link to the packet, the packet itself is part of the next queue already */
-		g_queue_pop_tail(recv_sock->recv_queue->chunks);
+		GString *error = g_string_sized_new(64);
+		g_string_printf(error, "Access denied for user '%s'@'%s' (using password: YES)", auth->username->str, recv_sock->src->name->str);
+		network_mysqld_con_send_error_full(recv_sock, S(error), ER_ACCESS_DENIED_ERROR, "28000");
 	}
 
 	return NETWORK_SOCKET_SUCCESS;
@@ -1973,7 +1862,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
  */
 NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
-//	guint min_connected_clients = G_MAXUINT;
 	guint i;
 	network_backend_t *cur;
 
@@ -1995,125 +1883,26 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 		}    
 	}
 
-	if (con->server) {
-		switch (network_socket_connect_finish(con->server)) {
-		case NETWORK_SOCKET_SUCCESS:
-			break;
-		case NETWORK_SOCKET_ERROR:
-        case NETWORK_SOCKET_ERROR_RETRY:
-		g_message("%s.%d: connect(%s) failed: %s. backend maybe down, Retrying with different backend if backends_state is auto.", 
-			__FILE__, __LINE__,
-			con->server->dst->name->str, g_strerror(errno));
+	network_mysqld_auth_challenge *challenge = network_mysqld_auth_challenge_new();
 
-		if (st->backend->state != BACKEND_STATE_OFFLINE) st->backend->state = BACKEND_STATE_DOWN;
-		network_socket_free(con->server);
-		con->server = NULL;
+	challenge->protocol_version = 0;
+	challenge->server_version_str = "5.0.81-log";
+	challenge->server_version = 50081;
+	challenge->thread_id = rand();
 
-			return NETWORK_SOCKET_ERROR_RETRY;
-		default:
-			g_assert_not_reached();
-			break;
-		}
+	GString *str = con->challenge;
+	for (i = 0; i < 20; ++i) g_string_append_c(str, rand() % 256);
+	challenge->challenge = g_string_new(str->str);
 
-		con->state = CON_STATE_READ_HANDSHAKE;
+	challenge->capabilities = 41484;
+	challenge->charset = 8;
+	challenge->server_status = 2;
 
-		return NETWORK_SOCKET_SUCCESS;
-	}
-
-	st->backend = NULL;
-	st->backend_ndx = -1;
-
-	guint min_idle_connections = config->min_idle_connections;
-	int backend_ndx = -1;
-	gboolean use_pooled_connection = TRUE;
-
-	//g_mutex_lock(&mutex);
-
-	network_backends_t* backends = con->srv->priv->backends;
-	guint count = network_backends_count(backends);
-	for (i = 0; i < count; ++i) {
-		cur = network_backends_get(backends, i);
-		if (cur == NULL || cur->state != BACKEND_STATE_UP) continue;
-
-		network_connection_pool* pool = chassis_event_thread_pool(cur);
-		if (pool->length < min_idle_connections) {
-			backend_ndx = i;
-			use_pooled_connection = FALSE;
-			break;
-		}
-	}
-
-	if (backend_ndx == -1) {
-		for (i = count-1; i < count; --i) {
-			cur = network_backends_get(backends, i);
-			if (cur == NULL || cur->state != BACKEND_STATE_UP) continue;
-			backend_ndx = i;
-			break;
-		}
-	}
-
-	if (backend_ndx == -1) {
-		network_mysqld_con_send_error_pre41(con->client, C("(proxy) all backends are down"));
-		//g_mutex_unlock(&mutex);
-		g_critical("%s.%d: Cannot connect, all backends are down.", __FILE__, __LINE__);
-		return NETWORK_SOCKET_ERROR;
-	} else {
-		st->backend = network_backends_get(backends, backend_ndx);
-		st->backend_ndx = backend_ndx;
-
-		if (use_pooled_connection) con->server = network_connection_pool_lua_swap(con, backend_ndx);
-	}
-
-	//g_mutex_unlock(&mutex);
-
-	/**
-	 * check if we have a connection in the pool for this backend
-	 */
-	if (NULL == con->server) {
-		con->server = network_socket_new();
-		network_address_copy(con->server->dst, st->backend->addr);
-	
-		st->backend->connected_clients++;
-
-		switch(network_socket_connect(con->server)) {
-		case NETWORK_SOCKET_ERROR_RETRY:
-			/* the socket is non-blocking already, 
-			 * call getsockopt() to see if we are done */
-			return NETWORK_SOCKET_ERROR_RETRY;
-		case NETWORK_SOCKET_SUCCESS:
-			break;
-		default:
-			g_message("%s.%d: connecting to backend (%s) failed, marking it as down for ...", 
-				__FILE__, __LINE__, con->server->dst->name->str);
-
-			if (st->backend->state != BACKEND_STATE_OFFLINE) st->backend->state = BACKEND_STATE_DOWN;
-			network_socket_free(con->server);
-			con->server = NULL;
-
-			return NETWORK_SOCKET_ERROR_RETRY;
-		}
-
-		con->state = CON_STATE_READ_HANDSHAKE;
-	} else {
-		GString *auth_packet;
-
-		/**
-		 * send the old hand-shake packet
-		 */
-
-		auth_packet = g_string_new(NULL);
-		network_mysqld_proto_append_auth_challenge(auth_packet, con->server->challenge);
-
-		network_mysqld_queue_append(con->client, con->client->send_queue, S(auth_packet));
-
-		g_string_free(auth_packet, TRUE);
-		
-		con->state = CON_STATE_SEND_HANDSHAKE;
-
-		/**
-		 * connect_clients is already incremented 
-		 */
-	}
+	GString *auth_packet = g_string_new(NULL);
+	network_mysqld_proto_append_auth_challenge(auth_packet, challenge);
+	network_mysqld_queue_append(con->client, con->client->send_queue, S(auth_packet));
+	g_string_free(auth_packet, TRUE);
+	con->state = CON_STATE_SEND_HANDSHAKE;
 
 	return NETWORK_SOCKET_SUCCESS;
 }

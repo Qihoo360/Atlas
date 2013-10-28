@@ -213,6 +213,8 @@ network_mysqld_con *network_mysqld_con_new() {
 	con->merge_res = g_new(merge_res_t, 1);
 	con->merge_res->rows = g_ptr_array_new();
 
+	con->challenge = g_string_sized_new(20);
+
 	return con;
 }
 
@@ -271,6 +273,8 @@ void network_mysqld_con_free(network_mysqld_con *con) {
 		}
 		g_free(con->merge_res);
 	}
+
+	if (con->challenge) g_string_free(con->challenge, TRUE);
 
 	g_free(con);
 }

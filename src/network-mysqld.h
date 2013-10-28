@@ -362,6 +362,8 @@ struct network_mysqld_con {
 	GHashTable* locks;
 
 	merge_res_t* merge_res;
+
+	GString* challenge;
 };
 
 

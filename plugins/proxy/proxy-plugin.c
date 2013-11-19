@@ -489,7 +489,7 @@ int idle_rw(network_mysqld_con* con) {
 		network_connection_pool* pool = chassis_event_thread_pool(backend);
 		if (pool == NULL) continue;
 
-		if (backend->type == BACKEND_TYPE_RW && backend->state == BACKEND_STATE_UP && pool->length > 0) {
+		if (backend->type == BACKEND_TYPE_RW && backend->state == BACKEND_STATE_UP) {
 			ret = i;
 			break;
 		}
@@ -512,7 +512,7 @@ int idle_ro(network_mysqld_con* con) {
 		network_connection_pool* pool = chassis_event_thread_pool(backend);
 		if (pool == NULL) continue;
 
-		if (backend->type == BACKEND_TYPE_RO && backend->state == BACKEND_STATE_UP && pool->length > 0) {
+		if (backend->type == BACKEND_TYPE_RO && backend->state == BACKEND_STATE_UP) {
 			if (max_conns == -1 || backend->connected_clients < max_conns) {
 				max_conns = backend->connected_clients;
 			}
@@ -865,7 +865,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 	recv_sock = con->client;
 	send_sock = con->server;
 
- 	packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
+	packet.data = g_queue_pop_tail(recv_sock->recv_queue->chunks);
+	g_string_free(g_queue_pop_tail(recv_sock->recv_queue->chunks), TRUE);
 	packet.offset = 0;
 
 	err = err || network_mysqld_proto_skip_network_header(&packet);
@@ -874,6 +875,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 	auth = network_mysqld_auth_response_new();
 
 	err = err || network_mysqld_proto_get_auth_response(&packet, auth);
+
+	g_string_free(packet.data, TRUE);
 
 	if (err) {
 		network_mysqld_auth_response_free(auth);
@@ -886,7 +889,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 		return NETWORK_SOCKET_ERROR;
 	}
 
- 	con->client->response = auth;
+	con->client->response = auth;
 
 	g_string_assign_len(con->client->default_db, S(auth->database));
 
@@ -902,12 +905,14 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 			GString *error = g_string_sized_new(64);
 			g_string_printf(error, "Access denied for user '%s'@'%s' (using password: YES)", auth->username->str, recv_sock->src->name->str);
 			network_mysqld_con_send_error_full(recv_sock, S(error), ER_ACCESS_DENIED_ERROR, "28000");
+			g_string_free(error, TRUE);
 		}
-		
+		g_string_free(expected_response, TRUE);
 	} else {
 		GString *error = g_string_sized_new(64);
 		g_string_printf(error, "Access denied for user '%s'@'%s' (using password: YES)", auth->username->str, recv_sock->src->name->str);
 		network_mysqld_con_send_error_full(recv_sock, S(error), ER_ACCESS_DENIED_ERROR, "28000");
+		g_string_free(error, TRUE);
 	}
 
 	return NETWORK_SOCKET_SUCCESS;
@@ -1052,7 +1057,7 @@ void modify_user(network_mysqld_con* con) {
 		GString* hashed_password = g_hash_table_lookup(con->config->pwd_table, client_user->str);
 		if (!hashed_password) return;
 
-		GString* expected_response = g_string_new(NULL);
+		GString* expected_response = g_string_sized_new(20);
 		network_mysqld_proto_password_scramble(expected_response, S(con->server->challenge->challenge), S(hashed_password));
 
 		g_string_append_c(com_change_user, (expected_response->len & 0xff));
@@ -1886,12 +1891,12 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 	network_mysqld_auth_challenge *challenge = network_mysqld_auth_challenge_new();
 
 	challenge->protocol_version = 0;
-	challenge->server_version_str = "5.0.81-log";
+	challenge->server_version_str = g_strdup("5.0.81-log");
 	challenge->server_version = 50081;
 	challenge->thread_id = rand();
 
 	GString *str = con->challenge;
-	for (i = 0; i < 20; ++i) g_string_append_c(str, rand() % 256);
+	for (i = 0; i < 20; ++i) g_string_append_c(str, rand()%255+1);
 	challenge->challenge = g_string_new(str->str);
 
 	challenge->capabilities = 41484;
@@ -1900,6 +1905,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 
 	GString *auth_packet = g_string_new(NULL);
 	network_mysqld_proto_append_auth_challenge(auth_packet, challenge);
+	network_mysqld_auth_challenge_free(challenge);
 	network_mysqld_queue_append(con->client, con->client->send_queue, S(auth_packet));
 	g_string_free(auth_packet, TRUE);
 	con->state = CON_STATE_SEND_HANDSHAKE;

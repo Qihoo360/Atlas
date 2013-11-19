@@ -124,6 +124,7 @@ NETWORK_API network_socket_retval_t network_socket_connect(network_socket *con);
 NETWORK_API network_socket_retval_t network_socket_connect_finish(network_socket *sock);
 NETWORK_API network_socket_retval_t network_socket_bind(network_socket *con);
 NETWORK_API network_socket *network_socket_accept(network_socket *srv);
+NETWORK_API network_socket_retval_t network_socket_connect_setopts(network_socket *sock);
 
 #endif
 

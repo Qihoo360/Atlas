@@ -219,7 +219,7 @@ network_socket *network_socket_accept(network_socket *srv) {
 	return client;
 }
 
-static network_socket_retval_t network_socket_connect_setopts(network_socket *sock) {
+network_socket_retval_t network_socket_connect_setopts(network_socket *sock) {
 #ifdef WIN32
 	char val = 1;	/* Win32 setsockopt wants a const char* instead of the UNIX void*...*/
 #else

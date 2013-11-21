@@ -1897,7 +1897,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 
 	GString *str = con->challenge;
 	for (i = 0; i < 20; ++i) g_string_append_c(str, rand()%255+1);
-	challenge->challenge = g_string_new(str->str);
+	g_string_assign(challenge->challenge, str->str);
 
 	challenge->capabilities = 41484;
 	challenge->charset = 8;

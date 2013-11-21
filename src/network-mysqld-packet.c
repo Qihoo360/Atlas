@@ -1141,7 +1141,7 @@ network_mysqld_auth_challenge *network_mysqld_auth_challenge_new() {
 
 	shake = g_new0(network_mysqld_auth_challenge, 1);
 	
-	shake->challenge = g_string_new("");
+	shake->challenge = g_string_sized_new(20);
 	shake->capabilities = 
 		CLIENT_PROTOCOL_41 |
 		CLIENT_SECURE_CONNECTION |

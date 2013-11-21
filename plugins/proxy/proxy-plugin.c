@@ -554,7 +554,7 @@ int wrr_ro(network_mysqld_con *con) {
 		network_connection_pool* pool = chassis_event_thread_pool(backend);
 		if (pool == NULL) goto next;
 
-		if (backend->type == BACKEND_TYPE_RO && backend->weight >= cur_weight && backend->state == BACKEND_STATE_UP && pool->length > 0) ndx = next_ndx;
+		if (backend->type == BACKEND_TYPE_RO && backend->weight >= cur_weight && backend->state == BACKEND_STATE_UP) ndx = next_ndx;
 
 	next:
 		if (next_ndx == ndx_num - 1) {
@@ -866,7 +866,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 	send_sock = con->server;
 
 	packet.data = g_queue_pop_tail(recv_sock->recv_queue->chunks);
-	g_string_free(g_queue_pop_tail(recv_sock->recv_queue->chunks), TRUE);
 	packet.offset = 0;
 
 	err = err || network_mysqld_proto_skip_network_header(&packet);

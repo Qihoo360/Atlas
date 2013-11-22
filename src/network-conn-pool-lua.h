@@ -46,8 +46,6 @@ struct chassis_plugin_config {
 
 	gint start_proxy;
 
-	gint min_idle_connections;
-
 	gchar **client_ips;
 	GHashTable *ip_table;
 

@@ -2246,8 +2246,6 @@ static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_con
 		
 		{ "proxy-pool-no-change-user", 0, G_OPTION_FLAG_REVERSE, G_OPTION_ARG_NONE, NULL, "don't use CHANGE_USER to reset the connection coming from the pool (default: enabled)", NULL },
 
-		{ "min-idle-connections", 0, 0, G_OPTION_ARG_INT, NULL, "min idle connections of each backend", NULL },
-
 		{ "client-ips", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "all permitted client ips", NULL },
 	
 		{ "lvs-ips", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "all lvs ips", NULL },
@@ -2272,7 +2270,6 @@ static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_con
 	config_entries[i++].arg_data = &(config->lua_script);
 	config_entries[i++].arg_data = &(config->start_proxy);
 	config_entries[i++].arg_data = &(config->pool_change_user);
-	config_entries[i++].arg_data = &(config->min_idle_connections);
 	config_entries[i++].arg_data = &(config->client_ips);
 	config_entries[i++].arg_data = &(config->lvs_ips);
 	config_entries[i++].arg_data = &(config->tables);
@@ -2508,8 +2505,6 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	}
 
 	if (!config->charset) config->charset = g_strdup("LATIN1");
-
-	config->min_idle_connections = ceil(config->min_idle_connections * 1.0 / chas->event_thread_count);
 
 	/* load the script and setup the global tables */
 	network_mysqld_lua_setup_global(chas->priv->sc->L, g, chas);

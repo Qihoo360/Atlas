@@ -61,6 +61,7 @@ struct chassis_plugin_config {
 	network_mysqld_con *listen_con;
 
 	FILE *sql_log;
+	gchar *sql_log_type;
 
 	gchar *charset;
 };

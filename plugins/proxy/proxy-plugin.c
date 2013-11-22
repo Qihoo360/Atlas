@@ -185,6 +185,14 @@ typedef struct {
 
 //GMutex mutex;
 
+typedef enum {
+	OFF,
+	ON,
+	REALTIME
+} SQL_LOG_TYPE;
+
+SQL_LOG_TYPE sql_log_type = OFF;
+
 guint get_table_index(GPtrArray* tokens, gint* d, gint* t) {
 	*d = *t = -1;
 
@@ -1631,6 +1639,8 @@ void merge_rows(network_mysqld_con* con, injection* inj) {
 }
 
 void log_sql(network_mysqld_con* con, injection* inj) {
+	if (sql_log_type == OFF) return;
+
 	chassis_plugin_config *config = con->config;
 	GString* message = g_string_new(NULL);
 
@@ -1646,8 +1656,9 @@ void log_sql(network_mysqld_con* con, injection* inj) {
 	}
 
 	fwrite(message->str, message->len, 1, config->sql_log);
-
 	g_string_free(message, TRUE);
+
+	if (sql_log_type == REALTIME) fflush(config->sql_log);
 }
 
 /**
@@ -2145,6 +2156,7 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->dt_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	config->pwd_table = g_hash_table_new(g_str_hash, g_str_equal);
 	config->sql_log = NULL;
+	config->sql_log_type = NULL;
 	config->charset = NULL;
 
 	//g_mutex_init(&mutex);
@@ -2215,6 +2227,7 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *config) {
 	g_hash_table_destroy(config->pwd_table);
 
 	if (config->sql_log) fclose(config->sql_log);
+	if (config->sql_log_type) g_free(config->sql_log_type);
 
 	if (config->charset) g_free(config->charset);
 
@@ -2256,6 +2269,8 @@ static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_con
 		
 		{ "charset", 0, 0, G_OPTION_ARG_STRING, NULL, "original charset(default: LATIN1)", NULL },
 
+		{ "sql-log", 0, 0, G_OPTION_ARG_STRING, NULL, "sql log type(default: OFF)", NULL },
+
 		{ NULL,                       0, 0, G_OPTION_ARG_NONE,   NULL, NULL, NULL }
 	};
 
@@ -2275,6 +2290,7 @@ static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_con
 	config_entries[i++].arg_data = &(config->tables);
 	config_entries[i++].arg_data = &(config->pwds);
 	config_entries[i++].arg_data = &(config->charset);
+	config_entries[i++].arg_data = &(config->sql_log_type);
 
 	return config_entries;
 }
@@ -2440,14 +2456,24 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	signal(SIGUSR1, handler);
 	signal(SIGUSR2, handler);
 
-	gchar* sql_log_filename = g_strdup_printf("%s/sql_%s.log", chas->log_path, chas->instance_name);
-	config->sql_log = fopen(sql_log_filename, "a");
-	if (config->sql_log == NULL) {
-		g_critical("Failed to open %s", sql_log_filename);
-		g_free(sql_log_filename);
-		return -1; 
+	if (config->sql_log_type) {
+		if (strcasecmp(config->sql_log_type, "ON") == 0) {
+			sql_log_type = ON;
+		} else if (strcasecmp(config->sql_log_type, "REALTIME") == 0) {
+			sql_log_type = REALTIME;
+		}
 	}
-	g_free(sql_log_filename);
+
+	if (sql_log_type != OFF) {
+		gchar* sql_log_filename = g_strdup_printf("%s/sql_%s.log", chas->log_path, chas->instance_name);
+		config->sql_log = fopen(sql_log_filename, "a");
+		if (config->sql_log == NULL) {
+			g_critical("Failed to open %s", sql_log_filename);
+			g_free(sql_log_filename);
+			return -1;
+		}
+		g_free(sql_log_filename);
+	}
 
 	for (i = 0; config->tables && config->tables[i]; i++) {
 		db_table_t* dt = g_new0(db_table_t, 1);

@@ -98,19 +98,19 @@ admin-address = 0.0.0.0:2345
 #(可选项)分表设置，此例中person为库名，mt为表名，id为分表字段，3为子表数量，可设置多项，以逗号分隔，若不分表则不需要设置该项
 #tables = person.mt.id.3
 
-#(可选项)默认字符集，若不设置该项，则默认字符集为latin1
-#charset = utf8
-
 #(可选项)允许连接Atlas的客户端的IP，可以是精确IP，也可以是IP段，以逗号分隔，若不设置该项则允许所有IP连接，否则只允许列表中的IP连接
 #client-ips = 127.0.0.1, 192.168.1
 
-#(可选项)Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
+#(极少需要)默认字符集，若不设置该项，则默认字符集为latin1
+#charset = utf8
+
+#(极少需要)Atlas前面挂接的LVS的物理网卡的IP(注意不是虚IP)，若有LVS且设置了client-ips则此项必须设置，否则可以不设置
 #lvs-ips = 192.168.1.1
 
 三、编译安装
 -------------------
 1. 源码方式
-依赖：glib(2.32.x)、libevent(1.4以上)、Lua(5.1.x)、OpenSSL(0.9.8以上)
+依赖：glib(2.32.x)、libevent(1.4以上)、Lua(5.1.x)
 
 ./bootstrap.sh	#可能需要修改其中的路径
 make
@@ -121,7 +121,7 @@ sudo make install
 
 四、启动与停止
 -------------------
-进入PREFIX/conf目录，编辑xxx.cnf，此处xxx的实际名称应与其中instance设置项相同，其他设置项含义见第二节，另外xxx.cnf的mode必须是0660或更低。
+进入PREFIX/conf目录，编辑xxx.cnf，此处xxx的实际名称应与其中instance设置项相同，其他设置项含义见第二节。
 RPM包里自带一个示例test.cnf，可基于它进行修改。
 
 启动：

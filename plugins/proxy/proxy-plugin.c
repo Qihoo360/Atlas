@@ -2360,7 +2360,7 @@ void* check_state(network_backends_t* bs) {
 
 		for (i = 0; i < len; ++i) {
 			network_backend_t* backend = g_ptr_array_index(backends, i);
-			if (backend == NULL || backend->state == BACKEND_STATE_OFFLINE) continue;
+			if (backend == NULL || backend->state == BACKEND_STATE_UP || backend->state == BACKEND_STATE_OFFLINE) continue;
 
 			gchar* ip = inet_ntoa(backend->addr->addr.ipv4.sin_addr);
 			guint port = ntohs(backend->addr->addr.ipv4.sin_port);

@@ -1975,21 +1975,15 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_disconnect_client) {
 
 //	if (use_pooled_connection &&
 //	    con->state == CON_STATE_CLOSE_CLIENT) {
+/*
 	if (con->state == CON_STATE_CLOSE_CLIENT) {
-		/* move the connection to the connection pool
-		 *
-		 * this disconnects con->server and safes it from getting free()ed later
-		 */
 		if (con->server && con->server->is_authed) {
-			//g_mutex_lock(&mutex);
 			network_connection_pool_lua_add_connection(con);
-			//g_mutex_unlock(&mutex);
 		}
 	} else if (st->backend) {
-		/* we have backend assigned and want to close the connection to it */
 		st->backend->connected_clients--;
 	}
-
+*/
 #ifdef HAVE_LUA_H
 	/* remove this cached script from registry */
 	if (st->L_ref > 0) {

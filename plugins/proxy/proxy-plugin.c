@@ -193,6 +193,8 @@ typedef enum {
 
 SQL_LOG_TYPE sql_log_type = OFF;
 
+char* charset[64] = {NULL, "big5", NULL, NULL, NULL, NULL, NULL, NULL, "latin1", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "gb2312", NULL, NULL, NULL, "gbk", NULL, NULL, NULL, NULL, "utf8", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "binary"};
+
 guint get_table_index(GPtrArray* tokens, gint* d, gint* t) {
 	*d = *t = -1;
 
@@ -898,7 +900,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 
 	con->client->response = auth;
 
-	g_string_assign_len(con->client->default_db, S(auth->database));
+//	g_string_assign_len(con->client->default_db, S(auth->database));
 
 	con->state = CON_STATE_SEND_AUTH_RESULT;
 
@@ -907,6 +909,13 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 		GString *expected_response = g_string_sized_new(20);
 		network_mysqld_proto_password_scramble(expected_response, S(con->challenge), S(hashed_password));
 		if (g_string_equal(expected_response, auth->response)) {
+			g_string_assign_len(recv_sock->default_db, S(auth->database));
+
+			char *client_charset = charset[auth->charset];
+			g_string_assign(recv_sock->charset_client,     client_charset);
+			g_string_assign(recv_sock->charset_results,    client_charset);
+			g_string_assign(recv_sock->charset_connection, client_charset);
+
 			network_mysqld_con_send_ok(recv_sock);
 		} else {
 			GString *error = g_string_sized_new(64);

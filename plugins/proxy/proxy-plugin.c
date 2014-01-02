@@ -1130,21 +1130,23 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 				g_string_assign(con->charset_client, str);
 				g_string_assign(con->charset_results, str);
 				g_string_assign(con->charset_connection, str);
-			} else if (strcasecmp(str, "CHARACTER_SET_CLIENT") == 0) {
-				is_set_client = TRUE;
+			} else if (tokens->len > 4 && ((sql_token*)(tokens->pdata[3]))->token_id == TK_EQ) {
+				if (strcasecmp(str, "CHARACTER_SET_RESULTS") == 0) {
+					is_set_results = TRUE;
 
-				str = ((sql_token*)(tokens->pdata[3]))->text->str;
-				g_string_assign(con->charset_client, str);
-			} else if (strcasecmp(str, "CHARACTER_SET_RESULTS") == 0) {
-				is_set_results = TRUE;
+					str = ((sql_token*)(tokens->pdata[4]))->text->str;
+					g_string_assign(con->charset_results, str);
+				} else if (strcasecmp(str, "CHARACTER_SET_CLIENT") == 0) {
+					is_set_client = TRUE;
 
-				str = ((sql_token*)(tokens->pdata[3]))->text->str;
-				g_string_assign(con->charset_results, str);
-			} else if (strcasecmp(str, "CHARACTER_SET_CONNECTION") == 0) {
-				is_set_connection = TRUE;
+					str = ((sql_token*)(tokens->pdata[4]))->text->str;
+					g_string_assign(con->charset_client, str);
+				} else if (strcasecmp(str, "CHARACTER_SET_CONNECTION") == 0) {
+					is_set_connection = TRUE;
 
-				str = ((sql_token*)(tokens->pdata[3]))->text->str;
-				g_string_assign(con->charset_connection, str);
+					str = ((sql_token*)(tokens->pdata[4]))->text->str;
+					g_string_assign(con->charset_connection, str);
+				}
 			}
 		}
 	}

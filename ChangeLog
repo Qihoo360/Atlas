@@ -1,3 +1,6 @@
+2.0.4
+*修正SET CHARACTER_[CLIENT|RESULTS|CONNECTION]的bug
+
 2.0.3
 *支持客户端在连接时指定默认字符集
 

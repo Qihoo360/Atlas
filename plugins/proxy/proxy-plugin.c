@@ -2373,7 +2373,7 @@ void* check_state(network_backends_t* bs) {
 			mysql_real_connect(&mysql, ip, NULL, NULL, NULL, port, NULL, 0);
 
 			if (mysql_errno(&mysql) == 1045 || mysql_errno(&mysql) == 0) backend->state = BACKEND_STATE_UP;
-		//	else backend->state = BACKEND_STATE_DOWN;
+			else if (backend->state == BACKEND_STATE_UNKNOWN) backend->state = BACKEND_STATE_DOWN;
 
 			mysql_close(&mysql);
 		}

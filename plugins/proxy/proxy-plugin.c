@@ -1386,7 +1386,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 						//g_mutex_lock(&mutex);
 						send_sock = network_connection_pool_lua_swap(con, backend_ndx);
 						//g_mutex_unlock(&mutex);
-					} else if (type == COM_INIT_DB) {
+					} else if (type == COM_INIT_DB || type == COM_SET_OPTION) {
 						backend_ndx = wrr_ro(con);
 						//g_mutex_lock(&mutex);
 						send_sock = network_connection_pool_lua_swap(con, backend_ndx);

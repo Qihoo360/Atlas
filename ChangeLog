@@ -1,3 +1,8 @@
+2.0.5
+*连接失败时将unknown状态的DB置为down
+*将COM_SET_OPTION优先发往从库
+*从admin.lua里移除uuid和connected_clients
+
 2.0.4
 *修正SET CHARACTER_[CLIENT|RESULTS|CONNECTION]的bug
 

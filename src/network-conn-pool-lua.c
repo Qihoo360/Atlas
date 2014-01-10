@@ -126,7 +126,7 @@ int network_connection_pool_lua_add_connection(network_mysqld_con *con) {
 		chassis_event_add_local(con->srv, &(con->server->event)); /* add a event, but stay in the same thread */
 	}
 	
-	st->backend->connected_clients--;
+//	st->backend->connected_clients--;
 	st->backend = NULL;
 	st->backend_ndx = -1;
 	
@@ -324,7 +324,7 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 
 	/* connect to the new backend */
 	st->backend = backend;
-	st->backend->connected_clients++;
+//	st->backend->connected_clients++;
 	st->backend_ndx = backend_ndx;
 
 	return send_sock;

@@ -59,10 +59,10 @@ function read_query(packet)
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "type",
 			  type = proxy.MYSQL_TYPE_STRING },
-			{ name = "uuid",
-			  type = proxy.MYSQL_TYPE_STRING },
-			{ name = "connected_clients", 
-			  type = proxy.MYSQL_TYPE_LONG },
+		--	{ name = "uuid",
+		--	  type = proxy.MYSQL_TYPE_STRING },
+		--	{ name = "connected_clients", 
+		--	  type = proxy.MYSQL_TYPE_LONG },
               --[[
             { name = "cur_idle_connections",
               type = proxy.MYSQL_TYPE_LONG },
@@ -88,8 +88,8 @@ function read_query(packet)
                 b.dst.name,          -- configured backend address
                     states[b.state + 1], -- the C-id is pushed down starting at 0
                     types[b.type + 1],   -- the C-id is pushed down starting at 0
-                    b.uuid,              -- the MySQL Server's UUID if it is managed
-                    b.connected_clients  -- currently connected clients
+                    --b.uuid,              -- the MySQL Server's UUID if it is managed
+                    --b.connected_clients  -- currently connected clients
             }
 
             --[[
@@ -133,10 +133,10 @@ function read_query(packet)
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "type",
 			  type = proxy.MYSQL_TYPE_STRING },
-			{ name = "uuid",
-			  type = proxy.MYSQL_TYPE_STRING },
-			{ name = "connected_clients", 
-			  type = proxy.MYSQL_TYPE_LONG },
+		--	{ name = "uuid",
+		--	  type = proxy.MYSQL_TYPE_STRING },
+		--	{ name = "connected_clients", 
+		--	  type = proxy.MYSQL_TYPE_LONG },
 		}
 
 		local states = {
@@ -157,8 +157,8 @@ function read_query(packet)
 			b.dst.name,          -- configured backend address
 			states[b.state + 1], -- the C-id is pushed down starting at 0
 			types[b.type + 1],   -- the C-id is pushed down starting at 0
-			b.uuid,              -- the MySQL Server's UUID if it is managed
-			b.connected_clients  -- currently connected clients
+		--	b.uuid,              -- the MySQL Server's UUID if it is managed
+		--	b.connected_clients  -- currently connected clients
 		}
 	elseif string.find(query:lower(), "^add%s+master%s+.+$") then
         	local newserver = string.match(query:lower(), "^add%s+master%s+(.+)$")

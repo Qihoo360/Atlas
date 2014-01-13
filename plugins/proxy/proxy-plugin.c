@@ -1308,7 +1308,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 	}
 
 	char type = packets->str[0];
-	if (type == COM_QUIT) {
+	if (type == COM_QUIT || type == COM_PING) {
 		g_string_free(packets, TRUE);
 		network_mysqld_con_send_ok_full(con->client, 0, 0, 0x0002, 0);
 		ret = PROXY_SEND_RESULT;

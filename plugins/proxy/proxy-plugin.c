@@ -1661,9 +1661,9 @@ void log_sql(network_mysqld_con* con, injection* inj) {
 	gint latency = inj->ts_read_query_result_last - inj->ts_read_query;
 
 	if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
-		g_string_append_printf(message, "%s OK %.3f \"%s\"\n", inet_ntoa(con->server->dst->addr.ipv4.sin_addr), latency/1000.0, inj->query->str+1);
+		g_string_append_printf(message, "%s OK %.3f \"%s\"\n", con->server->dst->name->str, latency/1000.0, inj->query->str+1);
 	} else {
-		g_string_append_printf(message, "%s ERR %.3f \"%s\"\n", inet_ntoa(con->server->dst->addr.ipv4.sin_addr), latency/1000.0, inj->query->str+1);
+		g_string_append_printf(message, "%s ERR %.3f \"%s\"\n", con->server->dst->name->str, latency/1000.0, inj->query->str+1);
 	}
 
 	fwrite(message->str, message->len, 1, config->sql_log);

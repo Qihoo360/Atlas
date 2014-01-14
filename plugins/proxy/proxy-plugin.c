@@ -1657,7 +1657,7 @@ void log_sql(network_mysqld_con* con, injection* inj) {
 
 	time_t t = time(NULL);
 	struct tm* tm = localtime(&t);
-	g_string_printf(message, "[%02d/%02d/%d %02d:%02d:%02d] C:%s S:", tm->tm_mon+1, tm->tm_mday, tm->tm_year+1900, tm->tm_hour, tm->tm_min, tm->tm_sec, inet_ntoa(con->client->src->addr.ipv4.sin_addr));
+	g_string_printf(message, "[%02d/%02d/%d %02d:%02d:%02d] C:%s S:", tm->tm_mon+1, tm->tm_mday, tm->tm_year+1900, tm->tm_hour, tm->tm_min, tm->tm_sec, con->client->src->name->str);
 	gint latency = inj->ts_read_query_result_last - inj->ts_read_query;
 
 	if (inj->qstat.query_status == MYSQLD_PACKET_OK) {

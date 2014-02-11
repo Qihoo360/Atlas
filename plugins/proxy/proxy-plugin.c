@@ -1049,9 +1049,9 @@ int rw_split(GPtrArray* tokens, network_mysqld_con* con) {
 				token_id = first_token->token_id;
 			}    
 		}    
-	}    
+	}
 
-	if (token_id == TK_SQL_SELECT || token_id == TK_SQL_SET || token_id == TK_SQL_USE || token_id == TK_SQL_EXPLAIN || token_id == TK_SQL_SHOW || token_id == TK_SQL_DESC) {
+	if (token_id == TK_SQL_SELECT || token_id == TK_SQL_SET || token_id == TK_SQL_USE || token_id == TK_SQL_SHOW || token_id == TK_SQL_DESC || token_id == TK_SQL_EXPLAIN) {
 		return wrr_ro(con);
 	} else {
 		return idle_rw(con);

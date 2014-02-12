@@ -62,14 +62,13 @@
 void chassis_event_add(network_mysqld_con* client_con) {		//主线程执行，ping工作线程，使其初次进入状态机
 	chassis* chas = client_con->srv;
 
-	g_async_queue_push(chas->threads->event_queue, client_con);
-
 	// choose a event thread
 	static guint last_event_thread = 0;
 	if (last_event_thread == chas->event_thread_count) last_event_thread = 0;
 	chassis_event_thread_t *event_thread = chas->threads->event_threads->pdata[last_event_thread];
 	++last_event_thread;
 
+	g_async_queue_push(event_thread->event_queue, client_con);
 	if (write(event_thread->notify_send_fd, "", 1) != 1) g_error("pipes - write error: %s", g_strerror(errno));
 }
 
@@ -113,7 +112,7 @@ void chassis_event_handle(int G_GNUC_UNUSED event_fd, short G_GNUC_UNUSED events
 	char ping[1];
 	if (read(event_thread->notify_receive_fd, ping, 1) != 1) g_error("pipes - read error");
 
-	network_mysqld_con* client_con = g_async_queue_try_pop(event_thread->chas->threads->event_queue);
+	network_mysqld_con* client_con = g_async_queue_try_pop(event_thread->event_queue);
 	if (client_con != NULL) network_mysqld_con_handle(-1, 0, client_con);
 }
 
@@ -126,6 +125,8 @@ chassis_event_thread_t *chassis_event_thread_new(guint index) {
 	event_thread = g_new0(chassis_event_thread_t, 1);
 
 	event_thread->index = index;
+
+	event_thread->event_queue = g_async_queue_new();
 
 	return event_thread;
 }
@@ -153,6 +154,12 @@ void chassis_event_thread_free(chassis_event_thread_t *event_thread) {
 	/* we don't want to free the global event-base */
 	if (is_thread && event_thread->event_base) event_base_free(event_thread->event_base);
 
+	network_mysqld_con* con;
+	while (con = g_async_queue_try_pop(event_thread->event_queue)) {
+		network_mysqld_con_free(con);
+	}
+	g_async_queue_unref(event_thread->event_queue);
+
 	g_free(event_thread);
 }
 
@@ -173,7 +180,6 @@ chassis_event_threads_t *chassis_event_threads_new() {
 	 * something is available in the event-async-queues
 	 */
 	threads->event_threads = g_ptr_array_new();
-	threads->event_queue = g_async_queue_new();
 
 	return threads;
 }
@@ -198,11 +204,6 @@ void chassis_event_threads_free(chassis_event_threads_t *threads) {
 
 	g_ptr_array_free(threads->event_threads, TRUE);
 
-	/* free the events that are still in the queue */
-	while ((con = g_async_queue_try_pop(threads->event_queue))) {
-		network_mysqld_con_free(con);
-	}
-	g_async_queue_unref(threads->event_queue);
 	g_free(threads);
 }
 
@@ -212,7 +213,6 @@ void chassis_event_threads_free(chassis_event_threads_t *threads) {
 void chassis_event_threads_add(chassis_event_threads_t *threads, chassis_event_thread_t *thread) {
 	g_ptr_array_add(threads->event_threads, thread);
 }
-
 
 /**
  * setup the notification-fd of a event-thread
@@ -276,22 +276,7 @@ void *chassis_event_thread_loop(chassis_event_thread_t *event_thread) {
 
 	return NULL;
 }
-/*
-void *chassis_remove_thread_loop(chassis *chas) {
-	struct event ev;
-	signal_set(&ev, SIGRTMIN, NULL, NULL);
-	event_base_set(chas->remove_base, &ev);
-	signal_add(&ev, NULL);
 
-	event_base_dispatch(chas->remove_base);
-	return NULL;
-} 
-
-void chassis_remove_thread_start(chassis *chas) {
-	chas->remove_base = event_base_new();
-	g_thread_create((GThreadFunc)chassis_remove_thread_loop, chas, TRUE, NULL);
-}
-*/
 /**
  * start all the event-threads 
  *

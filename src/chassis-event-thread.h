@@ -50,6 +50,8 @@ typedef struct {
 	struct event_base *event_base;
 
 	guint index;
+
+	GAsyncQueue *event_queue;
 } chassis_event_thread_t;
 
 CHASSIS_API chassis_event_thread_t *chassis_event_thread_new();
@@ -60,8 +62,6 @@ CHASSIS_API void *chassis_event_thread_loop(chassis_event_thread_t *);
 
 struct chassis_event_threads_t {
  	GPtrArray *event_threads;
-
-	GAsyncQueue *event_queue;
 };
 
 CHASSIS_API chassis_event_threads_t *chassis_event_threads_new();

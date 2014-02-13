@@ -40,8 +40,8 @@ typedef struct {
 	chassis *chas;
 
 	//int notify_fd;
-    int notify_receive_fd;
-    int notify_send_fd;
+	int notify_receive_fd;
+	int notify_send_fd;
 
 	struct event notify_fd_event;
 
@@ -55,20 +55,13 @@ typedef struct {
 } chassis_event_thread_t;
 
 CHASSIS_API chassis_event_thread_t *chassis_event_thread_new();
-CHASSIS_API void chassis_event_thread_free(chassis_event_thread_t *e);
+CHASSIS_API void chassis_event_thread_free(chassis_event_thread_t *thread);
 CHASSIS_API void chassis_event_handle(int event_fd, short events, void *user_data);
-CHASSIS_API void chassis_event_thread_set_event_base(chassis_event_thread_t *e, struct event_base *event_base);
-CHASSIS_API void *chassis_event_thread_loop(chassis_event_thread_t *);
+CHASSIS_API void chassis_event_thread_set_event_base(chassis_event_thread_t *thread, struct event_base *event_base);
+CHASSIS_API void *chassis_event_thread_loop(chassis_event_thread_t *thread);
 
-struct chassis_event_threads_t {
- 	GPtrArray *event_threads;
-};
-
-CHASSIS_API chassis_event_threads_t *chassis_event_threads_new();
-CHASSIS_API void chassis_event_threads_free(chassis_event_threads_t *threads);
-CHASSIS_API int chassis_event_threads_init_thread(chassis_event_threads_t *threads, chassis_event_thread_t *event_thread, chassis *chas);
-CHASSIS_API void chassis_event_threads_add(chassis_event_threads_t *threads, chassis_event_thread_t *thread);
-CHASSIS_API void chassis_event_threads_start(chassis_event_threads_t *threads);
+CHASSIS_API int chassis_event_threads_init_thread(chassis_event_thread_t *thread, chassis *chas);
+CHASSIS_API void chassis_event_threads_start(GPtrArray *threads);
 
 CHASSIS_API network_connection_pool* chassis_event_thread_pool(network_backend_t* backend);
 

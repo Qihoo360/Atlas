@@ -114,7 +114,7 @@ chassis *chassis_new() {
 	/* create a new global timer info */
 	chassis_timestamps_global_init(NULL);
 
-	chas->threads = chassis_event_threads_new();
+	chas->threads = g_ptr_array_new();
 
 	chas->event_hdr_version = g_strdup(_EVENT_VERSION);
 
@@ -173,7 +173,14 @@ void chassis_free(chassis *chas) {
 
 	chassis_timestamps_global_free(NULL);
 
-	if (chas->threads) chassis_event_threads_free(chas->threads);
+	GPtrArray *threads = chas->threads;
+	if (threads) {
+		for (i = 0; i < threads->len; ++i) {
+			chassis_event_thread_free(threads->pdata[i]);
+		}
+
+		g_ptr_array_free(threads, TRUE);
+	}
 
 	if (chas->instance_name) g_free(chas->instance_name);
 
@@ -252,8 +259,8 @@ int chassis_mainloop(void *_chas) {
 
 	/* add a event-handler for the "main" events */
 	mainloop_thread = chassis_event_thread_new(0);
-	chassis_event_threads_init_thread(chas->threads, mainloop_thread, chas);
-	chassis_event_threads_add(chas->threads, mainloop_thread);
+	chassis_event_threads_init_thread(mainloop_thread, chas);
+	g_ptr_array_add(chas->threads, mainloop_thread);
 
 	chas->event_base = mainloop_thread->event_base; /* all global events go to the 1st thread */
 
@@ -336,14 +343,10 @@ int chassis_mainloop(void *_chas) {
 	 * - setup the events notification
 	 * */
 	for (i = 1; i < (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
-		chassis_event_thread_t *event_thread;
-	
-		event_thread = chassis_event_thread_new(i);
-		chassis_event_threads_init_thread(chas->threads, event_thread, chas);
-		chassis_event_threads_add(chas->threads, event_thread);
+		chassis_event_thread_t *thread = chassis_event_thread_new(i);
+		chassis_event_threads_init_thread(thread, chas);
+		g_ptr_array_add(chas->threads, thread);
 	}
-
-//	chassis_remove_thread_start(chas);
 
 	/* start the event threads */
 	if (chas->event_thread_count > 1) {
@@ -364,4 +367,3 @@ int chassis_mainloop(void *_chas) {
 #endif
 	return 0;
 }
-

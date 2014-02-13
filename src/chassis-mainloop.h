@@ -52,7 +52,6 @@
 /*@{*/
 typedef struct chassis_private chassis_private;
 typedef struct chassis chassis;
-typedef struct chassis_event_threads_t chassis_event_threads_t;
 
 struct chassis {
 	struct event_base *event_base;
@@ -76,11 +75,9 @@ struct chassis {
 	/* network-io threads */
 	guint event_thread_count;
 
-	chassis_event_threads_t *threads;
+	GPtrArray *threads;
 
 	chassis_shutdown_hooks_t *shutdown_hooks;
-
-//	struct event_base *remove_base;
 };
 
 CHASSIS_API chassis *chassis_init(void) G_GNUC_DEPRECATED;

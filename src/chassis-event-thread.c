@@ -63,20 +63,20 @@ void chassis_event_add(network_mysqld_con* client_con) {		//Ö÷Ïß³ÌÖ´ÐÐ£¬ping¹¤×÷
 	chassis* chas = client_con->srv;
 
 	// choose a event thread
-	static guint last_event_thread = 0;
-	if (last_event_thread == chas->event_thread_count) last_event_thread = 0;
-	chassis_event_thread_t *event_thread = chas->threads->event_threads->pdata[last_event_thread];
-	++last_event_thread;
+	static guint last_thread = 0;
+	if (last_thread == chas->event_thread_count) last_thread = 0;
+	chassis_event_thread_t *thread = chas->threads->pdata[last_thread];
+	++last_thread;
 
-	g_async_queue_push(event_thread->event_queue, client_con);
-	if (write(event_thread->notify_send_fd, "", 1) != 1) g_error("pipes - write error: %s", g_strerror(errno));
+	g_async_queue_push(thread->event_queue, client_con);
+	if (write(thread->notify_send_fd, "", 1) != 1) g_error("pipes - write error: %s", g_strerror(errno));
 }
 
 static GPrivate tls_index;
 
 void chassis_event_add_self(chassis* chas, struct event* ev, int timeout) {	//¹¤×÷Ïß³ÌÖ´ÐÐ£¬RETRYºó½«ÊÂ¼þÖØÐÂ·ÅÈë±¾Ïß³ÌµÄevent_baseÖÐ
 	guint index = GPOINTER_TO_UINT(g_private_get(&tls_index));
-	chassis_event_thread_t* thread = g_ptr_array_index(chas->threads->event_threads, index);
+	chassis_event_thread_t* thread = g_ptr_array_index(chas->threads, index);
 	struct event_base *event_base = thread->event_base;
 	event_base_set(event_base, ev);
 
@@ -97,7 +97,7 @@ void chassis_event_add_self(chassis* chas, struct event* ev, int timeout) {	//¹¤
  */
 void chassis_event_add_local(chassis *chas, struct event *ev) {		//¹¤×÷Ïß³Ì»ò»ØÊÕÏß³ÌÖ´ÐÐ£¬¼àÌý³ØÖÐÁ¬½ÓµÄ³¬Ê±ÊÂ¼þEV_READ£¬ÓÃÀ´Ïú»Ù³¬Ê±Á¬½Ó
 	guint index = GPOINTER_TO_UINT(g_private_get(&tls_index));
-	chassis_event_thread_t* thread = g_ptr_array_index(chas->threads->event_threads, index);
+	chassis_event_thread_t* thread = g_ptr_array_index(chas->threads, index);
 	struct event_base *event_base = thread->event_base;
 
 	g_assert(event_base); /* the thread-local event-base has to be initialized */
@@ -107,12 +107,12 @@ void chassis_event_add_local(chassis *chas, struct event *ev) {		//¹¤×÷Ïß³Ì»ò»ØÊ
 }
 
 void chassis_event_handle(int G_GNUC_UNUSED event_fd, short G_GNUC_UNUSED events, void* user_data) {
-	chassis_event_thread_t* event_thread = user_data;
+	chassis_event_thread_t* thread = user_data;
 
 	char ping[1];
-	if (read(event_thread->notify_receive_fd, ping, 1) != 1) g_error("pipes - read error");
+	if (read(thread->notify_receive_fd, ping, 1) != 1) g_error("pipes - read error");
 
-	network_mysqld_con* client_con = g_async_queue_try_pop(event_thread->event_queue);
+	network_mysqld_con* client_con = g_async_queue_try_pop(thread->event_queue);
 	if (client_con != NULL) network_mysqld_con_handle(-1, 0, client_con);
 }
 
@@ -120,15 +120,13 @@ void chassis_event_handle(int G_GNUC_UNUSED event_fd, short G_GNUC_UNUSED events
  * create the data structure for a new event-thread
  */
 chassis_event_thread_t *chassis_event_thread_new(guint index) {
-	chassis_event_thread_t *event_thread;
+	chassis_event_thread_t *thread = g_new0(chassis_event_thread_t, 1);
 
-	event_thread = g_new0(chassis_event_thread_t, 1);
+	thread->index = index;
 
-	event_thread->index = index;
+	thread->event_queue = g_async_queue_new();
 
-	event_thread->event_queue = g_async_queue_new();
-
-	return event_thread;
+	return thread;
 }
 
 /**
@@ -136,82 +134,29 @@ chassis_event_thread_t *chassis_event_thread_new(guint index) {
  *
  * joins the event-thread, closes notification-pipe and free's the event-base
  */
-void chassis_event_thread_free(chassis_event_thread_t *event_thread) {
-	gboolean is_thread = (event_thread->thr != NULL);
+void chassis_event_thread_free(chassis_event_thread_t *thread) {
+	if (!thread) return;
 
-	if (!event_thread) return;
+	if (thread->thr) g_thread_join(thread->thr);
 
-	if (event_thread->thr) g_thread_join(event_thread->thr);
-
-	if (event_thread->notify_receive_fd != -1) {
-		event_del(&(event_thread->notify_fd_event));
-		closesocket(event_thread->notify_receive_fd);
+	if (thread->notify_receive_fd != -1) {
+		event_del(&(thread->notify_fd_event));
+		closesocket(thread->notify_receive_fd);
 	}
-	if (event_thread->notify_send_fd != -1) {
-		closesocket(event_thread->notify_send_fd);
+	if (thread->notify_send_fd != -1) {
+		closesocket(thread->notify_send_fd);
 	}
 
 	/* we don't want to free the global event-base */
-	if (is_thread && event_thread->event_base) event_base_free(event_thread->event_base);
+	if (thread->thr != NULL && thread->event_base) event_base_free(thread->event_base);
 
 	network_mysqld_con* con;
-	while (con = g_async_queue_try_pop(event_thread->event_queue)) {
+	while (con = g_async_queue_try_pop(thread->event_queue)) {
 		network_mysqld_con_free(con);
 	}
-	g_async_queue_unref(event_thread->event_queue);
+	g_async_queue_unref(thread->event_queue);
 
-	g_free(event_thread);
-}
-
-/**
- * create the event-threads handler
- *
- * provides the event-queue that is contains the event_ops from the event-threads
- * and notifies all the idling event-threads for the new event-ops to process
- */
-chassis_event_threads_t *chassis_event_threads_new() {
-	chassis_event_threads_t *threads;
-
-	threads = g_new0(chassis_event_threads_t, 1);
-
-	/* create the ping-fds
-	 *
-	 * the event-thread write a byte to the ping-pipe to trigger a fd-event when
-	 * something is available in the event-async-queues
-	 */
-	threads->event_threads = g_ptr_array_new();
-
-	return threads;
-}
-
-/**
- * free all event-threads
- *
- * frees all the registered event-threads and event-queue
- */
-void chassis_event_threads_free(chassis_event_threads_t *threads) {
-	guint i;
-	network_mysqld_con* con;
-
-	if (!threads) return;
-
-	/* all threads are running, now wait until they are down again */
-	for (i = 0; i < threads->event_threads->len; i++) {
-		chassis_event_thread_t *event_thread = threads->event_threads->pdata[i];
-
-		chassis_event_thread_free(event_thread);
-	}
-
-	g_ptr_array_free(threads->event_threads, TRUE);
-
-	g_free(threads);
-}
-
-/**
- * add a event-thread to the event-threads handler
- */
-void chassis_event_threads_add(chassis_event_threads_t *threads, chassis_event_thread_t *thread) {
-	g_ptr_array_add(threads->event_threads, thread);
+	g_free(thread);
 }
 
 /**
@@ -221,11 +166,11 @@ void chassis_event_threads_add(chassis_event_threads_t *threads, chassis_event_t
  *
  * @see chassis_event_handle()
  */ 
-int chassis_event_threads_init_thread(chassis_event_threads_t *threads, chassis_event_thread_t *event_thread, chassis *chas) {
-	event_thread->event_base = event_base_new();
-	event_thread->chas = chas;
+int chassis_event_threads_init_thread(chassis_event_thread_t *thread, chassis *chas) {
+	thread->event_base = event_base_new();
+	thread->chas = chas;
 
-    int fds[2];
+	int fds[2];
 	if (pipe(fds)) {
 		int err;
 		err = errno;
@@ -234,12 +179,12 @@ int chassis_event_threads_init_thread(chassis_event_threads_t *threads, chassis_
 				g_strerror(err),
 				err);
 	}
-    event_thread->notify_receive_fd = fds[0];
-    event_thread->notify_send_fd = fds[1];
+	thread->notify_receive_fd = fds[0];
+	thread->notify_send_fd = fds[1];
 
-	event_set(&(event_thread->notify_fd_event), event_thread->notify_receive_fd, EV_READ | EV_PERSIST, chassis_event_handle, event_thread);
-	event_base_set(event_thread->event_base, &(event_thread->notify_fd_event));
-	event_add(&(event_thread->notify_fd_event), NULL);
+	event_set(&(thread->notify_fd_event), thread->notify_receive_fd, EV_READ | EV_PERSIST, chassis_event_handle, thread);
+	event_base_set(thread->event_base, &(thread->notify_fd_event));
+	event_add(&(thread->notify_fd_event), NULL);
 
 	return 0;
 }
@@ -248,8 +193,8 @@ int chassis_event_threads_init_thread(chassis_event_threads_t *threads, chassis_
  * event-handler thread
  *
  */
-void *chassis_event_thread_loop(chassis_event_thread_t *event_thread) {
-	g_private_set(&tls_index, GUINT_TO_POINTER(event_thread->index));
+void *chassis_event_thread_loop(chassis_event_thread_t *thread) {
+	g_private_set(&tls_index, GUINT_TO_POINTER(thread->index));
 	/**
 	 * check once a second if we shall shutdown the proxy
 	 */
@@ -260,9 +205,9 @@ void *chassis_event_thread_loop(chassis_event_thread_t *event_thread) {
 		timeout.tv_sec = 1;
 		timeout.tv_usec = 0;
 
-		g_assert(event_base_loopexit(event_thread->event_base, &timeout) == 0);
+		g_assert(event_base_loopexit(thread->event_base, &timeout) == 0);
 
-		r = event_base_dispatch(event_thread->event_base);
+		r = event_base_dispatch(thread->event_base);
 
 		if (r == -1) {
 #ifdef WIN32
@@ -284,16 +229,16 @@ void *chassis_event_thread_loop(chassis_event_thread_t *event_thread) {
  *
  * @see chassis_event_threads_add
  */
-void chassis_event_threads_start(chassis_event_threads_t *threads) {
+void chassis_event_threads_start(GPtrArray *threads) {
 	guint i;
 
-	g_message("%s: starting %d threads", G_STRLOC, threads->event_threads->len - 1);
+	g_message("%s: starting %d threads", G_STRLOC, threads->len - 1);
 
-	for (i = 1; i < threads->event_threads->len; i++) { /* the 1st is the main-thread and already set up */
-		chassis_event_thread_t *event_thread = threads->event_threads->pdata[i];
+	for (i = 1; i < threads->len; i++) { /* the 1st is the main-thread and already set up */
+		chassis_event_thread_t *thread = threads->pdata[i];
 		GError *gerr = NULL;
 
-		event_thread->thr = g_thread_create((GThreadFunc)chassis_event_thread_loop, event_thread, TRUE, &gerr);
+		thread->thr = g_thread_create((GThreadFunc)chassis_event_thread_loop, thread, TRUE, &gerr);
 
 		if (gerr) {
 			g_critical("%s: %s", G_STRLOC, gerr->message);

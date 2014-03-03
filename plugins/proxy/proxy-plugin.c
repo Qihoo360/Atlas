@@ -289,7 +289,7 @@ GArray* get_column_index(GPtrArray* tokens, gchar* table_name, gchar* column_nam
 				for (j = i+1; j < len-2; ++j) {
 					if (ts[j]->token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0) {
 						if (ts[j+1]->token_id == TK_EQ) {
-							if (ts[j-1]->token_id != TK_DOT || strcmp(ts[j-2]->text->str, table_name) == 0) {
+							if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
 								k = j + 2;
 								g_array_append_val(columns, k);
 								break;
@@ -300,23 +300,26 @@ GArray* get_column_index(GPtrArray* tokens, gchar* table_name, gchar* column_nam
 							while ((k += 2) < len && ts[k-1]->token_id != TK_CBRACE) {
 								g_array_append_val(columns, k);
 							}
+							break;
 						}
 					}
 				}
+				break;
 			}
 		}
 	} else if (sql_type == 2) {
 		for (i = start; i < len; ++i) {
 			if (ts[i]->token_id == TK_SQL_WHERE) {
 				for (j = i+1; j < len-2; ++j) {
-					if (ts[j]->token_id == TK_LITERAL && strcmp(ts[j]->text->str, column_name) == 0 && ts[j+1]->token_id == TK_EQ) {
-						if (ts[j-1]->token_id != TK_DOT || strcmp(ts[j-2]->text->str, table_name) == 0) {
+					if (ts[j]->token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0 && ts[j+1]->token_id == TK_EQ) {
+						if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
 							k = j + 2;
 							g_array_append_val(columns, k);
 							break;
 						}
 					}
 				}
+				break;
 			}
 		}
 	} else if (sql_type == 3) {
@@ -324,7 +327,7 @@ GArray* get_column_index(GPtrArray* tokens, gchar* table_name, gchar* column_nam
 
 		if (token_id == TK_SQL_SET) {
 			for (i = start+1; i < len-2; ++i) {
-				if (ts[i]->token_id == TK_LITERAL && strcmp(ts[i]->text->str, column_name) == 0) {
+				if (ts[i]->token_id == TK_LITERAL && strcasecmp(ts[i]->text->str, column_name) == 0) {
 					k = i + 2;
 					g_array_append_val(columns, k);
 					break;
@@ -337,8 +340,8 @@ GArray* get_column_index(GPtrArray* tokens, gchar* table_name, gchar* column_nam
 				for (j = start+1; j < len; ++j) {
 					token_id = ts[j]->token_id;
 					if (token_id == TK_CBRACE) break;
-					if (token_id == TK_LITERAL && strcmp(ts[j]->text->str, column_name) == 0) {
-						if (ts[j-1]->token_id != TK_DOT || strcmp(ts[j-2]->text->str, table_name) == 0) {
+					if (token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0) {
+						if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
 							found = j;
 							break;
 						}
@@ -693,7 +696,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_handshake) {
 
  	packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
 	packet.offset = 0;
-	
+
 	err = err || network_mysqld_proto_skip_network_header(&packet);
 	if (err) return NETWORK_SOCKET_ERROR;
 
@@ -703,19 +706,18 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_handshake) {
 	/* handle ERR packets directly */
 	if (status == 0xff) {
 		/* move the chunk from one queue to the next */
-        guint16 errcode;
-        gchar *errmsg = NULL;
+		guint16 errcode;
+		gchar *errmsg = NULL;
 
-        // get error message from packet
-        packet.offset += 1; // skip 0xff
-        err = err || network_mysqld_proto_get_int16(&packet, &errcode);
-        if (packet.offset < packet.data->len) {
-            err = err || network_mysqld_proto_get_string_len(&packet, &errmsg, packet.data->len - packet.offset);
-        }
+		// get error message from packet
+		packet.offset += 1; // skip 0xff
+		err = err || network_mysqld_proto_get_int16(&packet, &errcode);
+		if (packet.offset < packet.data->len) {
+		    err = err || network_mysqld_proto_get_string_len(&packet, &errmsg, packet.data->len - packet.offset);
+		}
 
-        g_warning("[%s]: error packet from server (%s -> %s): %s(%d)", G_STRLOC,
-                recv_sock->dst->name->str, recv_sock->src->name->str, errmsg, errcode);
-        if (errmsg) g_free(errmsg);
+		g_warning("[%s]: error packet from server (%s -> %s): %s(%d)", G_STRLOC, recv_sock->dst->name->str, recv_sock->src->name->str, errmsg, errcode);
+		if (errmsg) g_free(errmsg);
 
 		network_mysqld_queue_append_raw(send_sock, send_sock->send_queue, g_queue_pop_tail(recv_sock->recv_queue->chunks));
 
@@ -1714,7 +1716,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 	//if(inj) {
 	//	g_string_assign_len(con->current_query, inj->query->str, inj->query->len);
 	//}
-	
+
 	is_finished = network_mysqld_proto_get_query_result(&packet, con);
 	if (is_finished == -1) return NETWORK_SOCKET_ERROR; /* something happend, let's get out of here */
 
@@ -1754,7 +1756,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 			inj->ts_read_query_result_last = chassis_get_rel_microseconds();
 			/* g_get_current_time(&(inj->ts_read_query_result_last)); */
 		}
-		
+
 		network_mysqld_queue_reset(recv_sock); /* reset the packet-id checks as the server-side is finished */
 
 		NETWORK_MYSQLD_CON_TRACK_TIME(con, "proxy::ready_query_result::enter_lua");

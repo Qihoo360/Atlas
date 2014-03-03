@@ -542,8 +542,6 @@ static GOptionEntry * network_mysqld_admin_plugin_get_options(chassis_plugin_con
 		{ "admin-address",            0, 0, G_OPTION_ARG_STRING, NULL, "listening address:port of the admin-server (default: :4041)", "<host:port>" },
 		{ "admin-username",           0, 0, G_OPTION_ARG_STRING, NULL, "username to allow to log in", "<string>" },
 		{ "admin-password",           0, 0, G_OPTION_ARG_STRING, NULL, "password to allow to log in", "<string>" },
-		{ "admin-lua-script",         0, 0, G_OPTION_ARG_FILENAME, NULL, "script to execute by the admin plugin", "<filename>" },
-		
 		{ NULL,                       0, 0, G_OPTION_ARG_NONE,   NULL, NULL, NULL }
 	};
 
@@ -551,7 +549,6 @@ static GOptionEntry * network_mysqld_admin_plugin_get_options(chassis_plugin_con
 	config_entries[i++].arg_data = &(config->address);
 	config_entries[i++].arg_data = &(config->admin_username);
 	config_entries[i++].arg_data = &(config->admin_password);
-	config_entries[i++].arg_data = &(config->lua_script);
 
 	return config_entries;
 }
@@ -565,10 +562,10 @@ static int network_mysqld_admin_plugin_apply_config(chassis *chas, chassis_plugi
 
 	//if (!config->address) config->address = g_strdup(":4041");
 	if (!config->address) {
-        g_critical("%s: Failed to get bind address, please set by --admin-address=<host:port>",
-                G_STRLOC);
-        return -1;
-    }
+		g_critical("%s: Failed to get bind address, please set by --admin-address=<host:port>",
+				G_STRLOC);
+		return -1;
+	}
 	if (!config->admin_username) {
 		g_critical("%s: --admin-username needs to be set",
 				G_STRLOC);
@@ -580,11 +577,8 @@ static int network_mysqld_admin_plugin_apply_config(chassis *chas, chassis_plugi
 		return -1;
 	}
 	if (!config->lua_script) {
-		g_critical("%s: --admin-lua-script needs to be set, <install-dir>/lib/mysql-proxy/lua/admin.lua may be a good value",
-				G_STRLOC);
-		return -1;
+		config->lua_script = g_strdup_printf("%s/lib/mysql-proxy/lua/admin.lua", chas->base_dir);
 	}
-
 
 	/** 
 	 * create a connection handle for the listen socket 

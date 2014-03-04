@@ -1251,7 +1251,7 @@ gboolean is_in_blacklist(GPtrArray* tokens) {
 	guint i;
 
 	sql_token* token = tokens->pdata[1];
-	if (token->token_id == TK_SQL_DELETE) {
+	if (token->token_id == TK_SQL_DELETE || token->token_id == TK_SQL_UPDATE) {
 		for (i = 2; i < len; ++i) {
 			token = tokens->pdata[i];
 			if (token->token_id == TK_SQL_WHERE) break;

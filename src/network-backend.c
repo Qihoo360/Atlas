@@ -161,7 +161,7 @@ int network_backends_add(network_backends_t *bs, /* const */ gchar *address, bac
 
 		if (first_slave == -1 && old_backend->type == BACKEND_TYPE_RO) first_slave = i;
 
-		if (strleq(S(old_backend->addr->name), S(new_backend->addr->name))) {
+		if (old_backend->type == type && strleq(S(old_backend->addr->name), S(new_backend->addr->name))) {
 			network_backend_free(new_backend);
 
 			g_mutex_unlock(bs->backends_mutex);	/*remove lock*/

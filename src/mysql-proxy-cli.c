@@ -114,7 +114,7 @@ typedef struct {
 	chassis_plugin *p;
 	GOptionEntry *config_entries;
 
-    gchar *pid_file;
+	gchar *pid_file;
 
 	gchar *plugin_dir;
 	gchar **plugin_names;
@@ -136,8 +136,8 @@ typedef struct {
 	char *lua_path;
 	char *lua_cpath;
 	char **lua_subdirs;
-    
-    gchar *instance_name;
+
+	gchar *instance_name;
 } chassis_frontend_t;
 
 /**
@@ -433,14 +433,20 @@ int main_cmdline(int argc, char **argv) {
 	 * start the logging and pid
 	 */
 	if (frontend->log_path) {
-        if (! frontend->instance_name) {
-            g_critical("%s: Failed to get instance name, please set by --instance",
-                    G_STRLOC);
-            GOTO_EXIT(EXIT_FAILURE);
-        }
-        log->log_filename = g_strdup_printf("%s/%s.log", frontend->log_path, frontend->instance_name);
-        frontend->pid_file = g_strdup_printf("%s/%s.pid", frontend->log_path, frontend->instance_name);
-	    srv->log_path = g_strdup(frontend->log_path);
+		if (frontend->instance_name == NULL) {
+			gchar *default_file = frontend->default_file;
+
+			gchar *slash = strrchr(default_file, '/');
+			if (slash != NULL) ++slash;
+			else slash = default_file;
+
+			gchar *dot = strrchr(default_file, '.');
+			if (dot != NULL && dot >= slash) frontend->instance_name = g_strndup(slash, dot-slash);
+			else frontend->instance_name = g_strdup(slash);
+		}
+		log->log_filename = g_strdup_printf("%s/%s.log", frontend->log_path, frontend->instance_name);
+		frontend->pid_file = g_strdup_printf("%s/%s.pid", frontend->log_path, frontend->instance_name);
+		srv->log_path = g_strdup(frontend->log_path);
 	}
 
 	log->use_syslog = frontend->use_syslog;
@@ -575,12 +581,8 @@ int main_cmdline(int argc, char **argv) {
 		}
 	}
 
-    // we need instance name that read by lua, may be use in lua log and ...
-    if(frontend->instance_name == NULL) {
-        srv->instance_name = g_strdup("");
-    } else {
-        srv->instance_name = g_strdup(frontend->instance_name);
-    }
+	// we need instance name that read by lua, may be use in lua log and ...
+	srv->instance_name = g_strdup(frontend->instance_name);
 
 	/* the message has to be _after_ the g_option_content_parse() to 
 	 * hide from the output if the --help is asked for

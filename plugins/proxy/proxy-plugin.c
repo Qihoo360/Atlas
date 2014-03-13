@@ -694,7 +694,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_handshake) {
 	send_sock = con->client;
 	recv_sock = con->server;
 
- 	packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
+	packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
 	packet.offset = 0;
 
 	err = err || network_mysqld_proto_skip_network_header(&packet);
@@ -913,7 +913,10 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 		if (g_string_equal(expected_response, auth->response)) {
 			g_string_assign_len(recv_sock->default_db, S(auth->database));
 
-			char *client_charset = charset[auth->charset];
+			char *client_charset = NULL;
+			if (con->config->charset == NULL) client_charset = charset[auth->charset];
+			else client_charset = con->config->charset;
+
 			g_string_assign(recv_sock->charset_client,     client_charset);
 			g_string_assign(recv_sock->charset_results,    client_charset);
 			g_string_assign(recv_sock->charset_connection, client_charset);
@@ -1156,7 +1159,6 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 	//3.检查client和server两端的字符集是否相同
 	network_socket* client = con->client;
 	network_socket* server = con->server;
-	char* default_charset = con->config->charset;
 	GString* empty_charset = g_string_new("");
 	char cmd = COM_QUERY;
 	network_mysqld_con_lua_t* st = con->plugin_con_state;
@@ -1164,14 +1166,8 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 	if (!is_set_client && !g_string_equal(client->charset_client, server->charset_client)) {
 		GString* query = g_string_new_len(&cmd, 1);
 		g_string_append(query, "SET CHARACTER_SET_CLIENT=");
-
-		if (g_string_equal(client->charset_client, empty_charset)) {
-			g_string_append(query, default_charset);
-			g_string_assign(con->charset_client, default_charset);
-		} else {
-			g_string_append(query, client->charset_client->str);
-			g_string_assign(con->charset_client, client->charset_client->str);
-		}
+		g_string_append(query, client->charset_client->str);
+		g_string_assign(con->charset_client, client->charset_client->str);
 
 		injection* inj = injection_new(3, query);
 		inj->resultset_is_needed = TRUE;
@@ -1180,14 +1176,8 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 	if (!is_set_results && !g_string_equal(client->charset_results, server->charset_results)) {
 		GString* query = g_string_new_len(&cmd, 1);
 		g_string_append(query, "SET CHARACTER_SET_RESULTS=");
-
-		if (g_string_equal(client->charset_results, empty_charset)) {
-			g_string_append(query, default_charset);
-			g_string_assign(con->charset_results, default_charset);
-		} else {
-			g_string_append(query, client->charset_results->str);
-			g_string_assign(con->charset_results, client->charset_results->str);
-		}
+		g_string_append(query, client->charset_results->str);
+		g_string_assign(con->charset_results, client->charset_results->str);
 
 		injection* inj = injection_new(4, query);
 		inj->resultset_is_needed = TRUE;
@@ -1196,14 +1186,8 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 	if (!is_set_connection && !g_string_equal(client->charset_connection, server->charset_connection)) {
 		GString* query = g_string_new_len(&cmd, 1);
 		g_string_append(query, "SET CHARACTER_SET_CONNECTION=");
-
-		if (g_string_equal(client->charset_connection, empty_charset)) {
-			g_string_append(query, default_charset);
-			g_string_assign(con->charset_connection, default_charset);
-		} else {
-			g_string_append(query, client->charset_connection->str);
-			g_string_assign(con->charset_connection, client->charset_connection->str);
-		}
+		g_string_append(query, client->charset_connection->str);
+		g_string_assign(con->charset_connection, client->charset_connection->str);
 
 		injection* inj = injection_new(5, query);
 		inj->resultset_is_needed = TRUE;
@@ -1293,7 +1277,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
 	int proxy_query = 1;
 	network_mysqld_lua_stmt_ret ret;
-	
+
 	NETWORK_MYSQLD_CON_TRACK_TIME(con, "proxy::ready_query::enter");
 
 	send_sock = NULL;
@@ -2536,8 +2520,6 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 			return -1;
 		}
 	}
-
-	if (!config->charset) config->charset = g_strdup("LATIN1");
 
 	/* load the script and setup the global tables */
 	network_mysqld_lua_setup_global(chas->priv->sc->L, g, chas);

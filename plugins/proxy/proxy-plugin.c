@@ -311,10 +311,19 @@ GArray* get_column_index(GPtrArray* tokens, gchar* table_name, gchar* column_nam
 		for (i = start; i < len; ++i) {
 			if (ts[i]->token_id == TK_SQL_WHERE) {
 				for (j = i+1; j < len-2; ++j) {
-					if (ts[j]->token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0 && ts[j+1]->token_id == TK_EQ) {
-						if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
-							k = j + 2;
+					if (ts[j]->token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0) {
+						if (ts[j+1]->token_id == TK_EQ) {
+							if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
+								k = j + 2;
+								g_array_append_val(columns, k);
+								break;
+							}
+						} else if (j + 3 < len && strcasecmp(ts[j+1]->text->str, "IN") == 0 && ts[j+2]->token_id == TK_OBRACE) {
+							k = j + 3;
 							g_array_append_val(columns, k);
+							while ((k += 2) < len && ts[k-1]->token_id != TK_CBRACE) {
+								g_array_append_val(columns, k);
+							}
 							break;
 						}
 					}
@@ -436,6 +445,8 @@ GPtrArray* combine_sql(GPtrArray* tokens, gint table, GArray* columns, guint num
 							g_string_append_printf(sql, "%s_%u", ts[i]->text->str, m);
 						} else if (i == property_index) {
 							g_string_append_printf(sql, "%s%s", ts[i]->text->str, tmp->str);
+						} else if (ts[i]->token_id == TK_STRING) {
+							g_string_append_printf(sql, "'%s'", ts[i]->text->str);
 						} else if (ts[i]->token_id == TK_COMMENT) {
 							g_string_append_printf(sql, "/*%s*/", ts[i]->text->str);
 						} else {
@@ -1159,7 +1170,6 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 	//3.检查client和server两端的字符集是否相同
 	network_socket* client = con->client;
 	network_socket* server = con->server;
-	GString* empty_charset = g_string_new("");
 	char cmd = COM_QUERY;
 	network_mysqld_con_lua_t* st = con->plugin_con_state;
 
@@ -1193,8 +1203,6 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 		inj->resultset_is_needed = TRUE;
 		g_queue_push_head(st->injected.queries, inj);
 	}
-
-	g_string_free(empty_charset, TRUE);
 }
 
 void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
@@ -1331,6 +1339,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 					merge_res->sub_sql_num = sqls->len;
 					merge_res->sub_sql_exed = 0;
 					merge_res->limit = G_MAXINT;
+					merge_res->affected_rows = 0;
+					merge_res->warnings = 0;
 
 					sql_token** ts = (sql_token**)(tokens->pdata);
 					for (i = tokens->len-2; i >= 0; --i) {
@@ -1351,8 +1361,9 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 					}
 					g_ptr_array_set_size(rows, 0);
 
+					int id = (ts[1]->token_id == TK_SQL_SELECT) ? 7 : 8;
 					for (i = 0; i < sqls->len; ++i) {
-						inj = injection_new(7, sqls->pdata[i]);
+						inj = injection_new(id, sqls->pdata[i]);
 						inj->resultset_is_needed = TRUE;
 						g_queue_push_tail(st->injected.queries, inj);
 					}
@@ -1777,6 +1788,34 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 
 						proxy_resultset_free(res);
 					}
+				}
+			} else if (inj->id == 8) {
+				log_sql(con, inj);
+
+				if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
+					network_mysqld_ok_packet_t *ok_packet = network_mysqld_ok_packet_new();
+					packet.offset = NET_HEADER_SIZE;
+					if (network_mysqld_proto_get_ok_packet(&packet, ok_packet)) {
+						network_mysqld_ok_packet_free(ok_packet);
+						return NETWORK_SOCKET_ERROR;
+					}
+
+					merge_res_t *merge_res = con->merge_res;
+					merge_res->affected_rows += ok_packet->affected_rows;
+					merge_res->warnings += ok_packet->warnings;
+
+					if ((++merge_res->sub_sql_exed) < merge_res->sub_sql_num) {
+						ret = PROXY_IGNORE_RESULT;
+					} else {
+						network_mysqld_con_send_ok_full(con->client, merge_res->affected_rows, 0, ok_packet->server_status, merge_res->warnings);
+						network_injection_queue_reset(st->injected.queries);
+						while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) g_string_free(p, TRUE);
+						ret = PROXY_SEND_RESULT;
+					}
+
+					network_mysqld_ok_packet_free(ok_packet);
+				} else {
+					ret = PROXY_SEND_RESULT;
 				}
 			} else {
 				ret = PROXY_IGNORE_RESULT;

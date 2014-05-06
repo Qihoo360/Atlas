@@ -1,7 +1,7 @@
 2.1
 *修正配置文件里的charset不生效的bug
 *修正update/delete分多张子表的bug
-*增加对MySQL Workbench、Navicat、SQLyog的支持
+*增加对MySQL Workbench, Navicat, SQLyog的支持
 *SQL日志里增加端口信息
 *改为每个工作线程一个消息队列
 *去除配置文件里的admin-lua-script项

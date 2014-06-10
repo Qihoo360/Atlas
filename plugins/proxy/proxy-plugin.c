@@ -510,8 +510,7 @@ int idle_rw(network_mysqld_con* con) {
 		network_backend_t* backend = network_backends_get(backends, i);
 		if (backend == NULL) continue;
 
-		network_connection_pool* pool = chassis_event_thread_pool(backend);
-		if (pool == NULL) continue;
+		if (chassis_event_thread_pool(backend) == NULL) continue;
 
 		if (backend->type == BACKEND_TYPE_RW && backend->state == BACKEND_STATE_UP) {
 			ret = i;
@@ -533,8 +532,7 @@ int idle_ro(network_mysqld_con* con) {
 		network_backend_t* backend = network_backends_get(backends, i);
 		if (backend == NULL) continue;
 
-		network_connection_pool* pool = chassis_event_thread_pool(backend);
-		if (pool == NULL) continue;
+		if (chassis_event_thread_pool(backend) == NULL) continue;
 
 		if (backend->type == BACKEND_TYPE_RO && backend->state == BACKEND_STATE_UP) {
 			if (max_conns == -1 || backend->connected_clients < max_conns) {
@@ -575,8 +573,7 @@ int wrr_ro(network_mysqld_con *con) {
 		network_backend_t* backend = network_backends_get(backends, next_ndx);
 		if (backend == NULL) goto next;
 
-		network_connection_pool* pool = chassis_event_thread_pool(backend);
-		if (pool == NULL) goto next;
+		if (chassis_event_thread_pool(backend) == NULL) goto next;
 
 		if (backend->type == BACKEND_TYPE_RO && backend->weight >= cur_weight && backend->state == BACKEND_STATE_UP) ndx = next_ndx;
 

@@ -380,6 +380,7 @@ NETWORK_API void network_mysqld_con_free(network_mysqld_con *con);
  * should be socket 
  */
 NETWORK_API void network_mysqld_con_accept(int event_fd, short events, void *user_data); /** event handler for accept() */
+NETWORK_API void network_mysqld_admin_con_accept(int event_fd, short events, void *user_data); /** event handler for accept() */
 
 NETWORK_API int network_mysqld_con_send_ok(network_socket *con);
 NETWORK_API int network_mysqld_con_send_ok_full(network_socket *con, guint64 affected_rows, guint64 insert_id, guint16 server_status, guint16 warnings);

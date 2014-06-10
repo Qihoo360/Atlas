@@ -608,7 +608,7 @@ static int network_mysqld_admin_plugin_apply_config(chassis *chas, chassis_plugi
 	/**
 	 * call network_mysqld_con_accept() with this connection when we are done
 	 */
-	event_set(&(listen_sock->event), listen_sock->fd, EV_READ|EV_PERSIST, network_mysqld_con_accept, con);
+	event_set(&(listen_sock->event), listen_sock->fd, EV_READ|EV_PERSIST, network_mysqld_admin_con_accept, con);
 	event_base_set(chas->event_base, &(listen_sock->event));
 	event_add(&(listen_sock->event), NULL);
 

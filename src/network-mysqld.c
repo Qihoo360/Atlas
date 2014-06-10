@@ -1823,7 +1823,6 @@ void network_mysqld_con_accept(int G_GNUC_UNUSED event_fd, short events, void *u
 
 	network_mysqld_add_connection(listen_con->srv, client_con);
 
-	
 	/**
 	 * inherit the config to the new connection 
 	 */
@@ -1834,8 +1833,35 @@ void network_mysqld_con_accept(int G_GNUC_UNUSED event_fd, short events, void *u
 	//network_mysqld_con_handle(-1, 0, client_con);
 	//此处将client_con放入异步队列，然后ping工作线程，由工作线程去执行network_mysqld_con_handle，不再由主线程直接执行network_mysqld_con_handle
 	chassis_event_add(client_con);
+}
 
-	return;
+void network_mysqld_admin_con_accept(int G_GNUC_UNUSED event_fd, short events, void *user_data) {
+	network_mysqld_con *listen_con = user_data;
+	network_mysqld_con *client_con;
+	network_socket *client;
+
+	g_assert(events == EV_READ);
+	g_assert(listen_con->server);
+
+	client = network_socket_accept(listen_con->server);
+	if (!client) return;
+
+	/* looks like we open a client connection */
+	client_con = network_mysqld_con_new();
+	client_con->client = client;
+
+	NETWORK_MYSQLD_CON_TRACK_TIME(client_con, "accept");
+
+	network_mysqld_add_connection(listen_con->srv, client_con);
+
+	/**
+	 * inherit the config to the new connection 
+	 */
+
+	client_con->plugins = listen_con->plugins;
+	client_con->config  = listen_con->config;
+
+	network_mysqld_con_handle(-1, 0, client_con);
 }
 
 /**

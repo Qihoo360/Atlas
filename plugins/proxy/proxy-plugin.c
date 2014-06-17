@@ -2204,12 +2204,8 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *config) {
 #endif
 	}
 
-	if (config->backend_addresses) {
-		for (i = 0; config->backend_addresses[i]; i++) {
-			g_free(config->backend_addresses[i]);
-		}
-		g_free(config->backend_addresses);
-	}
+	g_strfreev(config->backend_addresses);
+	g_strfreev(config->read_only_backend_addresses);
 
 	if (config->address) {
 		/* free the global scope */
@@ -2417,12 +2413,10 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 		return 0;
 	}
 
-	//if (!config->address) config->address = g_strdup(":4040");
-    if (!config->address) {
-        g_critical("%s: Failed to get bind address, please set by --proxy-address=<host:port>",
-                G_STRLOC);
-        return -1; 
-    }
+	if (!config->address) {
+		g_critical("%s: Failed to get bind address, please set by --proxy-address=<host:port>", G_STRLOC);
+		return -1;
+	}
 
 	if (!config->backend_addresses) {
 		config->backend_addresses = g_new0(char *, 2);

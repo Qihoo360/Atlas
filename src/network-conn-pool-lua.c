@@ -140,13 +140,13 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 	network_socket *sock = network_socket_new();
 	network_address_copy(sock->dst, backend->addr);
 	if (-1 == (sock->fd = socket(sock->dst->addr.common.sa_family, sock->socket_type, 0))) {
-		network_socket_free(sock);
 		g_critical("%s.%d: socket(%s) failed: %s (%d)", __FILE__, __LINE__, sock->dst->name->str, g_strerror(errno), errno);
+		network_socket_free(sock);
 		return NULL;
 	}
 	if (-1 == (connect(sock->fd, &sock->dst->addr.common, sock->dst->len))) {
-		network_socket_free(sock);
 		g_message("%s.%d: connecting to backend (%s) failed, marking it as down for ...", __FILE__, __LINE__, sock->dst->name->str);
+		network_socket_free(sock);
 		if (backend->state != BACKEND_STATE_OFFLINE) backend->state = BACKEND_STATE_DOWN;
 		return NULL;
 	}

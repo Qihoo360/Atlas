@@ -34,7 +34,7 @@ Atlas是由 Qihoo 360公司Web平台部基础架构团队开发维护的一个�
 
 [3.Atlas的分表功能简介](http://github.com/Qihoo360/Atlas/wiki/Atlas的分表功能简介)
 
-[4.Atla部分配置参数及原理详解](http://github.com/Qihoo360/Atlas/wiki/Atla部分配置参数及原理详解)
+[4.Atlas部分配置参数及原理详解](http://github.com/Qihoo360/Atlas/wiki/Atlas部分配置参数及原理详解)
 
 [5.Atlas的架构](https://github.com/Qihoo360/Atlas/wiki/Atlas的架构)
 

@@ -154,7 +154,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 	//2. read handshake，重点是获取20个字节的随机串
 	off_t to_read = NET_HEADER_SIZE;
 	guint offset = 0;
-	char header[NET_HEADER_SIZE];
+	guchar header[NET_HEADER_SIZE];
 	while (to_read > 0) {
 		gssize len = recv(sock->fd, header + offset, to_read, 0);
 		if (len == -1 || len == 0) {

@@ -578,7 +578,7 @@ int wrr_ro(network_mysqld_con *con) {
 		if (backend->type == BACKEND_TYPE_RO && backend->weight >= cur_weight && backend->state == BACKEND_STATE_UP) ndx = next_ndx;
 
 	next:
-		if (next_ndx == ndx_num - 1) {
+		if (next_ndx >= ndx_num - 1) {
 			--cur_weight;
 			next_ndx = 0;
 

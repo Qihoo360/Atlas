@@ -1857,14 +1857,18 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 
 				gboolean have_last_insert_id = inj->qstat.insert_id > 0;
 
-				if (!con->is_in_transaction && !con->is_not_autocommit && !con->is_in_select_calc_found_rows && !have_last_insert_id && g_hash_table_size(con->locks) == 0) network_connection_pool_lua_add_connection(con);
-
 				++st->injected.sent_resultset;
 				if (st->injected.sent_resultset == 1) {
 					while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) network_mysqld_queue_append_raw(send_sock, send_sock->send_queue, p);
-					break;
+				} else {
+					if (con->resultset_is_needed) {
+						while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) g_string_free(p, TRUE);
+					}
 				}
 
+				if (!con->is_in_transaction && !con->is_not_autocommit && !con->is_in_select_calc_found_rows && !have_last_insert_id && g_hash_table_size(con->locks) == 0) network_connection_pool_lua_add_connection(con);
+
+				break;
 			case PROXY_IGNORE_RESULT:
 				if (con->resultset_is_needed) {
 					while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) g_string_free(p, TRUE);

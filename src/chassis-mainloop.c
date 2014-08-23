@@ -56,14 +56,6 @@ static volatile sig_atomic_t signal_shutdown;
 #endif
 
 /**
- * @deprecated will be removed in 1.0
- * @see chassis_new()
- */
-chassis *chassis_init() {
-	return chassis_new();
-}
-
-/**
  * check if the libevent headers we built against match the 
  * library we run against
  */
@@ -107,7 +99,7 @@ chassis *chassis_new() {
 
 	chas = g_new0(chassis, 1);
 
-	chas->modules     = g_ptr_array_new();
+	chas->modules = g_ptr_array_new();
 	
 	chas->stats = chassis_stats_new();
 
@@ -139,10 +131,6 @@ void chassis_free(chassis *chas) {
 
 	if (!chas) return;
 
-	/* init the shutdown, without freeing share structures */	
-	if (chas->priv_shutdown) chas->priv_shutdown(chas, chas->priv);
-	
-
 	/* call the destructor for all plugins */
 	for (i = 0; i < chas->modules->len; i++) {
 		chassis_plugin *p = chas->modules->pdata[i];
@@ -160,10 +148,6 @@ void chassis_free(chassis *chas) {
 	}
 	
 	g_ptr_array_free(chas->modules, TRUE);
-
-	/* free the pointers _AFTER_ the modules are shutdown */
-	if (chas->priv_free) chas->priv_free(chas, chas->priv);
-
 
 	if (chas->base_dir) g_free(chas->base_dir);
 	if (chas->log_path) g_free(chas->log_path);
@@ -199,7 +183,11 @@ void chassis_free(chassis *chas) {
 	g_free(chas->event_hdr_version);
 
 	chassis_shutdown_hooks_free(chas->shutdown_hooks);
-	
+
+	lua_scope_free(chas->sc);
+
+	network_backends_free(chas->backends);
+
 	g_free(chas);
 }
 

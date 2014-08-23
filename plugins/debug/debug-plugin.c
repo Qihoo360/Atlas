@@ -122,7 +122,7 @@ int plugin_debug_con_handle_stmt(chassis *chas, network_mysqld_con *con, GString
 			network_mysqld_con_send_resultset(con->client, fields, rows);
 		} else {
 			MYSQL_FIELD *field = NULL;
-			lua_State *L = chas->priv->sc->L;
+			lua_State *L = chas->sc->L;
 
 			if (0 == luaL_loadstring(L, s->str + NET_HEADER_SIZE + 1) &&
 			    0 == lua_pcall(L, 0, 1, 0)) {

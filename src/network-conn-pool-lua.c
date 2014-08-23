@@ -284,7 +284,6 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 	network_backend_t *backend = NULL;
 	network_socket *send_sock;
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
-	chassis_private *g = con->srv->priv;
 //	GString empty_username = { "", 0, 0 };
 
 	/*
@@ -292,7 +291,7 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 	 * in the connection pool and connected
 	 */
 
-	backend = network_backends_get(g->backends, backend_ndx);
+	backend = network_backends_get(con->srv->backends, backend_ndx);
 	if (!backend) return NULL;
 
 

@@ -24,7 +24,6 @@
 
 #include <glib.h>
 
-#include "chassis-mainloop.h"
 #include "lua-scope.h"
 
 #include "network-socket.h"

@@ -27,8 +27,6 @@
 #endif
 
 #include "network-conn-pool.h"
-#include "chassis-mainloop.h"
-
 #include "network-exports.h"
 
 typedef enum { 

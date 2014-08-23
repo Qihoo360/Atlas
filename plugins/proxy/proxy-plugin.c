@@ -503,7 +503,7 @@ int idle_rw(network_mysqld_con* con) {
 	int ret = -1;
 	guint i;
 
-	network_backends_t* backends = con->srv->priv->backends;
+	network_backends_t* backends = con->srv->backends;
 
 	guint count = network_backends_count(backends);
 	for (i = 0; i < count; ++i) {
@@ -525,7 +525,7 @@ int idle_ro(network_mysqld_con* con) {
 	int max_conns = -1;
 	guint i;
 
-	network_backends_t* backends = con->srv->priv->backends;
+	network_backends_t* backends = con->srv->backends;
 
 	guint count = network_backends_count(backends);
 	for(i = 0; i < count; ++i) {
@@ -547,7 +547,7 @@ int idle_ro(network_mysqld_con* con) {
 int wrr_ro(network_mysqld_con *con) {
 	guint i;
 
-	network_backends_t* backends = con->srv->priv->backends;
+	network_backends_t* backends = con->srv->backends;
 	g_wrr_poll* rwsplit = backends->global_wrr;
 	guint ndx_num = network_backends_count(backends);
 
@@ -1985,7 +1985,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_init) {
  */
 NETWORK_MYSQLD_PLUGIN_PROTO(proxy_disconnect_client) {
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
-	lua_scope  *sc = con->srv->priv->sc;
+	lua_scope  *sc = con->srv->sc;
 //	gboolean use_pooled_connection = FALSE;
 
 	if (st == NULL) return NETWORK_SOCKET_SUCCESS;
@@ -2410,7 +2410,6 @@ void* check_state(network_backends_t* bs) {
 int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_config *config) {
 	network_mysqld_con *con;
 	network_socket *listen_sock;
-	chassis_private *g = chas->priv;
 	guint i;
 
 	if (!config->start_proxy) {
@@ -2452,13 +2451,13 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	g_message("proxy listening on port %s", config->address);
 
 	for (i = 0; config->backend_addresses && config->backend_addresses[i]; i++) {
-		if (-1 == network_backends_add(g->backends, config->backend_addresses[i], BACKEND_TYPE_RW)) {		
+		if (-1 == network_backends_add(chas->backends, config->backend_addresses[i], BACKEND_TYPE_RW)) {
 			return -1;
 		}
 	}
-	
+
 	for (i = 0; config->read_only_backend_addresses && config->read_only_backend_addresses[i]; i++) {
-		if (-1 == network_backends_add(g->backends, config->read_only_backend_addresses[i], BACKEND_TYPE_RO)) {
+		if (-1 == network_backends_add(chas->backends, config->read_only_backend_addresses[i], BACKEND_TYPE_RO)) {
 			return -1;
 		}
 	}
@@ -2556,7 +2555,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	}
 
 	/* load the script and setup the global tables */
-	network_mysqld_lua_setup_global(chas->priv->sc->L, g, chas);
+	network_mysqld_lua_setup_global(chas->sc->L, chas);
 
 	/**
 	 * call network_mysqld_con_accept() with this connection when we are done
@@ -2566,7 +2565,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	event_base_set(chas->event_base, &(listen_sock->event));
 	event_add(&(listen_sock->event), NULL);
 
-	g_thread_create((GThreadFunc)check_state, g->backends, FALSE, NULL);
+	g_thread_create((GThreadFunc)check_state, chas->backends, FALSE, NULL);
 
 	return 0;
 }

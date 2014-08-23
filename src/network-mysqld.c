@@ -140,54 +140,15 @@ network_socket_retval_t plugin_call_cleanup(chassis *srv, network_mysqld_con *co
 	return retval;
 }
 
-chassis_private *network_mysqld_priv_init(guint event_thread_count) {
-	chassis_private *priv;
-
-	priv = g_new0(chassis_private, 1);
-
-//	priv->cons = g_ptr_array_new();
-	priv->sc = lua_scope_new();
-	priv->backends = network_backends_new(event_thread_count);
-
-	return priv;
-}
-/*
-void network_mysqld_priv_shutdown(chassis *chas, chassis_private *priv) {
-	if (!priv) return;
-
-	// network_mysqld_con_free() changes the priv->cons directly
-	// always free the first element until all are gone 
-	while (0 != priv->cons->len) {
-		network_mysqld_con *con = priv->cons->pdata[0];
-
-		plugin_call_cleanup(chas, con);
-		network_mysqld_con_free(con);
-	}
-}
-*/
-void network_mysqld_priv_free(chassis G_GNUC_UNUSED *chas, chassis_private *priv) {
-	if (!priv) return;
-
-//	g_ptr_array_free(priv->cons, TRUE);
-
-	network_backends_free(priv->backends);
-
-	lua_scope_free(priv->sc);
-
-	g_free(priv);
-}
-
 int network_mysqld_init(chassis *srv) {
-	lua_State *L;
-	srv->priv_free = network_mysqld_priv_free;
-//	srv->priv_shutdown = network_mysqld_priv_shutdown;
-	srv->priv      = network_mysqld_priv_init(srv->event_thread_count);
-
 	/* store the pointer to the chassis in the Lua registry */
-	L = srv->priv->sc->L;
+	srv->sc = lua_scope_new();
+	lua_State *L = srv->sc->L;
 	lua_pushlightuserdata(L, (void*)srv);
 	lua_setfield(L, LUA_REGISTRYINDEX, CHASSIS_LUA_REGISTRY_KEY);
-	
+
+	srv->backends = network_backends_new(srv->event_thread_count);
+
 	return 0;
 }
 

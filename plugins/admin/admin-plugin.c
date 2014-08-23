@@ -476,7 +476,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(server_read_query) {
  */
 NETWORK_MYSQLD_PLUGIN_PROTO(admin_disconnect_client) {
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
-	lua_scope  *sc = con->srv->priv->sc;
+	lua_scope  *sc = con->srv->sc;
 
 	if (st == NULL) return NETWORK_SOCKET_SUCCESS;
 	

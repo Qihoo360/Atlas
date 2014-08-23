@@ -173,7 +173,7 @@ int network_mysqld_con_getmetatable(lua_State *L) {
  * 
  * @see lua_register_callback - for connection local setup
  */
-void network_mysqld_lua_setup_global(lua_State *L , chassis_private *g, chassis *chas) {
+void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 	network_backends_t **backends_p;
 
 	int stack_top = lua_gettop(L);
@@ -219,7 +219,7 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis_private *g, chassis 
 
     // 
 	backends_p = lua_newuserdata(L, sizeof(network_backends_t *));
-	*backends_p = g->backends;
+	*backends_p = chas->backends;
 
 	network_backends_lua_getmetatable(L);
 	lua_setmetatable(L, -2);          /* tie the metatable to the table   (sp -= 1) */
@@ -289,9 +289,8 @@ int network_mysqld_lua_load_script(lua_scope *sc, const char *lua_script) {
 network_mysqld_register_callback_ret network_mysqld_con_lua_register_callback(network_mysqld_con *con, const char *lua_script) {
 	lua_State *L = NULL;
 	network_mysqld_con_lua_t *st   = con->plugin_con_state;
-	chassis_private *g = con->srv->priv; 
 
-	lua_scope  *sc = g->sc;
+	lua_scope  *sc = con->srv->sc;
 
 	GQueue **q_p;
 	network_mysqld_con **con_p;
@@ -331,7 +330,7 @@ network_mysqld_register_callback_ret network_mysqld_con_lua_register_callback(ne
 	}
 
 	/* sets up global tables */
-	network_mysqld_lua_setup_global(sc->L, g, con->srv);
+	network_mysqld_lua_setup_global(sc->L, con->srv);
 
 	/**
 	 * create a side thread for this connection

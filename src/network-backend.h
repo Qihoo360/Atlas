@@ -72,13 +72,12 @@ typedef struct {
 typedef struct {
 	GPtrArray *backends;
 	GMutex    *backends_mutex;	/*remove lock*/
-	
-//	GTimeVal backend_last_check;
 	g_wrr_poll *global_wrr;
 	guint event_thread_count;
+	gchar *default_file;
 } network_backends_t;
 
-NETWORK_API network_backends_t *network_backends_new(guint event_thread_count);
+NETWORK_API network_backends_t *network_backends_new(guint event_thread_count, gchar *default_file);
 NETWORK_API void network_backends_free(network_backends_t *);
 NETWORK_API int network_backends_add(network_backends_t *backends, /* const */ gchar *address, backend_type_t type);
 NETWORK_API int network_backends_remove(network_backends_t *backends, guint index);

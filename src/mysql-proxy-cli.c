@@ -341,7 +341,7 @@ int main_cmdline(int argc, char **argv) {
 	srv->event_thread_count = frontend->event_thread_count;
 
 	/* assign the mysqld part to the */
-	network_mysqld_init(srv); /* starts the also the lua-scope, LUA_PATH and LUA_CPATH have to be set before this being called */
+	network_mysqld_init(srv, frontend->default_file); /* starts the also the lua-scope, LUA_PATH and LUA_CPATH have to be set before this being called */
 
 #ifdef HAVE_SIGACTION
 	/* register the sigsegv interceptor */

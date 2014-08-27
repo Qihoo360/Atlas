@@ -140,14 +140,14 @@ network_socket_retval_t plugin_call_cleanup(chassis *srv, network_mysqld_con *co
 	return retval;
 }
 
-int network_mysqld_init(chassis *srv) {
+int network_mysqld_init(chassis *srv, gchar *default_file) {
 	/* store the pointer to the chassis in the Lua registry */
 	srv->sc = lua_scope_new();
 	lua_State *L = srv->sc->L;
 	lua_pushlightuserdata(L, (void*)srv);
 	lua_setfield(L, LUA_REGISTRYINDEX, CHASSIS_LUA_REGISTRY_KEY);
 
-	srv->backends = network_backends_new(srv->event_thread_count);
+	srv->backends = network_backends_new(srv->event_thread_count, default_file);
 
 	return 0;
 }

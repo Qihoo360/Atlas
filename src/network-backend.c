@@ -66,7 +66,7 @@ void network_backend_free(network_backend_t *b) {
 	g_free(b);
 }
 
-network_backends_t *network_backends_new(guint event_thread_count) {
+network_backends_t *network_backends_new(guint event_thread_count, gchar *default_file) {
 	network_backends_t *bs;
 
 	bs = g_new0(network_backends_t, 1);
@@ -75,6 +75,7 @@ network_backends_t *network_backends_new(guint event_thread_count) {
 	bs->backends_mutex = g_mutex_new();	/*remove lock*/
 	bs->global_wrr = g_wrr_poll_new();
 	bs->event_thread_count = event_thread_count;
+	bs->default_file = g_strdup(default_file);
 
 	return bs;
 }
@@ -112,6 +113,8 @@ void network_backends_free(network_backends_t *bs) {
 	g_mutex_free(bs->backends_mutex);	/*remove lock*/
 
 	g_wrr_poll_free(bs->global_wrr);
+	g_free(bs->default_file);
+
 	g_free(bs);
 }
 
@@ -124,6 +127,67 @@ int network_backends_remove(network_backends_t *bs, guint index) {
 		g_ptr_array_remove_index(bs->backends, index);
 		g_mutex_unlock(bs->backends_mutex);
 	}
+	return 0;
+}
+
+int network_backends_save(network_backends_t *bs) {
+	GKeyFile *keyfile = g_key_file_new();
+	g_key_file_set_list_separator(keyfile, ',');
+	GError *gerr = NULL;
+
+	if (FALSE == g_key_file_load_from_file(keyfile, bs->default_file, G_KEY_FILE_KEEP_COMMENTS, &gerr)) {
+		g_critical("%s: g_key_file_load_from_file: %s", G_STRLOC, gerr->message);
+		g_error_free(gerr);
+		g_key_file_free(keyfile);
+		return -1;
+	}
+
+	GString *master = g_string_new(NULL);
+	GString *slave  = g_string_new(NULL);
+	guint i;
+	GPtrArray *backends = bs->backends;
+
+	g_mutex_lock(bs->backends_mutex);
+	guint len = backends->len;
+	for (i = 0; i < len; ++i) {
+		network_backend_t *backend = g_ptr_array_index(backends, i);
+		if (backend->type == BACKEND_TYPE_RW) {
+			g_string_append_c(master, ',');
+			g_string_append(master, backend->addr->name->str);
+		} else if (backend->type == BACKEND_TYPE_RO) {
+			g_string_append_c(slave, ',');
+			g_string_append(slave, backend->addr->name->str);
+		}
+	}
+	g_mutex_unlock(bs->backends_mutex);
+
+	if (master->len != 0) {
+		g_key_file_set_value(keyfile, "mysql-proxy", "proxy-backend-addresses", master->str+1);
+	} else {
+		g_key_file_set_value(keyfile, "mysql-proxy", "proxy-backend-addresses", "");
+	}
+	if (slave->len != 0) {
+		g_key_file_set_value(keyfile, "mysql-proxy", "proxy-read-only-backend-addresses", slave->str+1);
+	} else {
+		g_key_file_set_value(keyfile, "mysql-proxy", "proxy-read-only-backend-addresses", "");
+	}
+
+	g_string_free(master, TRUE);
+	g_string_free(slave, TRUE);
+
+	gsize file_size = 0;
+	gchar *file_buf = g_key_file_to_data(keyfile, &file_size, NULL);
+	if (FALSE == g_file_set_contents(bs->default_file, file_buf, file_size, &gerr)) {
+		g_critical("%s: g_file_set_contents: %s", G_STRLOC, gerr->message);
+		g_free(file_buf);
+		g_error_free(gerr);
+		g_key_file_free(keyfile);
+		return -1;
+	}
+
+	g_message("%s: saving config file succeed", G_STRLOC);
+	g_free(file_buf);
+	g_key_file_free(keyfile);
 	return 0;
 }
 

@@ -192,6 +192,12 @@ function read_query(packet)
 				  type = proxy.MYSQL_TYPE_STRING },
 			}
 		end
+	elseif string.find(query:lower(), "^save%s+config+$") then
+		proxy.global.backends.saveconfig = 0
+		fields = {
+			{ name = "status",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
 	elseif string.find(query:lower(), "^select%s+*%s+from%s+help$") then
 		fields = { 
 			{ name = "command", 
@@ -206,6 +212,7 @@ function read_query(packet)
 		rows[#rows + 1] = { "ADD MASTER $backend", "example: \"add master 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "ADD SLAVE $backend", "example: \"add slave 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "REMOVE BACKEND $backend_id", "example: \"remove backend 1\", ..." }
+		rows[#rows + 1] = { "SAVE CONFIG", "save the backends to config file" }
 	else
 		set_error("use 'SELECT * FROM help' to see the supported commands")
 		return proxy.PROXY_SEND_RESULT

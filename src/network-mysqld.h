@@ -399,7 +399,7 @@ NETWORK_API network_socket_retval_t network_mysqld_write(chassis *srv, network_s
 NETWORK_API network_socket_retval_t network_mysqld_write_len(chassis *srv, network_socket *con, int send_chunks);
 NETWORK_API network_socket_retval_t network_mysqld_con_get_packet(chassis G_GNUC_UNUSED*chas, network_socket *con);
 
-NETWORK_API int network_mysqld_init(chassis *srv);
+NETWORK_API int network_mysqld_init(chassis *srv, gchar *default_file);
 NETWORK_API void network_mysqld_add_connection(chassis *srv, network_mysqld_con *con);
 NETWORK_API void network_mysqld_con_handle(int event_fd, short events, void *user_data);
 NETWORK_API int network_mysqld_queue_append(network_socket *sock, network_queue *queue, const char *data, size_t len);

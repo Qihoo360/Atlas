@@ -32,14 +32,11 @@
 #define S(x) x->str, x->len
 
 network_backend_t *network_backend_new(guint event_thread_count) {
-	network_backend_t *b;
+	network_backend_t *b = g_new0(network_backend_t, 1);
 
-	b = g_new0(network_backend_t, 1);
-
-//	b->pool = network_connection_pool_new();
 	b->pools = g_ptr_array_new();
 	guint i;
-	for (i = 0; i < event_thread_count; ++i) {
+	for (i = 0; i <= event_thread_count; ++i) {
 		network_connection_pool* pool = network_connection_pool_new();
 		g_ptr_array_add(b->pools, pool);
 	}

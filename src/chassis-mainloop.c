@@ -330,16 +330,14 @@ int chassis_mainloop(void *_chas) {
 	 * - dup the async-queue-ping-fds
 	 * - setup the events notification
 	 * */
-	for (i = 1; i < (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
+	for (i = 1; i <= (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
 		chassis_event_thread_t *thread = chassis_event_thread_new(i);
 		chassis_event_threads_init_thread(thread, chas);
 		g_ptr_array_add(chas->threads, thread);
 	}
 
 	/* start the event threads */
-	if (chas->event_thread_count > 1) {
-		chassis_event_threads_start(chas->threads);
-	}
+	chassis_event_threads_start(chas->threads);
 
 	/**
 	 * handle signals and all basic events into the main-thread

@@ -183,8 +183,6 @@ typedef struct {
 	guint table_num;
 } db_table_t;
 
-//GMutex mutex;
-
 typedef enum {
 	OFF,
 	ON,
@@ -194,6 +192,8 @@ typedef enum {
 SQL_LOG_TYPE sql_log_type = OFF;
 
 char* charset[64] = {NULL, "big5", NULL, NULL, NULL, NULL, NULL, NULL, "latin1", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "gb2312", NULL, NULL, NULL, "gbk", NULL, NULL, NULL, NULL, "utf8", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "binary"};
+
+chassis_plugin_config *config = NULL;
 
 guint get_table_index(GPtrArray* tokens, gint* d, gint* t) {
 	*d = *t = -1;
@@ -480,7 +480,7 @@ GPtrArray* sql_parse(network_mysqld_con* con, GPtrArray* tokens) {
 		table_name = g_strdup_printf("%s.%s", ((sql_token*)tokens->pdata[db])->text->str, ((sql_token*)tokens->pdata[table])->text->str);
 	}
 
-	db_table_t* dt = g_hash_table_lookup(con->config->dt_table, table_name);
+	db_table_t* dt = g_hash_table_lookup(config->dt_table, table_name);
 	if (dt == NULL) {
 		g_free(table_name);
 		return NULL;
@@ -612,7 +612,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_handshake(network_mysqld_con *
 	   ignore the return code from network_mysqld_con_lua_register_callback, because we cannot do anything about it,
 	   it would always show up as ERROR 2013, which is not helpful.
 	 */
-	(void)network_mysqld_con_lua_register_callback(con, con->config->lua_script);
+	(void)network_mysqld_con_lua_register_callback(con, config->lua_script);
 
 	if (!st->L) return ret;
 
@@ -655,7 +655,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_handshake(network_mysqld_con *
 			 * proxy.response.type = ERR, RAW, ...
 			 */
 
-			if (network_mysqld_con_lua_handle_proxy_response(con, con->config->lua_script)) {
+			if (network_mysqld_con_lua_handle_proxy_response(con, config->lua_script)) {
 				/**
 				 * handling proxy.response failed
 				 *
@@ -794,7 +794,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_auth(network_mysqld_con *con) 
 	   ignore the return code from network_mysqld_con_lua_register_callback, because we cannot do anything about it,
 	   it would always show up as ERROR 2013, which is not helpful.	
 	*/
-	(void)network_mysqld_con_lua_register_callback(con, con->config->lua_script);
+	(void)network_mysqld_con_lua_register_callback(con, config->lua_script);
 
 	if (!st->L) return 0;
 
@@ -831,7 +831,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_auth(network_mysqld_con *con) 
 		case PROXY_SEND_RESULT:
 			/* answer directly */
 
-			if (network_mysqld_con_lua_handle_proxy_response(con, con->config->lua_script)) {
+			if (network_mysqld_con_lua_handle_proxy_response(con, config->lua_script)) {
 				/**
 				 * handling proxy.response failed
 				 *
@@ -876,7 +876,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 	/* read auth from client */
 	network_packet packet;
 	network_socket *recv_sock, *send_sock;
-	chassis_plugin_config *config = con->config;
 	network_mysqld_auth_response *auth;
 	int err = 0;
 	gboolean free_client_packet = TRUE;
@@ -914,7 +913,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 
 	con->state = CON_STATE_SEND_AUTH_RESULT;
 
-	GString *hashed_password = g_hash_table_lookup(con->config->pwd_table, auth->username->str);
+	GString *hashed_password = g_hash_table_lookup(config->pwd_table, auth->username->str);
 	if (hashed_password) {
 		GString *expected_response = g_string_sized_new(20);
 		network_mysqld_proto_password_scramble(expected_response, S(con->challenge), S(hashed_password));
@@ -922,8 +921,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 			g_string_assign_len(recv_sock->default_db, S(auth->database));
 
 			char *client_charset = NULL;
-			if (con->config->charset == NULL) client_charset = charset[auth->charset];
-			else client_charset = con->config->charset;
+			if (config->charset == NULL) client_charset = charset[auth->charset];
+			else client_charset = config->charset;
 
 			g_string_assign(recv_sock->charset_client,     client_charset);
 			g_string_assign(recv_sock->charset_results,    client_charset);
@@ -1017,7 +1016,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 		break;
 	}
 */
-	//g_mutex_lock(&mutex);
 	if (packet->str[NET_HEADER_SIZE] == MYSQLD_PACKET_OK) {
 		network_connection_pool_lua_add_connection(con);
 	}/*else {
@@ -1039,7 +1037,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 	 */
 	network_mysqld_queue_reset(send_sock);
 	network_mysqld_queue_reset(recv_sock);
-	//g_mutex_unlock(&mutex);
 
 	con->state = CON_STATE_SEND_AUTH_RESULT;
 
@@ -1083,7 +1080,7 @@ void modify_user(network_mysqld_con* con) {
 		g_string_append_c(com_change_user, COM_CHANGE_USER);
 		g_string_append_len(com_change_user, client_user->str, client_user->len + 1);
 
-		GString* hashed_password = g_hash_table_lookup(con->config->pwd_table, client_user->str);
+		GString* hashed_password = g_hash_table_lookup(config->pwd_table, client_user->str);
 		if (!hashed_password) return;
 
 		GString* expected_response = g_string_sized_new(20);
@@ -1313,7 +1310,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 			ret = PROXY_SEND_RESULT;
 		} else {
 			GPtrArray* sqls = NULL;
-			if (type == COM_QUERY && con->config->tables) {
+			if (type == COM_QUERY && config->tables) {
 				sqls = sql_parse(con, tokens);
 			}
 
@@ -1377,22 +1374,16 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 				if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
 					if (type == COM_QUERY) {
 						backend_ndx = rw_split(tokens, con);
-						//g_mutex_lock(&mutex);
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx);
-						//g_mutex_unlock(&mutex);
+						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config);
 					} else if (type == COM_INIT_DB || type == COM_SET_OPTION) {
 						backend_ndx = wrr_ro(con);
-						//g_mutex_lock(&mutex);
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx);
-						//g_mutex_unlock(&mutex);
+						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config);
 					}
 				}
 
 				if (send_sock == NULL) {
 					backend_ndx = idle_rw(con);
-					//g_mutex_lock(&mutex);
-					send_sock = network_connection_pool_lua_swap(con, backend_ndx);
-					//g_mutex_unlock(&mutex);
+					send_sock = network_connection_pool_lua_swap(con, backend_ndx, config);
 				}
 				con->server = send_sock;
 			}
@@ -1559,7 +1550,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_send_query_result) {
 		/* we already sent a resultset to the client and the next query wants to forward it's result-set too, that can't work */
 		g_critical("%s: proxy.queries:append() in %s can only have one injected query without { resultset_is_needed = true } set. We close the client connection now.",
 				G_STRLOC,
-				con->config->lua_script);
+				config->lua_script);
 
 		return NETWORK_SOCKET_ERROR;
 	}
@@ -1646,7 +1637,6 @@ void merge_rows(network_mysqld_con* con, injection* inj) {
 void log_sql(network_mysqld_con* con, injection* inj) {
 	if (sql_log_type == OFF) return;
 
-	chassis_plugin_config *config = con->config;
 	GString* message = g_string_new(NULL);
 
 	time_t t = time(NULL);
@@ -1726,7 +1716,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 		 * the resultset handler might decide to trash the send-queue
 		 * 
 		 * */
-		//g_mutex_lock(&mutex);
 		if (inj) {
 			if (con->parse.command == COM_QUERY || con->parse.command == COM_STMT_EXECUTE) {
 				network_mysqld_com_query_result_t *com_query = con->parse.data;
@@ -1887,7 +1876,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 			/* reset the packet-id checks, if we sent something to the client */
 			network_mysqld_queue_reset(send_sock);
 		}
-		//g_mutex_unlock(&mutex);
+
 		/**
 		 * if the send-queue is empty, we have nothing to send
 		 * and can read the next query */
@@ -1916,8 +1905,6 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
 	guint i;
 	network_backend_t *cur;
-
-	chassis_plugin_config *config = con->config;
 
 	guint client_ip = con->client->src->addr.ipv4.sin_addr.s_addr;
 	if (!online && g_hash_table_contains(config->lvs_table, &client_ip)) {
@@ -2174,9 +2161,8 @@ void network_mysqld_proxy_free(network_mysqld_con G_GNUC_UNUSED *con) {
 }
 
 chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
-	chassis_plugin_config *config;
-
 	config = g_new0(chassis_plugin_config, 1);
+
 	config->fix_bug_25371   = 0; /** double ERR packet on AUTH failures */
 	config->profiling       = 1;
 	config->start_proxy     = 1;
@@ -2190,12 +2176,10 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->sql_log_type = NULL;
 	config->charset = NULL;
 
-	//g_mutex_init(&mutex);
-
 	return config;
 }
 
-void network_mysqld_proxy_plugin_free(chassis_plugin_config *config) {
+void network_mysqld_proxy_plugin_free(chassis_plugin_config *oldconfig) {
 	gsize i;
 
 	if (config->listen_con) {
@@ -2259,14 +2243,12 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *config) {
 	if (config->charset) g_free(config->charset);
 
 	g_free(config);
-
-	//g_mutex_clear(&mutex);
 }
 
 /**
  * plugin options 
  */
-static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_config *config) {
+static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_config *oldconfig) {
 	guint i;
 
 	/* make sure it isn't collected */
@@ -2407,7 +2389,7 @@ void* check_state(network_backends_t* bs) {
 /**
  * init the plugin with the parsed config
  */
-int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_config *config) {
+int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_config *oldconfig) {
 	network_mysqld_con *con;
 	network_socket *listen_sock;
 	guint i;
@@ -2431,7 +2413,6 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	 */
 	con = network_mysqld_con_new();
 	network_mysqld_add_connection(chas, con);
-	con->config = config;
 
 	config->listen_con = con;
 	
@@ -2573,7 +2554,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 G_MODULE_EXPORT int plugin_init(chassis_plugin *p) {
 	p->magic        = CHASSIS_PLUGIN_MAGIC;
 	p->name         = g_strdup("proxy");
-	p->version		= g_strdup(PACKAGE_VERSION);
+	p->version	= g_strdup(PACKAGE_VERSION);
 
 	p->init         = network_mysqld_proxy_plugin_new;
 	p->get_options  = network_mysqld_proxy_plugin_get_options;
@@ -2582,4 +2563,3 @@ G_MODULE_EXPORT int plugin_init(chassis_plugin *p) {
 
 	return 0;
 }
-

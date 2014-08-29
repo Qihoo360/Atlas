@@ -1789,7 +1789,7 @@ void network_mysqld_con_accept(int G_GNUC_UNUSED event_fd, short events, void *u
 	 */
 
 	client_con->plugins = listen_con->plugins;
-	client_con->config  = listen_con->config;
+//	client_con->config  = listen_con->config;
 
 	//network_mysqld_con_handle(-1, 0, client_con);
 	//此处将client_con放入异步队列，然后ping工作线程，由工作线程去执行network_mysqld_con_handle，不再由主线程直接执行network_mysqld_con_handle

@@ -135,7 +135,7 @@ static int proxy_connection_set(lua_State *L) {
 			/** drop the backend for now
 			 */
 			network_connection_pool_lua_add_connection(con);
-		} else if (NULL != (send_sock = network_connection_pool_lua_swap(con, backend_ndx))) {
+		} else if (NULL != (send_sock = network_connection_pool_lua_swap(con, backend_ndx, NULL))) {
 			con->server = send_sock;
 		} else if (backend_ndx == -2) {
 			if (st->backend != NULL) {

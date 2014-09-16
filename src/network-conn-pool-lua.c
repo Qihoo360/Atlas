@@ -135,7 +135,7 @@ int network_connection_pool_lua_add_connection(network_mysqld_con *con) {
 	return 0;
 }
 
-network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend, chassis_plugin_config *config) {
+network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend, GHashTable *pwd_table) {
 	//1. connect DB
 	network_socket *sock = network_socket_new();
 	network_address_copy(sock->dst, backend->addr);
@@ -188,7 +188,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 
 	//3. Éú³Éresponse
 	GString *response = g_string_sized_new(20);
-	GString *hashed_password = g_hash_table_lookup(config->pwd_table, con->client->response->username->str);
+	GString *hashed_password = g_hash_table_lookup(pwd_table, con->client->response->username->str);
 	if (hashed_password) {
 		network_mysqld_proto_password_scramble(response, S(challenge->challenge), S(hashed_password));
 	} else {
@@ -280,7 +280,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
  * @return NULL if swapping failed
  *         the new backend on success
  */
-network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx, chassis_plugin_config *config) {
+network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx, GHashTable *pwd_table) {
 	network_backend_t *backend = NULL;
 	network_socket *send_sock;
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
@@ -309,7 +309,7 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 		/**
 		 * no connections in the pool
 		 */
-		if (NULL == (send_sock = self_connect(con, backend, config))) {
+		if (NULL == (send_sock = self_connect(con, backend, pwd_table))) {
 			st->backend_ndx = -1;
 			return NULL;
 		}

@@ -193,6 +193,45 @@ SQL_LOG_TYPE sql_log_type = OFF;
 
 char* charset[64] = {NULL, "big5", NULL, NULL, NULL, NULL, NULL, NULL, "latin1", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "gb2312", NULL, NULL, NULL, "gbk", NULL, NULL, NULL, NULL, "utf8", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "binary"};
 
+struct chassis_plugin_config {
+	gchar *address;                   /**< listening address of the proxy */
+
+	gchar **backend_addresses;        /**< read-write backends */
+	gchar **read_only_backend_addresses; /**< read-only  backends */
+
+	gint fix_bug_25371;               /**< suppress the second ERR packet of bug #25371 */
+
+	gint profiling;                   /**< skips the execution of the read_query() function */
+
+	gchar *lua_script;                /**< script to load at the start the connection */
+
+	gint pool_change_user;            /**< don't reset the connection, when a connection is taken from the pool
+					    - this safes a round-trip, but we also don't cleanup the connection
+					    - another name could be "fast-pool-connect", but that's too friendly
+					   */
+
+	gint start_proxy;
+
+	gchar **client_ips;
+	GHashTable *ip_table;
+
+	gchar **lvs_ips;
+	GHashTable *lvs_table;
+
+	gchar **tables;
+	GHashTable *dt_table;
+
+	gchar **pwds;
+	GHashTable *pwd_table;
+
+	network_mysqld_con *listen_con;
+
+	FILE *sql_log;
+	gchar *sql_log_type;
+
+	gchar *charset;
+};
+
 chassis_plugin_config *config = NULL;
 
 guint get_table_index(GPtrArray* tokens, gint* d, gint* t) {
@@ -1374,16 +1413,16 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 				if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
 					if (type == COM_QUERY) {
 						backend_ndx = rw_split(tokens, con);
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config);
+						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
 					} else if (type == COM_INIT_DB || type == COM_SET_OPTION) {
 						backend_ndx = wrr_ro(con);
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config);
+						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
 					}
 				}
 
 				if (send_sock == NULL) {
 					backend_ndx = idle_rw(con);
-					send_sock = network_connection_pool_lua_swap(con, backend_ndx, config);
+					send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
 				}
 				con->server = send_sock;
 			}

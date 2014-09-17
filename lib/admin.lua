@@ -160,7 +160,7 @@ function read_query(packet)
 		--	b.uuid,              -- the MySQL Server's UUID if it is managed
 		--	b.connected_clients  -- currently connected clients
 		}
-	elseif string.find(query:lower(), "^add%s+master%s+.+$") then
+	elseif string.find(query:lower(), "^add%s+master%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
         	local newserver = string.match(query:lower(), "^add%s+master%s+(.+)$")
         	proxy.global.backends.addmaster = newserver
 		if proxy.global.config.rwsplit then proxy.global.config.rwsplit.max_weight = -1 end
@@ -169,7 +169,7 @@ function read_query(packet)
 			{ name = "status", 
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
-	elseif string.find(query:lower(), "^add%s+slave%s+.+$") then
+	elseif string.find(query:lower(), "^add%s+slave%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
         	local newserver = string.match(query:lower(), "^add%s+slave%s+(.+)$")
         	proxy.global.backends.addslave = newserver
 		if proxy.global.config.rwsplit then proxy.global.config.rwsplit.max_weight = -1 end
@@ -192,6 +192,22 @@ function read_query(packet)
 				  type = proxy.MYSQL_TYPE_STRING },
 			}
 		end
+	elseif string.find(query:lower(), "^add%s+client%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?$") then
+		local client = string.match(query:lower(), "^add%s+client%s+(.+)$")
+		proxy.global.backends.addclient = client
+
+		fields = {
+			{ name = "status",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+	elseif string.find(query:lower(), "^remove%s+client%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?$") then
+		local client = string.match(query:lower(), "^remove%s+client%s+(.+)$")
+		proxy.global.backends.removeclient = client
+
+		fields = {
+			{ name = "status",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
 	elseif string.find(query:lower(), "^save%s+config+$") then
 		proxy.global.backends.saveconfig = 0
 		fields = {
@@ -212,6 +228,8 @@ function read_query(packet)
 		rows[#rows + 1] = { "ADD MASTER $backend", "example: \"add master 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "ADD SLAVE $backend", "example: \"add slave 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "REMOVE BACKEND $backend_id", "example: \"remove backend 1\", ..." }
+		rows[#rows + 1] = { "ADD CLIENT $client", "example: \"add client 192.168.1.2\", ..." }
+		rows[#rows + 1] = { "REMOVE CLIENT $client", "example: \"remove client 192.168.1.2\", ..." }
 		rows[#rows + 1] = { "SAVE CONFIG", "save the backends to config file" }
 	else
 		set_error("use 'SELECT * FROM help' to see the supported commands")

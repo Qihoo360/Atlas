@@ -127,6 +127,63 @@ int network_backends_remove(network_backends_t *bs, guint index) {
 	return 0;
 }
 
+void copy_key(guint *key, guint *value, GHashTable *table) {
+	guint *new_key = g_new0(guint, 1);
+	*new_key = *key;
+	g_hash_table_add(table, new_key);
+}
+
+int network_backends_addclient(network_backends_t *bs, gchar *address) {
+	guint* sum = g_new0(guint, 1);
+	char* token;
+	while ((token = strsep(&address, ".")) != NULL) {
+		*sum = (*sum << 8) + atoi(token);
+	}
+	*sum = htonl(*sum);
+
+	gint index = *(bs->ip_table_index);
+	GHashTable *old_table = bs->ip_table[index];
+	GHashTable *new_table = bs->ip_table[1-index];
+	g_hash_table_remove_all(new_table);
+	g_hash_table_foreach(old_table, copy_key, new_table);
+	g_hash_table_add(new_table, sum);
+	g_atomic_int_set(bs->ip_table_index, 1-index);
+
+	return 0;
+}
+
+int network_backends_removeclient(network_backends_t *bs, gchar *address) {
+	guint sum;
+	char* token;
+	while ((token = strsep(&address, ".")) != NULL) {
+		sum = (sum << 8) + atoi(token);
+	}
+	sum = htonl(sum);
+
+	gint index = *(bs->ip_table_index);
+	GHashTable *old_table = bs->ip_table[index];
+	GHashTable *new_table = bs->ip_table[1-index];
+	g_hash_table_remove_all(new_table);
+	g_hash_table_foreach(old_table, copy_key, new_table);
+	g_hash_table_remove(new_table, &sum);
+	g_atomic_int_set(bs->ip_table_index, 1-index);
+
+	return 0;
+}
+
+void append_key(guint *key, guint *value, GString *str) {
+	g_string_append_c(str, ',');
+	guint sum = *key;
+
+	g_string_append_printf(str, "%u", sum & 0x000000FF);
+
+	guint i;
+	for (i = 1; i <= 3; ++i) {
+		sum >>= 8;
+		g_string_append_printf(str, ".%u", sum & 0x000000FF);
+	}
+}
+
 int network_backends_save(network_backends_t *bs) {
 	GKeyFile *keyfile = g_key_file_new();
 	g_key_file_set_list_separator(keyfile, ',');
@@ -172,6 +229,18 @@ int network_backends_save(network_backends_t *bs) {
 	g_string_free(master, TRUE);
 	g_string_free(slave, TRUE);
 
+	GString *client_ips = g_string_new(NULL);
+	GHashTable *ip_table = bs->ip_table[*(bs->ip_table_index)];
+	g_hash_table_foreach(ip_table, append_key, client_ips);
+
+	if (client_ips->len != 0) {
+		g_key_file_set_value(keyfile, "mysql-proxy", "client-ips", client_ips->str+1);
+	} else {
+		g_key_file_set_value(keyfile, "mysql-proxy", "client-ips", "");
+	}
+
+	g_string_free(client_ips, TRUE);
+
 	gsize file_size = 0;
 	gchar *file_buf = g_key_file_to_data(keyfile, &file_size, NULL);
 	if (FALSE == g_file_set_contents(bs->default_file, file_buf, file_size, &gerr)) {
@@ -199,9 +268,10 @@ int network_backends_add(network_backends_t *bs, /* const */ gchar *address, bac
 	new_backend = network_backend_new(bs->event_thread_count);
 	new_backend->type = type;
 
+	gchar *p = NULL;
 	if (type == BACKEND_TYPE_RO) {
 		guint weight = 1;
-		gchar *p = strrchr(address, '@');
+		p = strrchr(address, '@');
 		if (p != NULL) {
 			*p = '\0';
 			weight = atoi(p+1);
@@ -239,8 +309,9 @@ int network_backends_add(network_backends_t *bs, /* const */ gchar *address, bac
 	}
 	g_mutex_unlock(bs->backends_mutex);	/*remove lock*/
 
-	g_message("added %s backend: %s", (type == BACKEND_TYPE_RW) ?
-			"read/write" : "read-only", address);
+	g_message("added %s backend: %s", (type == BACKEND_TYPE_RW) ? "read/write" : "read-only", address);
+
+	if (p != NULL) *p = '@';
 
 	return 0;
 }

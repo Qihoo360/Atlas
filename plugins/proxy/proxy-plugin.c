@@ -213,7 +213,8 @@ struct chassis_plugin_config {
 	gint start_proxy;
 
 	gchar **client_ips;
-	GHashTable *ip_table;
+	GHashTable *ip_table[2];
+	gint ip_table_index;
 
 	gchar **lvs_ips;
 	GHashTable *lvs_table;
@@ -1941,24 +1942,25 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
  *   NETWORK_SOCKET_ERROR          - no backends available, adds a ERR packet to the client queue
  */
 NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
-	network_mysqld_con_lua_t *st = con->plugin_con_state;
 	guint i;
-	network_backend_t *cur;
 
 	guint client_ip = con->client->src->addr.ipv4.sin_addr.s_addr;
 	if (!online && g_hash_table_contains(config->lvs_table, &client_ip)) {
 		network_mysqld_con_send_error_full(con->client, C("Proxy Warning - Offline Now"), ER_UNKNOWN_ERROR, "07000");
 		return NETWORK_SOCKET_SUCCESS;
-	} else if (config->client_ips != NULL) {
-		for (i = 0; i < 3; ++i) {
-			if (g_hash_table_contains(config->ip_table, &client_ip)) break;
-			client_ip <<= 8;
-		}
+	} else {
+		GHashTable *ip_table = config->ip_table[config->ip_table_index];
+		if (g_hash_table_size(ip_table) != 0) {
+			for (i = 0; i < 3; ++i) {
+				if (g_hash_table_contains(ip_table, &client_ip)) break;
+				client_ip <<= 8;
+			}
 
-		if (i == 3 && !g_hash_table_contains(config->lvs_table, &(con->client->src->addr.ipv4.sin_addr.s_addr))) {
-			network_mysqld_con_send_error_full(con->client, C("Proxy Warning - IP Forbidden"), ER_UNKNOWN_ERROR, "07000");
-			return NETWORK_SOCKET_SUCCESS;
-		}    
+			if (i == 3 && !g_hash_table_contains(config->lvs_table, &client_ip)) {
+				network_mysqld_con_send_error_full(con->client, C("Proxy Warning - IP Forbidden"), ER_UNKNOWN_ERROR, "07000");
+				return NETWORK_SOCKET_SUCCESS;
+			}
+		}
 	}
 
 	network_mysqld_auth_challenge *challenge = network_mysqld_auth_challenge_new();
@@ -1966,7 +1968,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 	challenge->protocol_version = 0;
 	challenge->server_version_str = g_strdup("5.0.81-log");
 	challenge->server_version = 50081;
-	challenge->thread_id = rand();
+	static guint32 thread_id = 0;
+	challenge->thread_id = ++thread_id;
 
 	GString *str = con->challenge;
 	for (i = 0; i < 20; ++i) g_string_append_c(str, rand()%127+1);
@@ -2207,7 +2210,9 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->start_proxy     = 1;
 	config->pool_change_user = 1; /* issue a COM_CHANGE_USER to cleanup the connection 
 					 when we get back the connection from the pool */
-	config->ip_table = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
+	config->ip_table[0] = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
+	config->ip_table[1] = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
+	config->ip_table_index = 0;
 	config->lvs_table = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
 	config->dt_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	config->pwd_table = g_hash_table_new(g_str_hash, g_str_equal);
@@ -2250,8 +2255,10 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *oldconfig) {
 		g_free(config->client_ips);
 	}
 
-	g_hash_table_remove_all(config->ip_table);
-	g_hash_table_destroy(config->ip_table);
+	g_hash_table_remove_all(config->ip_table[0]);
+	g_hash_table_destroy(config->ip_table[0]);
+	g_hash_table_remove_all(config->ip_table[1]);
+	g_hash_table_destroy(config->ip_table[1]);
 
 	if (config->lvs_ips) {
 		for (i = 0; config->lvs_ips[i]; i++) {
@@ -2489,8 +2496,10 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 			*sum = (*sum << 8) + atoi(token);
 		}
 		*sum = htonl(*sum);
-		g_hash_table_add(config->ip_table, sum);
+		g_hash_table_add(config->ip_table[config->ip_table_index], sum);
 	}
+	chas->backends->ip_table = config->ip_table;
+	chas->backends->ip_table_index = &(config->ip_table_index);
 
 	for (i = 0; config->lvs_ips && config->lvs_ips[i]; i++) {
 		guint* lvs_ip = g_new0(guint, 1);

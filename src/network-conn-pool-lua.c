@@ -253,7 +253,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 	}
 	data->len = offset;
 
-	if (data->str[NET_HEADER_SIZE] != MYSQLD_PACKET_OK) {
+	if (data->str[0] != MYSQLD_PACKET_OK) {
 		network_socket_free(sock);
 		g_string_free(data, TRUE);
 		network_mysqld_auth_challenge_free(challenge);

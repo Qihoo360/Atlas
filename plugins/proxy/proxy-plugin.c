@@ -1084,28 +1084,13 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 }
 
 int rw_split(GPtrArray* tokens, network_mysqld_con* con) {
-	if (tokens->len < 2 || g_hash_table_size(con->locks) > 0) return idle_rw(con);
-
 	sql_token* first_token = tokens->pdata[1];
 	sql_token_id token_id = first_token->token_id;
+	if (token_id == TK_COMMENT && strcasecmp(first_token->text->str, "MASTER") == 0) return idle_rw(con);
 
-	if (token_id == TK_COMMENT) {
-		if (strcasecmp(first_token->text->str, "MASTER") == 0) {
-			return idle_rw(con);
-		} else {
-			guint i = 1; 
-			while (token_id == TK_COMMENT && ++i < tokens->len) {
-				first_token = tokens->pdata[i];
-				token_id = first_token->token_id;
-			}    
-		}    
-	}
+	if (tokens->len < 2 || g_hash_table_size(con->locks) > 0) return idle_rw(con);
 
-	if (token_id == TK_SQL_SELECT || token_id == TK_SQL_SET || token_id == TK_SQL_USE || token_id == TK_SQL_SHOW || token_id == TK_SQL_DESC || token_id == TK_SQL_EXPLAIN) {
-		return wrr_ro(con);
-	} else {
-		return idle_rw(con);
-	}    
+	return wrr_ro(con);
 }
 
 void modify_user(network_mysqld_con* con) {
@@ -1306,6 +1291,20 @@ gboolean is_in_blacklist(GPtrArray* tokens) {
 	return FALSE;
 }
 
+gboolean sql_is_write(GPtrArray *tokens) {
+	sql_token **ts = (sql_token**)(tokens->pdata);
+	guint len = tokens->len;
+
+	guint i = 1;
+	sql_token_id token_id = ts[i]->token_id;
+
+	while (token_id == TK_COMMENT && ++i < len) {
+		token_id = ts[i]->token_id;
+	}
+
+	return (token_id != TK_SQL_SELECT && token_id != TK_SQL_SET && token_id != TK_SQL_USE && token_id != TK_SQL_SHOW && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
+}
+
 /**
  * gets called after a query has been read
  *
@@ -1354,18 +1353,20 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 				sqls = sql_parse(con, tokens);
 			}
 
+			gboolean is_write = sql_is_write(tokens);
+
 			ret = PROXY_SEND_INJECTION;
 			injection* inj = NULL;
 			if (sqls == NULL) {
 				inj = injection_new(1, packets);
-				inj->resultset_is_needed = TRUE;
+				inj->resultset_is_needed = is_write;
 				g_queue_push_tail(st->injected.queries, inj);
 			} else {
 				g_string_free(packets, TRUE);
 
 				if (sqls->len == 1) {
 					inj = injection_new(1, sqls->pdata[0]);
-					inj->resultset_is_needed = TRUE;
+					inj->resultset_is_needed = is_write;
 					g_queue_push_tail(st->injected.queries, inj);
 				} else {
 					merge_res_t* merge_res = con->merge_res;
@@ -1395,7 +1396,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 					}
 					g_ptr_array_set_size(rows, 0);
 
-					int id = (ts[1]->token_id == TK_SQL_SELECT) ? 7 : 8;
+					int id = is_write ? 8 : 7;
 					for (i = 0; i < sqls->len; ++i) {
 						inj = injection_new(id, sqls->pdata[i]);
 						inj->resultset_is_needed = TRUE;
@@ -1413,7 +1414,11 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 
 				if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
 					if (type == COM_QUERY) {
-						backend_ndx = rw_split(tokens, con);
+						if (is_write) {
+							backend_ndx = idle_rw(con);
+						} else {
+							backend_ndx = rw_split(tokens, con);
+						}
 						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
 					} else if (type == COM_INIT_DB || type == COM_SET_OPTION) {
 						backend_ndx = wrr_ro(con);

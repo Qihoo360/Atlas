@@ -1278,7 +1278,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			case NETWORK_SOCKET_ERROR:
 				g_critical("%s.%d: network_mysqld_read(CON_STATE_READ_AUTH_OLD_PASSWORD) returned an error", __FILE__, __LINE__);
 				con->state = CON_STATE_ERROR;
-				return;
+				break;
 			}
 			
 			if (con->state != ostate) break; /* the state has changed (e.g. CON_STATE_ERROR) */
@@ -1343,7 +1343,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 				case NETWORK_SOCKET_ERROR:
 					g_critical("%s.%d: network_mysqld_read(CON_STATE_READ_QUERY) returned an error", __FILE__, __LINE__);
 					con->state = CON_STATE_ERROR;
-					return;
+					break;
 				}
 				if (con->state != ostate) break; /* the state has changed (e.g. CON_STATE_ERROR) */
 

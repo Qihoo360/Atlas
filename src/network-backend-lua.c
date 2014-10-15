@@ -151,21 +151,21 @@ static int proxy_backends_set(lua_State *L) {
 
 	if (strleq(key, keysize, C("addslave"))) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
-		network_backends_add(bs, g_strdup(lua_tostring(L, -1)), BACKEND_TYPE_RO);
+		network_backends_add(bs, address, BACKEND_TYPE_RO);
 		g_free(address);
 	} else if (strleq(key, keysize, C("addmaster"))) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
-		network_backends_add(bs, g_strdup(lua_tostring(L, -1)), BACKEND_TYPE_RW);
+		network_backends_add(bs, address, BACKEND_TYPE_RW);
 		g_free(address);
 	} else if (strleq(key, keysize, C("removebackend"))) {
 		network_backends_remove(bs, lua_tointeger(L, -1));
 	} else if (strleq(key, keysize, C("addclient"))) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
-		network_backends_addclient(bs, g_strdup(lua_tostring(L, -1)));
+		network_backends_addclient(bs, address);
 		g_free(address);
 	} else if (strleq(key, keysize, C("removeclient"))) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
-		network_backends_removeclient(bs, g_strdup(lua_tostring(L, -1)));
+		network_backends_removeclient(bs, address);
 		g_free(address);
 	} else if (strleq(key, keysize, C("saveconfig"))) {
 		network_backends_save(bs);

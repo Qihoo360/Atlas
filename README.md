@@ -1,51 +1,46 @@
-###一、简介
+###1.Brief introduction
 
-Atlas是由 Qihoo 360公司Web平台部基础架构团队开发维护的一个基于MySQL协议的数据中间层项目。它在MySQL官方推出的MySQL-Proxy 0.8.2版本的基础上，修改了大量bug，添加了很多功能特性。目前该项目在360公司内部得到了广泛应用，很多MySQL业务已经接入了Atlas平台，每天承载的读写请求数达几十亿条。
-    
-主要功能：
+Atlas is a MySQL protocol-based database middleware project developed and maintained by infrastructure team of the Web platform Department in Qihoo 360 company. It fixed lots of bugs and added lot of new functions on the basis of MySQL-Proxy 0.8.2. Currently the project has been widely applied in 360 company, many MySQL business has connected to the Atlas platform. The number of read and write requests forwarded by Atlas has reached billions.
+ 
+###2.Major functions
 
-1.读写分离
+1.Read/Write Splitting.
 
-2.从库负载均衡
+2.Load balancing and failover handling.
 
-3.IP过滤
+3.IP filtering.
 
-4.自动分表
+4.Data sharding
 
-5.DBA可平滑上下线DB
+5.DBA can online or offline the backend database server smoothly.
 
-6.自动摘除宕机的DB
+6.Remove the failed database server automatically.
 
-###二、Atlas相对于官方MySQL-Proxy的优势
+7.Config file reload without downtime.
 
-1.将主流程中所有Lua代码用C重写，Lua仅用于管理接口
+###3.The improvement of Atlas compared with Mysql-proxy
 
-2.重写网络模型、线程模型
+1.Rewrite all lua code with C, Lua is only used for management interface.
 
-3.实现了真正意义上的连接池
+2.Rewrite the network model and the threading model.
 
-4.优化了锁机制，性能提高数十倍
+3.Implement the connection pool.
 
-###三、Atlas详细说明
+4.Optimize the locking mechanism, performance improved immensely.
 
-[1.Atlas的安装](http://github.com/Qihoo360/Atlas/wiki/Atlas的安装)
+###4.Detailed descriptions about Atlas
 
-[2.Atlas的运行及常见问题](http://github.com/Qihoo360/Atlas/wiki/Atlas的运行及常见问题)
+[The installing of Atlas](https://github.com/Qihoo360/Atlas/wiki/Installing-Atlas)
 
-[3.Atlas的分表功能简介](http://github.com/Qihoo360/Atlas/wiki/Atlas的分表功能简介)
+###5.Requirement and feedback
 
-[4.Atlas部分配置参数及原理详解](http://github.com/Qihoo360/Atlas/wiki/Atlas部分配置参数及原理详解)
+If You have new functional requirements about Atlas in the production environment, or find a bug in the process of using Atlas. Welcome to send a mail to g-atlas@360.cn, we will reply as soon as possible. Enthusiastic user has established a QQ group:326544838, the developers of Atlas have also been in the QQ group.
 
-[5.Atlas的架构](https://github.com/Qihoo360/Atlas/wiki/Atlas的架构)
+###6.The origin of the name
 
-[6.Atlas的性能测试](https://github.com/Qihoo360/Atlas/wiki/Atlas的性能测试)
+In Greek mythology, Atlas was the primordial Titan who held up the celestial spheres. He is also the titan of astronomy and navigation.
 
-[7.Atlas功能特点FAQ](https://github.com/Qihoo360/Atlas/wiki/Atlas功能特点FAQ)
+###7.Other language version
 
-###四、Atlas的需求及Bug反馈方式
-
-如果用户在实际的应用场景中对Atlas有新的功能需求，或者在使用Atlas的过程中发现了bug，欢迎用户发邮件至zhuchao[AT]360.cn，与我们取得联系，我们将及时回复。另外有热心网友建立了QQ群326544838，开发者也已经加入，方便讨论。
-
-###五、名字来源
-
-Atlas：希腊神话中双肩撑天的巨人，普罗米修斯的兄弟，最高大强壮的神之一，因反抗宙斯失败而被罚顶天。我们期望这个系统能够脚踏后端DB，为前端应用撑起一片天。
+[简体中文](README_ZH.md)
+ 

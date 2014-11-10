@@ -1296,14 +1296,18 @@ gboolean sql_is_write(GPtrArray *tokens) {
 	sql_token **ts = (sql_token**)(tokens->pdata);
 	guint len = tokens->len;
 
-	guint i = 1;
-	sql_token_id token_id = ts[i]->token_id;
+	if (len > 1) {
+		guint i = 1;
+		sql_token_id token_id = ts[i]->token_id;
 
-	while (token_id == TK_COMMENT && ++i < len) {
-		token_id = ts[i]->token_id;
+		while (token_id == TK_COMMENT && ++i < len) {
+			token_id = ts[i]->token_id;
+		}
+
+		return (token_id != TK_SQL_SELECT && token_id != TK_SQL_SET && token_id != TK_SQL_USE && token_id != TK_SQL_SHOW && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
+	} else {
+		return TRUE;
 	}
-
-	return (token_id != TK_SQL_SELECT && token_id != TK_SQL_SET && token_id != TK_SQL_USE && token_id != TK_SQL_SHOW && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
 }
 
 /**

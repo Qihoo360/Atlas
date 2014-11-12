@@ -167,6 +167,14 @@ static int proxy_backends_set(lua_State *L) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
 		network_backends_removeclient(bs, address);
 		g_free(address);
+	} else if (strleq(key, keysize, C("addpwd"))) {
+		gchar *address = g_strdup(lua_tostring(L, -1));
+		network_backends_addpwd(bs, address);
+		g_free(address);
+	} else if (strleq(key, keysize, C("removepwd"))) {
+		gchar *address = g_strdup(lua_tostring(L, -1));
+		network_backends_removepwd(bs, address);
+		g_free(address);
 	} else if (strleq(key, keysize, C("saveconfig"))) {
 		network_backends_save(bs);
 	} else {
@@ -174,6 +182,7 @@ static int proxy_backends_set(lua_State *L) {
 	}
 	return 1;
 }
+
 static int proxy_backends_len(lua_State *L) {
 	network_backends_t *bs = *(network_backends_t **)luaL_checkself(L);
 
@@ -192,4 +201,3 @@ int network_backends_lua_getmetatable(lua_State *L) {
 
 	return proxy_getmetatable(L, methods);
 }
-

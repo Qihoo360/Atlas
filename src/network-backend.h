@@ -77,6 +77,8 @@ typedef struct {
 	gchar *default_file;
 	GHashTable **ip_table;
 	gint *ip_table_index;
+	GHashTable **pwd_table;
+	gint *pwd_table_index;
 } network_backends_t;
 
 NETWORK_API network_backends_t *network_backends_new(guint event_thread_count, gchar *default_file);
@@ -85,6 +87,8 @@ NETWORK_API int network_backends_add(network_backends_t *backends, gchar *addres
 NETWORK_API int network_backends_remove(network_backends_t *backends, guint index);
 NETWORK_API int network_backends_addclient(network_backends_t *backends, gchar *address);
 NETWORK_API int network_backends_removeclient(network_backends_t *backends, gchar *address);
+NETWORK_API int network_backends_addpwd(network_backends_t *backends, gchar *address);
+NETWORK_API int network_backends_removepwd(network_backends_t *backends, gchar *address);
 NETWORK_API int network_backends_check(network_backends_t *backends);
 NETWORK_API network_backend_t * network_backends_get(network_backends_t *backends, guint ndx);
 NETWORK_API guint network_backends_count(network_backends_t *backends);

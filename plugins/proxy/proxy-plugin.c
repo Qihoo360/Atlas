@@ -223,7 +223,8 @@ struct chassis_plugin_config {
 	GHashTable *dt_table;
 
 	gchar **pwds;
-	GHashTable *pwd_table;
+	GHashTable *pwd_table[2];
+	gint pwd_table_index;
 
 	network_mysqld_con *listen_con;
 
@@ -954,7 +955,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth) {
 
 	con->state = CON_STATE_SEND_AUTH_RESULT;
 
-	GString *hashed_password = g_hash_table_lookup(config->pwd_table, auth->username->str);
+	GString *hashed_password = g_hash_table_lookup(config->pwd_table[config->pwd_table_index], auth->username->str);
 	if (hashed_password) {
 		GString *expected_response = g_string_sized_new(20);
 		network_mysqld_proto_password_scramble(expected_response, S(con->challenge), S(hashed_password));
@@ -1106,7 +1107,7 @@ void modify_user(network_mysqld_con* con) {
 		g_string_append_c(com_change_user, COM_CHANGE_USER);
 		g_string_append_len(com_change_user, client_user->str, client_user->len + 1);
 
-		GString* hashed_password = g_hash_table_lookup(config->pwd_table, client_user->str);
+		GString* hashed_password = g_hash_table_lookup(config->pwd_table[config->pwd_table_index], client_user->str);
 		if (!hashed_password) return;
 
 		GString* expected_response = g_string_sized_new(20);
@@ -1424,16 +1425,16 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 						} else {
 							backend_ndx = rw_split(tokens, con);
 						}
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
+						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
 					} else if (type == COM_INIT_DB || type == COM_SET_OPTION) {
 						backend_ndx = wrr_ro(con);
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
+						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
 					}
 				}
 
 				if (send_sock == NULL) {
 					backend_ndx = idle_rw(con);
-					send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table);
+					send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
 				}
 				con->server = send_sock;
 			}
@@ -2214,6 +2215,10 @@ int network_mysqld_proxy_connection_init(network_mysqld_con *con) {
 void network_mysqld_proxy_free(network_mysqld_con G_GNUC_UNUSED *con) {
 }
 
+void *string_free(GString *s) {
+	g_string_free(s, TRUE);
+}
+
 chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config = g_new0(chassis_plugin_config, 1);
 
@@ -2227,7 +2232,9 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->ip_table_index = 0;
 	config->lvs_table = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
 	config->dt_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-	config->pwd_table = g_hash_table_new(g_str_hash, g_str_equal);
+	config->pwd_table[0] = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, string_free);
+	config->pwd_table[1] = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, string_free);
+	config->pwd_table_index = 0;
 	config->sql_log = NULL;
 	config->sql_log_type = NULL;
 	config->charset = NULL;
@@ -2293,8 +2300,10 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *oldconfig) {
 	g_hash_table_remove_all(config->dt_table);
 	g_hash_table_destroy(config->dt_table);
 
-	g_hash_table_remove_all(config->pwd_table);
-	g_hash_table_destroy(config->pwd_table);
+	g_hash_table_remove_all(config->pwd_table[0]);
+	g_hash_table_destroy(config->pwd_table[0]);
+	g_hash_table_remove_all(config->pwd_table[1]);
+	g_hash_table_destroy(config->pwd_table[1]);
 
 	if (config->sql_log) fclose(config->sql_log);
 	if (config->sql_log_type) g_free(config->sql_log_type);
@@ -2586,8 +2595,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 			if (raw_pwd) {
 				GString* hashed_password = g_string_new(NULL);
 				network_mysqld_proto_password_hash(hashed_password, raw_pwd, strlen(raw_pwd));
-
-				g_hash_table_insert(config->pwd_table, user, hashed_password);
+				g_hash_table_insert(config->pwd_table[config->pwd_table_index], g_strdup(user), hashed_password);
 			} else {
 				g_critical("password decrypt failed");
 				return -1;
@@ -2597,6 +2605,8 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 			return -1;
 		}
 	}
+	chas->backends->pwd_table = config->pwd_table;
+	chas->backends->pwd_table_index = &(config->pwd_table_index);
 
 	/* load the script and setup the global tables */
 	network_mysqld_lua_setup_global(chas->sc->L, chas);

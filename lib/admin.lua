@@ -18,16 +18,6 @@
 
  $%ENDLICENSE%$ --]]
 
---[[
--- redefine next, used for iterate userdata
-rawnext = next
-function next(t,k)
-    local m = getmetatable(t)
-    local n = m and m.__next or rawnext
-    return n(t,k)
-end
-]]
-
 function set_error(errmsg) 
 	proxy.response = {
 		type = proxy.MYSQLD_PACKET_ERR,
@@ -50,23 +40,12 @@ function read_query(packet)
 		fields = { 
 			{ name = "backend_ndx", 
 			  type = proxy.MYSQL_TYPE_LONG },
-            --[[{ name = "username",
-              type = proxy.MYSQL_TYPE_STRING },
-              ]]
 			{ name = "address",
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "state",
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "type",
 			  type = proxy.MYSQL_TYPE_STRING },
-		--	{ name = "uuid",
-		--	  type = proxy.MYSQL_TYPE_STRING },
-		--	{ name = "connected_clients", 
-		--	  type = proxy.MYSQL_TYPE_LONG },
-              --[[
-            { name = "cur_idle_connections",
-              type = proxy.MYSQL_TYPE_LONG },
-              ]]
 		}
 
 		for i = 1, #proxy.global.backends do
@@ -83,30 +62,12 @@ function read_query(packet)
 			}
 			local b = proxy.global.backends[i]
 
-            rows[#rows + 1] = {
-                i,
-                b.dst.name,          -- configured backend address
-                    states[b.state + 1], -- the C-id is pushed down starting at 0
-                    types[b.type + 1],   -- the C-id is pushed down starting at 0
-                    --b.uuid,              -- the MySQL Server's UUID if it is managed
-                    --b.connected_clients  -- currently connected clients
-            }
-
-            --[[
-            for j, username in next, b.pool.users, 0 do
-        
-                rows[#rows + 1] = {
-                    i,
-                    username,
-                    b.dst.name,          -- configured backend address
-                    states[b.state + 1], -- the C-id is pushed down starting at 0
-                    types[b.type + 1],   -- the C-id is pushed down starting at 0
-                    b.uuid,              -- the MySQL Server's UUID if it is managed
-                    b.connected_clients,  -- currently connected clients
-                    b.pool.users[username].cur_idle_connections
-                }
-            end
-            ]]
+			rows[#rows + 1] = {
+				i,
+				b.dst.name,          -- configured backend address
+				states[b.state + 1], -- the C-id is pushed down starting at 0
+				types[b.type + 1],   -- the C-id is pushed down starting at 0
+			}
 		end
 	elseif string.find(query:lower(), "^set%s+%a+%s+%d+$") then
 		local state,id = string.match(query:lower(), "^set%s+(%a+)%s+(%d+)$")
@@ -133,10 +94,6 @@ function read_query(packet)
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "type",
 			  type = proxy.MYSQL_TYPE_STRING },
-		--	{ name = "uuid",
-		--	  type = proxy.MYSQL_TYPE_STRING },
-		--	{ name = "connected_clients", 
-		--	  type = proxy.MYSQL_TYPE_LONG },
 		}
 
 		local states = {
@@ -157,8 +114,6 @@ function read_query(packet)
 			b.dst.name,          -- configured backend address
 			states[b.state + 1], -- the C-id is pushed down starting at 0
 			types[b.type + 1],   -- the C-id is pushed down starting at 0
-		--	b.uuid,              -- the MySQL Server's UUID if it is managed
-		--	b.connected_clients  -- currently connected clients
 		}
 	elseif string.find(query:lower(), "^add%s+master%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
         	local newserver = string.match(query:lower(), "^add%s+master%s+(.+)$")
@@ -208,6 +163,22 @@ function read_query(packet)
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
+	elseif string.find(query:lower(), "^add%s+pwd%s+(.+):(.+)$") then
+		local pwd = string.match(query:lower(), "^add%s+pwd%s+(.+)$")
+		proxy.global.backends.addpwd = pwd
+
+		fields = {
+			{ name = "status",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+	elseif string.find(query:lower(), "^remove%s+pwd%s+(.+)$") then
+		local pwd = string.match(query:lower(), "^remove%s+pwd%s+(.+)$")
+		proxy.global.backends.removepwd = pwd
+
+		fields = {
+			{ name = "status",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
 	elseif string.find(query:lower(), "^save%s+config+$") then
 		proxy.global.backends.saveconfig = 0
 		fields = {
@@ -222,14 +193,22 @@ function read_query(packet)
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
 		rows[#rows + 1] = { "SELECT * FROM help", "shows this help" }
+
 		rows[#rows + 1] = { "SELECT * FROM backends", "lists the backends and their state" }
 		rows[#rows + 1] = { "SET OFFLINE $backend_id", "offline backend server, $backend_id is backend_ndx's id" }
 		rows[#rows + 1] = { "SET ONLINE $backend_id", "online backend server, ..." }
 		rows[#rows + 1] = { "ADD MASTER $backend", "example: \"add master 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "ADD SLAVE $backend", "example: \"add slave 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "REMOVE BACKEND $backend_id", "example: \"remove backend 1\", ..." }
+
+		rows[#rows + 1] = { "SELECT * FROM clients", "lists the clients" }
 		rows[#rows + 1] = { "ADD CLIENT $client", "example: \"add client 192.168.1.2\", ..." }
 		rows[#rows + 1] = { "REMOVE CLIENT $client", "example: \"remove client 192.168.1.2\", ..." }
+
+		rows[#rows + 1] = { "SELECT * FROM pwds", "lists the pwds" }
+		rows[#rows + 1] = { "ADD PWD $pwd", "example: \"add pwd user:password\", ..." }
+		rows[#rows + 1] = { "REMOVE PWD $pwd", "example: \"remove pwd user\", ..." }
+
 		rows[#rows + 1] = { "SAVE CONFIG", "save the backends to config file" }
 	else
 		set_error("use 'SELECT * FROM help' to see the supported commands")

@@ -133,6 +133,10 @@ void copy_key(guint *key, guint *value, GHashTable *table) {
 	g_hash_table_add(table, new_key);
 }
 
+void copy_pwd(gchar *key, GString *value, GHashTable *table) {
+	g_hash_table_insert(table, g_strdup(key), g_string_new_len(S(value)));
+}
+
 int network_backends_addclient(network_backends_t *bs, gchar *address) {
 	guint* sum = g_new0(guint, 1);
 	char* token;
@@ -152,6 +156,35 @@ int network_backends_addclient(network_backends_t *bs, gchar *address) {
 	return 0;
 }
 
+int network_backends_addpwd(network_backends_t *bs, gchar *address) {
+	char *user = NULL, *pwd = NULL;
+	gboolean is_complete = FALSE;
+
+	if ((user = strsep(&address, ":")) != NULL) {
+		if ((pwd = strsep(&address, ":")) != NULL) {
+			is_complete = TRUE;
+		}
+	}
+
+	if (is_complete == FALSE) {
+		g_warning("incorrect password settings");
+		return -1;
+	}
+
+	GString* hashed_password = g_string_new(NULL);
+	network_mysqld_proto_password_hash(hashed_password, pwd, strlen(pwd));
+
+	gint index = *(bs->pwd_table_index);
+	GHashTable *old_table = bs->pwd_table[index];
+	GHashTable *new_table = bs->pwd_table[1-index];
+	g_hash_table_remove_all(new_table);
+	g_hash_table_foreach(old_table, copy_pwd, new_table);
+	g_hash_table_insert(new_table, g_strdup(user), hashed_password);
+	g_atomic_int_set(bs->pwd_table_index, 1-index);
+
+	return 0;
+}
+
 int network_backends_removeclient(network_backends_t *bs, gchar *address) {
 	guint sum;
 	char* token;
@@ -167,6 +200,18 @@ int network_backends_removeclient(network_backends_t *bs, gchar *address) {
 	g_hash_table_foreach(old_table, copy_key, new_table);
 	g_hash_table_remove(new_table, &sum);
 	g_atomic_int_set(bs->ip_table_index, 1-index);
+
+	return 0;
+}
+
+int network_backends_removepwd(network_backends_t *bs, gchar *address) {
+	gint index = *(bs->pwd_table_index);
+	GHashTable *old_table = bs->pwd_table[index];
+	GHashTable *new_table = bs->pwd_table[1-index];
+	g_hash_table_remove_all(new_table);
+	g_hash_table_foreach(old_table, copy_pwd, new_table);
+	g_hash_table_remove(new_table, address);
+	g_atomic_int_set(bs->pwd_table_index, 1-index);
 
 	return 0;
 }

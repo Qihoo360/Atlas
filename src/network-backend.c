@@ -20,7 +20,7 @@
 
 #include <stdlib.h> 
 #include <string.h>
-
+#include <openssl/evp.h>
 #include <glib.h>
 
 #include "network-mysqld-packet.h"
@@ -236,6 +236,42 @@ void append_key(guint *key, guint *value, GString *str) {
 	}
 }
 
+char *encrypt(char *in) {
+	EVP_CIPHER_CTX ctx;
+	const EVP_CIPHER *cipher = EVP_des_ecb();
+	unsigned char key[] = "aCtZlHaUs";
+
+	//1. DES¼ÓÃÜ
+	EVP_CIPHER_CTX_init(&ctx);
+	if (EVP_EncryptInit_ex(&ctx, cipher, NULL, key, NULL) != 1) return NULL;
+
+	int inl = strlen(in);
+
+	unsigned char inter[512] = {};
+	int interl = 0;
+
+	if (EVP_EncryptUpdate(&ctx, inter, &interl, in, inl) != 1) return NULL;
+	int len = interl;
+	if (EVP_EncryptFinal_ex(&ctx, inter+len, &interl) != 1) return NULL;
+	len += interl;
+	EVP_CIPHER_CTX_cleanup(&ctx);
+
+	//2. Base64±àÂë
+	EVP_ENCODE_CTX ectx;
+	EVP_EncodeInit(&ectx);
+
+	char *out = g_malloc0(512);
+	int outl = 0;
+
+	EVP_EncodeUpdate(&ectx, out, &outl, inter, len);
+	len = outl;
+	EVP_EncodeFinal(&ectx, out+len, &outl);
+	len += outl;
+
+	if (out[len-1] == 10) out[len-1] = '\0';
+	return out;
+}
+
 int network_backends_save(network_backends_t *bs) {
 	GKeyFile *keyfile = g_key_file_new();
 	g_key_file_set_list_separator(keyfile, ',');
@@ -299,7 +335,9 @@ int network_backends_save(network_backends_t *bs) {
 
 	GString *pwds = g_string_new(NULL);
 	while (g_hash_table_iter_next(&iter, &user, &pwd)) {
-		g_string_append_printf(pwds, ",%s:%s", user, pwd);
+		gchar *encrypt_pwd = encrypt(pwd);
+		g_string_append_printf(pwds, ",%s:%s", user, encrypt_pwd);
+		g_free(encrypt_pwd);
 	}
 
 	if (pwds->len != 0) {

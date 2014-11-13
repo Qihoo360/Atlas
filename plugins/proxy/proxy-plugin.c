@@ -1426,7 +1426,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 							backend_ndx = rw_split(tokens, con);
 						}
 						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
-					} else if (type == COM_INIT_DB || type == COM_SET_OPTION) {
+					} else if (type == COM_INIT_DB || type == COM_SET_OPTION || type == COM_FIELD_LIST) {
 						backend_ndx = wrr_ro(con);
 						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
 					}

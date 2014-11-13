@@ -73,6 +73,7 @@ network_backends_t *network_backends_new(guint event_thread_count, gchar *defaul
 	bs->global_wrr = g_wrr_poll_new();
 	bs->event_thread_count = event_thread_count;
 	bs->default_file = g_strdup(default_file);
+	bs->raw_pwds = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 	return bs;
 }
@@ -111,6 +112,9 @@ void network_backends_free(network_backends_t *bs) {
 
 	g_wrr_poll_free(bs->global_wrr);
 	g_free(bs->default_file);
+
+	g_hash_table_remove_all(bs->raw_pwds);
+	g_hash_table_destroy(bs->raw_pwds);
 
 	g_free(bs);
 }
@@ -182,6 +186,8 @@ int network_backends_addpwd(network_backends_t *bs, gchar *address) {
 	g_hash_table_insert(new_table, g_strdup(user), hashed_password);
 	g_atomic_int_set(bs->pwd_table_index, 1-index);
 
+	g_hash_table_insert(bs->raw_pwds, g_strdup(user), g_strdup(pwd));
+
 	return 0;
 }
 
@@ -212,6 +218,7 @@ int network_backends_removepwd(network_backends_t *bs, gchar *address) {
 	g_hash_table_foreach(old_table, copy_pwd, new_table);
 	g_hash_table_remove(new_table, address);
 	g_atomic_int_set(bs->pwd_table_index, 1-index);
+	g_hash_table_remove(bs->raw_pwds, address);
 
 	return 0;
 }
@@ -285,6 +292,23 @@ int network_backends_save(network_backends_t *bs) {
 	}
 
 	g_string_free(client_ips, TRUE);
+
+	GHashTableIter iter;
+	g_hash_table_iter_init(&iter, bs->raw_pwds);
+	gchar *user = NULL, *pwd = NULL;
+
+	GString *pwds = g_string_new(NULL);
+	while (g_hash_table_iter_next(&iter, &user, &pwd)) {
+		g_string_append_printf(pwds, ",%s:%s", user, pwd);
+	}
+
+	if (pwds->len != 0) {
+		g_key_file_set_value(keyfile, "mysql-proxy", "pwds", pwds->str+1);
+	} else {
+		g_key_file_set_value(keyfile, "mysql-proxy", "pwds", "");
+	}
+
+	g_string_free(pwds, TRUE);
 
 	gsize file_size = 0;
 	gchar *file_buf = g_key_file_to_data(keyfile, &file_size, NULL);

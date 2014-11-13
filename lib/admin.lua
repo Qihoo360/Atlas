@@ -185,6 +185,12 @@ function read_query(packet)
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
+	elseif string.find(query:lower(), "^select%s+version+$") then
+		fields = {
+			{ name = "version",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+		rows[#rows + 1] = { "2.2.1" }
 	elseif string.find(query:lower(), "^select%s+*%s+from%s+help$") then
 		fields = { 
 			{ name = "command", 
@@ -210,6 +216,7 @@ function read_query(packet)
 		rows[#rows + 1] = { "REMOVE PWD $pwd", "example: \"remove pwd user\", ..." }
 
 		rows[#rows + 1] = { "SAVE CONFIG", "save the backends to config file" }
+		rows[#rows + 1] = { "SELECT VERSION", "display the version of Atlas" }
 	else
 		set_error("use 'SELECT * FROM help' to see the supported commands")
 		return proxy.PROXY_SEND_RESULT

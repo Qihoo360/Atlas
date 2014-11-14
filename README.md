@@ -32,6 +32,8 @@ Atlas is a MySQL protocol-based database middleware project developed and mainta
 
 [The installing of Atlas](https://github.com/Qihoo360/Atlas/wiki/Installing-Atlas)
 
+[The FAQs about the main features of Atlas](https://github.com/Qihoo360/Atlas/wiki/The-FAQs-about-the-main-features-of-Atlas)
+
 ###5.Requirement and feedback
 
 If You have new functional requirements about Atlas in the production environment, or find a bug in the process of using Atlas. Welcome to send a mail to g-atlas@360.cn, we will reply as soon as possible. Also you can contact us in [Google group](https://groups.google.com/forum/#!forum/atlas-proxy). Enthusiastic user has established a QQ group:326544838, the developers of Atlas have also been in the QQ group.

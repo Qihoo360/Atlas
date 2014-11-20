@@ -1971,6 +1971,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_connect_server) {
 
 			if (i == 3 && !g_hash_table_contains(config->lvs_table, &client_ip)) {
 				network_mysqld_con_send_error_full(con->client, C("Proxy Warning - IP Forbidden"), ER_UNKNOWN_ERROR, "07000");
+				g_warning("Forbidden IP: %s", con->client->src->name->str);
 				return NETWORK_SOCKET_SUCCESS;
 			}
 		}

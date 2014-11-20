@@ -30,7 +30,13 @@ Atlas is a MySQL protocol-based database middleware project developed and mainta
 
 ###4.Detailed descriptions about Atlas
 
-[The installing of Atlas](https://github.com/Qihoo360/Atlas/wiki/Installing-Atlas)
+[1.The installing of Atlas](https://github.com/Qihoo360/Atlas/wiki/Installing-Atlas)
+
+[2.The Architecture Of Atlas](https://github.com/Qihoo360/Atlas/wiki/The-Architecture-Of-Atlas)
+
+[3.The FAQs about the main features of Atlas](https://github.com/Qihoo360/Atlas/wiki/The-FAQs-about-the-main-features-of-Atlas)
+
+[4.The FAQs Of Running Atlas](https://github.com/Qihoo360/Atlas/wiki/The-FAQs-Of-Running-Atlas)
 
 ###5.Requirement and feedback
 

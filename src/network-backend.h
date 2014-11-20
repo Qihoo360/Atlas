@@ -77,10 +77,10 @@ typedef struct {
 	gchar *default_file;
 	GHashTable **ip_table;
 	gint *ip_table_index;
-	GHashTable *raw_ips;
+	GPtrArray *raw_ips;
 	GHashTable **pwd_table;
 	gint *pwd_table_index;
-	GHashTable *raw_pwds;
+	GPtrArray *raw_pwds;
 } network_backends_t;
 
 NETWORK_API network_backends_t *network_backends_new(guint event_thread_count, gchar *default_file);

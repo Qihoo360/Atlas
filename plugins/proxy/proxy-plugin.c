@@ -2506,7 +2506,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	}
 
 	for (i = 0; config->client_ips && config->client_ips[i]; i++) {
-		g_hash_table_add(chas->backends->raw_ips, g_strdup(config->client_ips[i]));
+		g_ptr_array_add(chas->backends->raw_ips, g_strdup(config->client_ips[i]));
 		guint* sum = g_new0(guint, 1);
 		char* token;
 		while ((token = strsep(&config->client_ips[i], ".")) != NULL) {
@@ -2589,7 +2589,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 				GString* hashed_password = g_string_new(NULL);
 				network_mysqld_proto_password_hash(hashed_password, raw_pwd, strlen(raw_pwd));
 				g_hash_table_insert(config->pwd_table[config->pwd_table_index], g_strdup(user), hashed_password);
-				g_hash_table_insert(chas->backends->raw_pwds, g_strdup(user), g_strdup_printf("%s:%s", user, raw_pwd));
+				g_ptr_array_add(chas->backends->raw_pwds, g_strdup_printf("%s:%s", user, raw_pwd));
 			} else {
 				g_critical("password decrypt failed");
 				return -1;

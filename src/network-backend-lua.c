@@ -138,33 +138,17 @@ static int proxy_backends_get(lua_State *L) {
 }
 
 static int proxy_clients_get(lua_State *L) {
-	GHashTable *raw_ips = *(GHashTable **)luaL_checkself(L);
-	int index = luaL_checkinteger(L, 2); /** lua is indexes from 1, C from 0 */
-
-	GHashTableIter iter;
-	g_hash_table_iter_init(&iter, raw_ips);
-	gchar *ip = NULL;
-	int i;
-	for (i = 0; i < index; ++i) {
-		g_hash_table_iter_next(&iter, &ip, NULL);
-	}
-
+	GPtrArray *raw_ips = *(GPtrArray **)luaL_checkself(L);
+	int index = luaL_checkinteger(L, 2) - 1; /** lua is indexes from 1, C from 0 */
+	gchar *ip = g_ptr_array_index(raw_ips, index);
 	lua_pushlstring(L, ip, strlen(ip));
 	return 1;
 }
 
 static int proxy_pwds_get(lua_State *L) {
-	GHashTable *raw_pwds = *(GHashTable **)luaL_checkself(L);
-	int index = luaL_checkinteger(L, 2); /** lua is indexes from 1, C from 0 */
-
-	GHashTableIter iter;
-	g_hash_table_iter_init(&iter, raw_pwds);
-	gchar *user_pwd = NULL;
-	int i;
-	for (i = 0; i < index; ++i) {
-		g_hash_table_iter_next(&iter, NULL, &user_pwd);
-	}
-
+	GPtrArray *raw_pwds = *(GPtrArray **)luaL_checkself(L);
+	int index = luaL_checkinteger(L, 2) - 1; /** lua is indexes from 1, C from 0 */
+	gchar *user_pwd = g_ptr_array_index(raw_pwds, index);
 	lua_pushlstring(L, user_pwd, strlen(user_pwd));
 	return 1;
 }
@@ -222,14 +206,14 @@ static int proxy_backends_len(lua_State *L) {
 }
 
 static int proxy_clients_len(lua_State *L) {
-	GHashTable *raw_ips = *(GHashTable **)luaL_checkself(L);
-	lua_pushinteger(L, g_hash_table_size(raw_ips));
+	GPtrArray *raw_ips = *(GPtrArray **)luaL_checkself(L);
+	lua_pushinteger(L, raw_ips->len);
 	return 1;
 }
 
 static int proxy_pwds_len(lua_State *L) {
-	GHashTable *raw_pwds = *(GHashTable **)luaL_checkself(L);
-	lua_pushinteger(L, g_hash_table_size(raw_pwds));
+	GPtrArray *raw_pwds = *(GPtrArray **)luaL_checkself(L);
+	lua_pushinteger(L, raw_pwds->len);
 	return 1;
 }
 

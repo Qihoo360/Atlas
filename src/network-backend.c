@@ -73,8 +73,8 @@ network_backends_t *network_backends_new(guint event_thread_count, gchar *defaul
 	bs->global_wrr = g_wrr_poll_new();
 	bs->event_thread_count = event_thread_count;
 	bs->default_file = g_strdup(default_file);
-	bs->raw_ips = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-	bs->raw_pwds = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	bs->raw_ips = g_ptr_array_new_with_free_func(g_free);
+	bs->raw_pwds = g_ptr_array_new_with_free_func(g_free);
 
 	return bs;
 }
@@ -114,11 +114,8 @@ void network_backends_free(network_backends_t *bs) {
 	g_wrr_poll_free(bs->global_wrr);
 	g_free(bs->default_file);
 
-	g_hash_table_remove_all(bs->raw_ips);
-	g_hash_table_destroy(bs->raw_ips);
-
-	g_hash_table_remove_all(bs->raw_pwds);
-	g_hash_table_destroy(bs->raw_pwds);
+	g_ptr_array_free(bs->raw_ips, TRUE);
+	g_ptr_array_free(bs->raw_pwds, TRUE);
 
 	g_free(bs);
 }
@@ -146,7 +143,14 @@ void copy_pwd(gchar *key, GString *value, GHashTable *table) {
 }
 
 int network_backends_addclient(network_backends_t *bs, gchar *address) {
-	g_hash_table_add(bs->raw_ips, g_strdup(address));
+	guint i;
+	for (i = 0; i < bs->raw_ips->len; ++i) {
+		gchar *ip = g_ptr_array_index(bs->raw_ips, i);
+		if (strcmp(address, ip) == 0) {	//若有相同client_ip则不允许add
+			return -1;
+		}
+	}
+	g_ptr_array_add(bs->raw_ips, g_strdup(address));
 
 	guint* sum = g_new0(guint, 1);
 	char* token;
@@ -181,6 +185,22 @@ int network_backends_addpwd(network_backends_t *bs, gchar *address) {
 		return -1;
 	}
 
+	guint i;
+	for (i = 0; i < bs->raw_pwds->len; ++i) {
+		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
+		gchar *pos = strchr(user_pwd, ':');
+		if (pos != NULL) {
+			gchar tmp = *pos;
+			*pos = '\0';
+			if (strcmp(user, user_pwd) == 0) {	//若有相同user则不允许add
+				*pos = tmp;
+				return -1;
+			}
+			*pos = tmp;
+		}
+	}
+	g_ptr_array_add(bs->raw_pwds, g_strdup_printf("%s:%s", user, pwd));
+
 	GString* hashed_password = g_string_new(NULL);
 	network_mysqld_proto_password_hash(hashed_password, pwd, strlen(pwd));
 
@@ -192,43 +212,65 @@ int network_backends_addpwd(network_backends_t *bs, gchar *address) {
 	g_hash_table_insert(new_table, g_strdup(user), hashed_password);
 	g_atomic_int_set(bs->pwd_table_index, 1-index);
 
-	g_hash_table_insert(bs->raw_pwds, g_strdup(user), g_strdup_printf("%s:%s", user, pwd));
-
 	return 0;
 }
 
 int network_backends_removeclient(network_backends_t *bs, gchar *address) {
-	g_hash_table_remove(bs->raw_ips, address);
+	guint i;
+	for (i = 0; i < bs->raw_ips->len; ++i) {
+		gchar *ip = g_ptr_array_index(bs->raw_ips, i);
+		if (strcmp(address, ip) == 0) {	//找到相同client_ip才可remove
+			g_ptr_array_remove_index(bs->raw_ips, i);
 
-	guint sum;
-	char* token;
-	while ((token = strsep(&address, ".")) != NULL) {
-		sum = (sum << 8) + atoi(token);
+			guint sum;
+			char* token;
+			while ((token = strsep(&address, ".")) != NULL) {
+				sum = (sum << 8) + atoi(token);
+			}
+			sum = htonl(sum);
+
+			gint index = *(bs->ip_table_index);
+			GHashTable *old_table = bs->ip_table[index];
+			GHashTable *new_table = bs->ip_table[1-index];
+			g_hash_table_remove_all(new_table);
+			g_hash_table_foreach(old_table, copy_key, new_table);
+			g_hash_table_remove(new_table, &sum);
+			g_atomic_int_set(bs->ip_table_index, 1-index);
+
+			return 0;
+		}
 	}
-	sum = htonl(sum);
 
-	gint index = *(bs->ip_table_index);
-	GHashTable *old_table = bs->ip_table[index];
-	GHashTable *new_table = bs->ip_table[1-index];
-	g_hash_table_remove_all(new_table);
-	g_hash_table_foreach(old_table, copy_key, new_table);
-	g_hash_table_remove(new_table, &sum);
-	g_atomic_int_set(bs->ip_table_index, 1-index);
-
-	return 0;
+	return -1;
 }
 
 int network_backends_removepwd(network_backends_t *bs, gchar *address) {
-	gint index = *(bs->pwd_table_index);
-	GHashTable *old_table = bs->pwd_table[index];
-	GHashTable *new_table = bs->pwd_table[1-index];
-	g_hash_table_remove_all(new_table);
-	g_hash_table_foreach(old_table, copy_pwd, new_table);
-	g_hash_table_remove(new_table, address);
-	g_atomic_int_set(bs->pwd_table_index, 1-index);
-	g_hash_table_remove(bs->raw_pwds, address);
+	guint i;
+	for (i = 0; i < bs->raw_pwds->len; ++i) {
+		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
+		gchar *pos = strchr(user_pwd, ':');
+		if (pos != NULL) {
+			gchar tmp = *pos;
+			*pos = '\0';
+			if ((strcmp(address, user_pwd) == 0)) {	//找到相同user才能remove
+				*pos = tmp;
+				g_ptr_array_remove_index(bs->raw_pwds, i);
 
-	return 0;
+				gint index = *(bs->pwd_table_index);
+				GHashTable *old_table = bs->pwd_table[index];
+				GHashTable *new_table = bs->pwd_table[1-index];
+				g_hash_table_remove_all(new_table);
+				g_hash_table_foreach(old_table, copy_pwd, new_table);
+				g_hash_table_remove(new_table, address);
+				g_atomic_int_set(bs->pwd_table_index, 1-index);
+
+				return 0;
+			}
+			*pos = tmp;
+		}
+	}
+
+	return -1;
 }
 
 void append_key(guint *key, guint *value, GString *str) {
@@ -323,41 +365,33 @@ int network_backends_save(network_backends_t *bs) {
 	g_string_free(master, TRUE);
 	g_string_free(slave, TRUE);
 
-	GHashTableIter iter;
-
 	GString *client_ips = g_string_new(NULL);
-
-	g_hash_table_iter_init(&iter, bs->raw_ips);
-	gchar *client_ip = NULL;
-	while (g_hash_table_iter_next(&iter, &client_ip, NULL)) {
+	for (i = 0; i < bs->raw_ips->len; ++i) {
+		gchar *client_ip = g_ptr_array_index(bs->raw_ips, i);
 		g_string_append_printf(client_ips, ",%s", client_ip);
 	}
-
 	if (client_ips->len != 0) {
 		g_key_file_set_value(keyfile, "mysql-proxy", "client-ips", client_ips->str+1);
 	} else {
 		g_key_file_set_value(keyfile, "mysql-proxy", "client-ips", "");
 	}
-
 	g_string_free(client_ips, TRUE);
 
 	GString *pwds = g_string_new(NULL);
-
-	g_hash_table_iter_init(&iter, bs->raw_pwds);
-	gchar *user = NULL, *user_pwd = NULL;
-	while (g_hash_table_iter_next(&iter, &user, &user_pwd)) {
-		char *pwd = strchr(user_pwd, ':') + 1;
-		gchar *encrypt_pwd = encrypt(pwd);
-		g_string_append_printf(pwds, ",%s:%s", user, encrypt_pwd);
+	for (i = 0; i < bs->raw_pwds->len; ++i) {
+		g_string_append_c(pwds, ',');
+		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
+		char *pos = strchr(user_pwd, ':');
+		g_string_append_len(pwds, user_pwd, pos-user_pwd);
+		gchar *encrypt_pwd = encrypt(pos+1);
+		g_string_append_printf(pwds, ":%s", encrypt_pwd);
 		g_free(encrypt_pwd);
 	}
-
 	if (pwds->len != 0) {
 		g_key_file_set_value(keyfile, "mysql-proxy", "pwds", pwds->str+1);
 	} else {
 		g_key_file_set_value(keyfile, "mysql-proxy", "pwds", "");
 	}
-
 	g_string_free(pwds, TRUE);
 
 	gsize file_size = 0;

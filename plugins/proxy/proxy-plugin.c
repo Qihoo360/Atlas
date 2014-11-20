@@ -1271,17 +1271,7 @@ gboolean is_in_blacklist(GPtrArray* tokens) {
 		}
 		if (i == len) return TRUE;
 	}
-	/*
-	else if (token->token_id == TK_SQL_SET) {
-		if (tokens->len >= 5) {
-			token = tokens->pdata[2];
-			if (strcasecmp(token->text->str, "AUTOCOMMIT") == 0) {
-				token = tokens->pdata[3];
-				if (token->token_id == TK_EQ) return TRUE;
-			}
-		}
-	}
-	*/
+
 	for (i = 2; i < len; ++i) {
 		token = tokens->pdata[i];
 		if (token->token_id == TK_OBRACE) {
@@ -1350,6 +1340,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 		sql_tokenizer(tokens, packets->str, packets->len);
 
 		if (type == COM_QUERY && is_in_blacklist(tokens)) {
+			g_warning("Forbidden SQL: %s: %s", recv_sock->src->name->str, packets->str+1);
 			g_string_free(packets, TRUE);
 			network_mysqld_con_send_error_full(con->client, C("Proxy Warning - Syntax Forbidden"), ER_UNKNOWN_ERROR, "07000");
 			ret = PROXY_SEND_RESULT;

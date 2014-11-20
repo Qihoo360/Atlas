@@ -137,6 +137,38 @@ static int proxy_backends_get(lua_State *L) {
 	return 1;
 }
 
+static int proxy_clients_get(lua_State *L) {
+	GHashTable *raw_ips = *(GHashTable **)luaL_checkself(L);
+	int index = luaL_checkinteger(L, 2); /** lua is indexes from 1, C from 0 */
+
+	GHashTableIter iter;
+	g_hash_table_iter_init(&iter, raw_ips);
+	gchar *ip = NULL;
+	int i;
+	for (i = 0; i < index; ++i) {
+		g_hash_table_iter_next(&iter, &ip, NULL);
+	}
+
+	lua_pushlstring(L, ip, strlen(ip));
+	return 1;
+}
+
+static int proxy_pwds_get(lua_State *L) {
+	GHashTable *raw_pwds = *(GHashTable **)luaL_checkself(L);
+	int index = luaL_checkinteger(L, 2); /** lua is indexes from 1, C from 0 */
+
+	GHashTableIter iter;
+	g_hash_table_iter_init(&iter, raw_pwds);
+	gchar *user_pwd = NULL;
+	int i;
+	for (i = 0; i < index; ++i) {
+		g_hash_table_iter_next(&iter, NULL, &user_pwd);
+	}
+
+	lua_pushlstring(L, user_pwd, strlen(user_pwd));
+	return 1;
+}
+
 /**
  * set proxy.global.backends.addslave
  *
@@ -185,9 +217,19 @@ static int proxy_backends_set(lua_State *L) {
 
 static int proxy_backends_len(lua_State *L) {
 	network_backends_t *bs = *(network_backends_t **)luaL_checkself(L);
-
 	lua_pushinteger(L, network_backends_count(bs));
+	return 1;
+}
 
+static int proxy_clients_len(lua_State *L) {
+	GHashTable *raw_ips = *(GHashTable **)luaL_checkself(L);
+	lua_pushinteger(L, g_hash_table_size(raw_ips));
+	return 1;
+}
+
+static int proxy_pwds_len(lua_State *L) {
+	GHashTable *raw_pwds = *(GHashTable **)luaL_checkself(L);
+	lua_pushinteger(L, g_hash_table_size(raw_pwds));
 	return 1;
 }
 
@@ -196,6 +238,26 @@ int network_backends_lua_getmetatable(lua_State *L) {
 		{ "__index", proxy_backends_get },
 		{ "__newindex", proxy_backends_set },
 		{ "__len", proxy_backends_len },
+		{ NULL, NULL },
+	};
+
+	return proxy_getmetatable(L, methods);
+}
+
+int network_clients_lua_getmetatable(lua_State *L) {
+	static const struct luaL_reg methods[] = {
+		{ "__index", proxy_clients_get },
+		{ "__len", proxy_clients_len },
+		{ NULL, NULL },
+	};
+
+	return proxy_getmetatable(L, methods);
+}
+
+int network_pwds_lua_getmetatable(lua_State *L) {
+	static const struct luaL_reg methods[] = {
+		{ "__index", proxy_pwds_get },
+		{ "__len", proxy_pwds_len },
 		{ NULL, NULL },
 	};
 

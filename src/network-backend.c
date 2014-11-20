@@ -73,6 +73,7 @@ network_backends_t *network_backends_new(guint event_thread_count, gchar *defaul
 	bs->global_wrr = g_wrr_poll_new();
 	bs->event_thread_count = event_thread_count;
 	bs->default_file = g_strdup(default_file);
+	bs->raw_ips = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	bs->raw_pwds = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 	return bs;
@@ -113,6 +114,9 @@ void network_backends_free(network_backends_t *bs) {
 	g_wrr_poll_free(bs->global_wrr);
 	g_free(bs->default_file);
 
+	g_hash_table_remove_all(bs->raw_ips);
+	g_hash_table_destroy(bs->raw_ips);
+
 	g_hash_table_remove_all(bs->raw_pwds);
 	g_hash_table_destroy(bs->raw_pwds);
 
@@ -142,6 +146,8 @@ void copy_pwd(gchar *key, GString *value, GHashTable *table) {
 }
 
 int network_backends_addclient(network_backends_t *bs, gchar *address) {
+	g_hash_table_add(bs->raw_ips, g_strdup(address));
+
 	guint* sum = g_new0(guint, 1);
 	char* token;
 	while ((token = strsep(&address, ".")) != NULL) {
@@ -186,12 +192,14 @@ int network_backends_addpwd(network_backends_t *bs, gchar *address) {
 	g_hash_table_insert(new_table, g_strdup(user), hashed_password);
 	g_atomic_int_set(bs->pwd_table_index, 1-index);
 
-	g_hash_table_insert(bs->raw_pwds, g_strdup(user), g_strdup(pwd));
+	g_hash_table_insert(bs->raw_pwds, g_strdup(user), g_strdup_printf("%s:%s", user, pwd));
 
 	return 0;
 }
 
 int network_backends_removeclient(network_backends_t *bs, gchar *address) {
+	g_hash_table_remove(bs->raw_ips, address);
+
 	guint sum;
 	char* token;
 	while ((token = strsep(&address, ".")) != NULL) {
@@ -294,11 +302,9 @@ int network_backends_save(network_backends_t *bs) {
 	for (i = 0; i < len; ++i) {
 		network_backend_t *backend = g_ptr_array_index(backends, i);
 		if (backend->type == BACKEND_TYPE_RW) {
-			g_string_append_c(master, ',');
-			g_string_append(master, backend->addr->name->str);
+			g_string_append_printf(master, ",%s", backend->addr->name->str);
 		} else if (backend->type == BACKEND_TYPE_RO) {
-			g_string_append_c(slave, ',');
-			g_string_append(slave, backend->addr->name->str);
+			g_string_append_printf(slave, ",%s", backend->addr->name->str);
 		}
 	}
 	g_mutex_unlock(bs->backends_mutex);
@@ -317,9 +323,15 @@ int network_backends_save(network_backends_t *bs) {
 	g_string_free(master, TRUE);
 	g_string_free(slave, TRUE);
 
+	GHashTableIter iter;
+
 	GString *client_ips = g_string_new(NULL);
-	GHashTable *ip_table = bs->ip_table[*(bs->ip_table_index)];
-	g_hash_table_foreach(ip_table, append_key, client_ips);
+
+	g_hash_table_iter_init(&iter, bs->raw_ips);
+	gchar *client_ip = NULL;
+	while (g_hash_table_iter_next(&iter, &client_ip, NULL)) {
+		g_string_append_printf(client_ips, ",%s", client_ip);
+	}
 
 	if (client_ips->len != 0) {
 		g_key_file_set_value(keyfile, "mysql-proxy", "client-ips", client_ips->str+1);
@@ -329,12 +341,12 @@ int network_backends_save(network_backends_t *bs) {
 
 	g_string_free(client_ips, TRUE);
 
-	GHashTableIter iter;
-	g_hash_table_iter_init(&iter, bs->raw_pwds);
-	gchar *user = NULL, *pwd = NULL;
-
 	GString *pwds = g_string_new(NULL);
-	while (g_hash_table_iter_next(&iter, &user, &pwd)) {
+
+	g_hash_table_iter_init(&iter, bs->raw_pwds);
+	gchar *user = NULL, *user_pwd = NULL;
+	while (g_hash_table_iter_next(&iter, &user, &user_pwd)) {
+		char *pwd = strchr(user_pwd, ':') + 1;
 		gchar *encrypt_pwd = encrypt(pwd);
 		g_string_append_printf(pwds, ",%s:%s", user, encrypt_pwd);
 		g_free(encrypt_pwd);

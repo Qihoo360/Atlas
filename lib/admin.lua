@@ -37,7 +37,7 @@ function read_query(packet)
 	local fields = { }
 
 	if string.find(query:lower(), "^select%s+*%s+from%s+backends$") then
-		fields = { 
+		fields = {
 			{ name = "backend_ndx", 
 			  type = proxy.MYSQL_TYPE_LONG },
 			{ name = "address",
@@ -147,7 +147,17 @@ function read_query(packet)
 				  type = proxy.MYSQL_TYPE_STRING },
 			}
 		end
-	elseif string.find(query:lower(), "^add%s+client%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?$") then
+	elseif string.find(query:lower(), "^select%s+*%s+from%s+clients$") then
+		fields = {
+			{ name = "client",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+		for i = 1, #proxy.global.clients do
+			rows[#rows + 1] = {
+				proxy.global.clients[i]
+			}
+		end
+	elseif string.find(query:lower(), "^add%s+client%s+(.+)$") then
 		local client = string.match(query:lower(), "^add%s+client%s+(.+)$")
 		proxy.global.backends.addclient = client
 
@@ -155,7 +165,7 @@ function read_query(packet)
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
-	elseif string.find(query:lower(), "^remove%s+client%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?$") then
+	elseif string.find(query:lower(), "^remove%s+client%s+(.+)$") then
 		local client = string.match(query:lower(), "^remove%s+client%s+(.+)$")
 		proxy.global.backends.removeclient = client
 
@@ -163,6 +173,21 @@ function read_query(packet)
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
+	elseif string.find(query:lower(), "^select%s+*%s+from%s+pwds$") then
+		fields = {
+			{ name = "username",
+			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "password",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+		for i = 1, #proxy.global.pwds do
+			local user_pwd = proxy.global.pwds[i]
+			local pos = string.find(user_pwd, ":")
+			rows[#rows + 1] = {
+				string.sub(user_pwd, 1, pos-1),
+				string.sub(user_pwd, pos+1)
+			}
+		end
 	elseif string.find(query:lower(), "^add%s+pwd%s+(.+):(.+)$") then
 		local pwd = string.match(query:lower(), "^add%s+pwd%s+(.+)$")
 		proxy.global.backends.addpwd = pwd

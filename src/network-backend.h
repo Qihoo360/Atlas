@@ -77,6 +77,7 @@ typedef struct {
 	gchar *default_file;
 	GHashTable **ip_table;
 	gint *ip_table_index;
+	GHashTable *raw_ips;
 	GHashTable **pwd_table;
 	gint *pwd_table_index;
 	GHashTable *raw_pwds;

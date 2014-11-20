@@ -226,6 +226,18 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 
 	lua_setfield(L, -2, "backends");
 
+	GHashTable **raw_ips_p = lua_newuserdata(L, sizeof(GHashTable *));
+	*raw_ips_p = chas->backends->raw_ips;
+	network_clients_lua_getmetatable(L);
+	lua_setmetatable(L, -2);
+	lua_setfield(L, -2, "clients");
+
+	GHashTable **raw_pwds_p = lua_newuserdata(L, sizeof(GHashTable *));
+	*raw_pwds_p = chas->backends->raw_pwds;
+	network_pwds_lua_getmetatable(L);
+	lua_setmetatable(L, -2);
+	lua_setfield(L, -2, "pwds");
+
 	lua_pop(L, 2);  /* _G.proxy.global and _G.proxy */
 
 	g_assert(lua_gettop(L) == stack_top);

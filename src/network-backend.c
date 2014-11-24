@@ -190,13 +190,12 @@ int network_backends_addpwd(network_backends_t *bs, gchar *address) {
 		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
 		gchar *pos = strchr(user_pwd, ':');
 		if (pos != NULL) {
-			gchar tmp = *pos;
 			*pos = '\0';
 			if (strcmp(user, user_pwd) == 0) {	//若有相同user则不允许add
-				*pos = tmp;
+				*pos = ':';
 				return -1;
 			}
-			*pos = tmp;
+			*pos = ':';
 		}
 	}
 	g_ptr_array_add(bs->raw_pwds, g_strdup_printf("%s:%s", user, pwd));
@@ -250,10 +249,9 @@ int network_backends_removepwd(network_backends_t *bs, gchar *address) {
 		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
 		gchar *pos = strchr(user_pwd, ':');
 		if (pos != NULL) {
-			gchar tmp = *pos;
 			*pos = '\0';
 			if ((strcmp(address, user_pwd) == 0)) {	//找到相同user才能remove
-				*pos = tmp;
+				*pos = ':';
 				g_ptr_array_remove_index(bs->raw_pwds, i);
 
 				gint index = *(bs->pwd_table_index);
@@ -266,7 +264,7 @@ int network_backends_removepwd(network_backends_t *bs, gchar *address) {
 
 				return 0;
 			}
-			*pos = tmp;
+			*pos = ':';
 		}
 	}
 

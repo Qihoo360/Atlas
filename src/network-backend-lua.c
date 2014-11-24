@@ -217,6 +217,56 @@ static int proxy_pwds_len(lua_State *L) {
 	return 1;
 }
 
+static int proxy_clients_exist(lua_State *L) {
+	GPtrArray *raw_ips = *(GPtrArray **)luaL_checkself(L);
+	gchar *client = lua_tostring(L, -1);
+	guint i;
+	for (i = 0; i < raw_ips->len; ++i) {
+		if (strcmp(client, g_ptr_array_index(raw_ips, i)) == 0) {
+			lua_pushinteger(L, 1);
+			return 1;
+		}
+	}
+	lua_pushinteger(L, 0);
+	return 1;
+}
+
+static int proxy_pwds_exist(lua_State *L) {
+	GPtrArray *raw_pwds = *(GPtrArray **)luaL_checkself(L);
+	guint type = lua_tointeger(L, -1);
+	gchar *pwd = lua_tostring(L, -2);
+	gchar *user = NULL;
+
+	if (type == 0) {
+		gchar *pos = strchr(pwd, ':');
+		if (pos == NULL) return 0;
+		user = g_strndup(pwd, pos-pwd);
+	} else if (type = 1) {
+		user = g_strdup(pwd);
+	} else {
+		return 0;
+	}
+
+	guint i;
+	for (i = 0; i < raw_pwds->len; ++i) {
+		gchar *raw_pwd = g_ptr_array_index(raw_pwds, i);
+		gchar *raw_pos = strchr(raw_pwd, ':');
+		if (raw_pos == NULL) return 0;
+		*raw_pos = '\0';
+		if (strcmp(user, raw_pwd) == 0) {
+			*raw_pos = ':';
+			g_free(user);
+			lua_pushinteger(L, 1);
+			return 1;
+		}
+		*raw_pos = ':';
+	}
+
+	g_free(user);
+	lua_pushinteger(L, 0);
+	return 1;
+}
+
 int network_backends_lua_getmetatable(lua_State *L) {
 	static const struct luaL_reg methods[] = {
 		{ "__index", proxy_backends_get },
@@ -232,6 +282,7 @@ int network_clients_lua_getmetatable(lua_State *L) {
 	static const struct luaL_reg methods[] = {
 		{ "__index", proxy_clients_get },
 		{ "__len", proxy_clients_len },
+		{ "__call", proxy_clients_exist },
 		{ NULL, NULL },
 	};
 
@@ -242,6 +293,7 @@ int network_pwds_lua_getmetatable(lua_State *L) {
 	static const struct luaL_reg methods[] = {
 		{ "__index", proxy_pwds_get },
 		{ "__len", proxy_pwds_len },
+		{ "__call", proxy_pwds_exist },
 		{ NULL, NULL },
 	};
 

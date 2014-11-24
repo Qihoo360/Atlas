@@ -159,16 +159,26 @@ function read_query(packet)
 		end
 	elseif string.find(query:lower(), "^add%s+client%s+(.+)$") then
 		local client = string.match(query:lower(), "^add%s+client%s+(.+)$")
-		proxy.global.backends.addclient = client
 
+		if proxy.global.clients(client) == 1 then
+			set_error("this client is exist")
+			return proxy.PROXY_SEND_RESULT
+		end
+
+		proxy.global.backends.addclient = client
 		fields = {
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
 	elseif string.find(query:lower(), "^remove%s+client%s+(.+)$") then
 		local client = string.match(query:lower(), "^remove%s+client%s+(.+)$")
-		proxy.global.backends.removeclient = client
 
+		if proxy.global.clients(client) == 0 then
+			set_error("this client is NOT exist")
+			return proxy.PROXY_SEND_RESULT
+		end
+
+		proxy.global.backends.removeclient = client
 		fields = {
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
@@ -190,16 +200,26 @@ function read_query(packet)
 		end
 	elseif string.find(query:lower(), "^add%s+pwd%s+(.+):(.+)$") then
 		local pwd = string.match(query:lower(), "^add%s+pwd%s+(.+)$")
-		proxy.global.backends.addpwd = pwd
 
+		if proxy.global.pwds(pwd, 0) == 1 then
+			set_error("this user is exist")
+			return proxy.PROXY_SEND_RESULT
+		end
+
+		proxy.global.backends.addpwd = pwd
 		fields = {
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
 	elseif string.find(query:lower(), "^remove%s+pwd%s+(.+)$") then
 		local pwd = string.match(query:lower(), "^remove%s+pwd%s+(.+)$")
-		proxy.global.backends.removepwd = pwd
 
+		if proxy.global.pwds(pwd, 1) == 0 then
+			set_error("this user is NOT exist")
+			return proxy.PROXY_SEND_RESULT
+		end
+
+		proxy.global.backends.removepwd = pwd
 		fields = {
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },

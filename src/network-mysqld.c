@@ -1324,19 +1324,23 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			break;
 
 		case CON_STATE_READ_QUERY: {
-			network_socket *recv_sock;
-			network_packet last_packet;
+			network_socket *recv_sock = con->client;
 
-			recv_sock = con->client;
+			if (events == EV_TIMEOUT) {
+				g_message("%s: close the noninteractive connection(%s) now.", G_STRLOC, recv_sock->src->name->str);
+				con->state = CON_STATE_ERROR;
+				break;
+			}
 
 			g_assert(events == 0 || event_fd == recv_sock->fd);
 
+			network_packet last_packet;
 			do { 
 				switch (network_mysqld_read(srv, recv_sock)) {
 				case NETWORK_SOCKET_SUCCESS:
 					break;
 				case NETWORK_SOCKET_WAIT_FOR_EVENT:
-					WAIT_FOR_EVENT(con->client, EV_READ, 0);
+					WAIT_FOR_EVENT(con->client, EV_READ, srv->wait_timeout);
 					NETWORK_MYSQLD_CON_TRACK_TIME(con, "wait_for_event::read_query");
 					return;
 				case NETWORK_SOCKET_ERROR_RETRY:

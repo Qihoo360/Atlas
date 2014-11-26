@@ -79,6 +79,8 @@ struct chassis {
 	lua_scope *sc;
 
 	network_backends_t *backends;
+
+	gint wait_timeout;
 };
 
 CHASSIS_API chassis *chassis_new(void);

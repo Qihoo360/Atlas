@@ -138,6 +138,8 @@ typedef struct {
 	char **lua_subdirs;
 
 	gchar *instance_name;
+
+	gint wait_timeout;
 } chassis_frontend_t;
 
 /**
@@ -149,6 +151,7 @@ chassis_frontend_t *chassis_frontend_new(void) {
 	frontend = g_slice_new0(chassis_frontend_t);
 	frontend->event_thread_count = 1;
 	frontend->max_files_number = 0;
+	frontend->wait_timeout = 0;
 
 	return frontend;
 }
@@ -197,6 +200,7 @@ int chassis_frontend_set_chassis_options(chassis_frontend_t *frontend, chassis_o
 	chassis_options_add(opts, "lua-path", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_path), "set the LUA_PATH", "<...>");
 	chassis_options_add(opts, "lua-cpath", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_cpath), "set the LUA_CPATH", "<...>");
 	chassis_options_add(opts, "instance", 0, 0, G_OPTION_ARG_STRING, &(frontend->instance_name), "instance name", "<name>");
+	chassis_options_add(opts, "wait-timeout", 0, 0, G_OPTION_ARG_INT, &(frontend->wait_timeout), "the number of seconds which Atlas waits for activity on a connection before closing it (default:0)", NULL);
 
 	return 0;	
 }
@@ -337,8 +341,13 @@ int main_cmdline(int argc, char **argv) {
 		g_critical("--event-threads has to be >= 1, is %d", frontend->event_thread_count);
 		GOTO_EXIT(EXIT_FAILURE);
 	}
-
 	srv->event_thread_count = frontend->event_thread_count;
+
+	if (frontend->wait_timeout < 0) {
+		g_critical("--wait-timeout has to be >= 0, is %d", frontend->wait_timeout);
+		GOTO_EXIT(EXIT_FAILURE);
+	}
+	srv->wait_timeout = frontend->wait_timeout;
 
 	/* assign the mysqld part to the */
 	network_mysqld_init(srv, frontend->default_file); /* starts the also the lua-scope, LUA_PATH and LUA_CPATH have to be set before this being called */

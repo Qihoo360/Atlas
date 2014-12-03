@@ -25,6 +25,10 @@
 #define C(x) x, sizeof(x) - 1
 #define S(x) x->str, x->len
 
+#define ADD_PWD		1
+#define ADD_ENPWD	2
+#define REMOVE_PWD	3
+
 #include "network-backend.h"
 #include "network-mysqld.h"
 #include "network-conn-pool-lua.h"
@@ -183,14 +187,6 @@ static int proxy_backends_set(lua_State *L) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
 		network_backends_removeclient(bs, address);
 		g_free(address);
-	} else if (strleq(key, keysize, C("addpwd"))) {
-		gchar *address = g_strdup(lua_tostring(L, -1));
-		network_backends_addpwd(bs, address);
-		g_free(address);
-	} else if (strleq(key, keysize, C("removepwd"))) {
-		gchar *address = g_strdup(lua_tostring(L, -1));
-		network_backends_removepwd(bs, address);
-		g_free(address);
 	} else if (strleq(key, keysize, C("saveconfig"))) {
 		network_backends_save(bs);
 	} else {
@@ -231,39 +227,64 @@ static int proxy_clients_exist(lua_State *L) {
 	return 1;
 }
 
-static int proxy_pwds_exist(lua_State *L) {
-	GPtrArray *raw_pwds = *(GPtrArray **)luaL_checkself(L);
-	guint type = lua_tointeger(L, -1);
-	gchar *pwd = lua_tostring(L, -2);
-	gchar *user = NULL;
-
-	if (type == 0) {
-		gchar *pos = strchr(pwd, ':');
-		if (pos == NULL) return 0;
-		user = g_strndup(pwd, pos-pwd);
-	} else if (type = 1) {
-		user = g_strdup(pwd);
-	} else {
-		return 0;
-	}
+static gboolean proxy_pwds_exist(network_backends_t *bs, gchar *user) {
+	GPtrArray *raw_pwds = bs->raw_pwds;
 
 	guint i;
 	for (i = 0; i < raw_pwds->len; ++i) {
 		gchar *raw_pwd = g_ptr_array_index(raw_pwds, i);
 		gchar *raw_pos = strchr(raw_pwd, ':');
-		if (raw_pos == NULL) return 0;
+		g_assert(raw_pos);
 		*raw_pos = '\0';
 		if (strcmp(user, raw_pwd) == 0) {
 			*raw_pos = ':';
-			g_free(user);
-			lua_pushinteger(L, 1);
-			return 1;
+			return TRUE;
 		}
 		*raw_pos = ':';
 	}
 
-	g_free(user);
-	lua_pushinteger(L, 0);
+	return FALSE;
+}
+
+static int proxy_backends_pwds(lua_State *L) {
+	network_backends_t *bs = *(network_backends_t **)luaL_checkself(L);
+	guint type  = lua_tointeger(L, -1);
+	gchar *pwd  = lua_tostring(L, -2);
+	gchar *user = lua_tostring(L, -3);
+
+	gboolean is_user_exist = proxy_pwds_exist(bs, user);
+	int ret = -1;
+
+	switch (type) {
+	case ADD_PWD:
+		if (is_user_exist) {
+			ret = ERR_USER_EXIST;
+		} else {
+			ret = network_backends_addpwd(bs, user, pwd, FALSE);
+		}
+		break;
+
+	case ADD_ENPWD:
+		if (is_user_exist) {
+			ret = ERR_USER_EXIST;
+		} else {
+			ret = network_backends_addpwd(bs, user, pwd, TRUE);
+		}
+		break;
+
+	case REMOVE_PWD:
+		if (!is_user_exist) {
+			ret = ERR_USER_NOT_EXIST;
+		} else {
+			ret = network_backends_removepwd(bs, user);
+		}
+		break;
+
+	default:
+		g_assert_not_reached();
+	}
+
+	lua_pushinteger(L, ret);
 	return 1;
 }
 
@@ -272,6 +293,7 @@ int network_backends_lua_getmetatable(lua_State *L) {
 		{ "__index", proxy_backends_get },
 		{ "__newindex", proxy_backends_set },
 		{ "__len", proxy_backends_len },
+		{ "__call", proxy_backends_pwds },
 		{ NULL, NULL },
 	};
 
@@ -293,7 +315,6 @@ int network_pwds_lua_getmetatable(lua_State *L) {
 	static const struct luaL_reg methods[] = {
 		{ "__index", proxy_pwds_get },
 		{ "__len", proxy_pwds_len },
-		{ "__call", proxy_pwds_exist },
 		{ NULL, NULL },
 	};
 

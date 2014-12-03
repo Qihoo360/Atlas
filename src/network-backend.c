@@ -170,38 +170,106 @@ int network_backends_addclient(network_backends_t *bs, gchar *address) {
 	return 0;
 }
 
-int network_backends_addpwd(network_backends_t *bs, gchar *address) {
-	char *user = NULL, *pwd = NULL;
-	gboolean is_complete = FALSE;
+static char *encrypt(char *in) {
+	EVP_CIPHER_CTX ctx;
+	const EVP_CIPHER *cipher = EVP_des_ecb();
+	unsigned char key[] = "aCtZlHaUs";
 
-	if ((user = strsep(&address, ":")) != NULL) {
-		if ((pwd = strsep(&address, ":")) != NULL) {
-			is_complete = TRUE;
+	//1. DES加密
+	EVP_CIPHER_CTX_init(&ctx);
+	if (EVP_EncryptInit_ex(&ctx, cipher, NULL, key, NULL) != 1) return NULL;
+
+	int inl = strlen(in);
+
+	unsigned char inter[512] = {};
+	int interl = 0;
+
+	if (EVP_EncryptUpdate(&ctx, inter, &interl, in, inl) != 1) return NULL;
+	int len = interl;
+	if (EVP_EncryptFinal_ex(&ctx, inter+len, &interl) != 1) return NULL;
+	len += interl;
+	EVP_CIPHER_CTX_cleanup(&ctx);
+
+	//2. Base64编码
+	EVP_ENCODE_CTX ectx;
+	EVP_EncodeInit(&ectx);
+
+	char *out = g_malloc0(512);
+	int outl = 0;
+
+	EVP_EncodeUpdate(&ectx, out, &outl, inter, len);
+	len = outl;
+	EVP_EncodeFinal(&ectx, out+len, &outl);
+	len += outl;
+
+	if (out[len-1] == 10) out[len-1] = '\0';
+	return out;
+}
+
+char *decrypt(char *in) {
+        //1. Base64解码
+        EVP_ENCODE_CTX dctx;
+        EVP_DecodeInit(&dctx);
+
+        int inl = strlen(in);
+        unsigned char inter[512] = {};
+        int interl = 0;
+
+        if (EVP_DecodeUpdate(&dctx, inter, &interl, in, inl) == -1) return NULL;
+        int len = interl;
+        if (EVP_DecodeFinal(&dctx, inter+len, &interl) != 1) return NULL;
+        len += interl;
+
+        //2. DES解码
+	EVP_CIPHER_CTX ctx;
+	EVP_CIPHER_CTX_init(&ctx);
+	const EVP_CIPHER *cipher = EVP_des_ecb();
+
+	unsigned char key[] = "aCtZlHaUs";
+	if (EVP_DecryptInit_ex(&ctx, cipher, NULL, key, NULL) != 1) return NULL;
+
+	char *out = g_malloc0(512);
+	int outl = 0;
+
+	if (EVP_DecryptUpdate(&ctx, out, &outl, inter, len) != 1) {
+		g_free(out);
+		return NULL;
+	}
+	len = outl;
+	if (EVP_DecryptFinal_ex(&ctx, out+len, &outl) != 1) {
+		g_free(out);
+		return NULL;
+	}
+	len += outl;
+
+	EVP_CIPHER_CTX_cleanup(&ctx);
+
+	out[len] = '\0';
+	return out;
+}
+
+int network_backends_addpwd(network_backends_t *bs, gchar *user, gchar *pwd, gboolean is_encrypt) {
+	GString *hashed_password = g_string_new(NULL);
+	if (is_encrypt) {
+		gchar *decrypt_pwd = decrypt(pwd);
+		if (decrypt_pwd == NULL) {
+			g_warning("failed to decrypt %s\n", pwd);
+			return ERR_PWD_DECRYPT;
 		}
-	}
-
-	if (is_complete == FALSE) {
-		g_warning("incorrect password settings");
-		return -1;
-	}
-
-	guint i;
-	for (i = 0; i < bs->raw_pwds->len; ++i) {
-		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
-		gchar *pos = strchr(user_pwd, ':');
-		if (pos != NULL) {
-			*pos = '\0';
-			if (strcmp(user, user_pwd) == 0) {	//若有相同user则不允许add
-				*pos = ':';
-				return -1;
-			}
-			*pos = ':';
+		network_mysqld_proto_password_hash(hashed_password, decrypt_pwd, strlen(decrypt_pwd));
+		g_free(decrypt_pwd);
+		g_ptr_array_add(bs->raw_pwds, g_strdup_printf("%s:%s", user, pwd));
+	} else {
+		gchar *encrypt_pwd = encrypt(pwd);
+		if (encrypt_pwd == NULL) {
+			g_warning("failed to encrypt %s\n", pwd);
+			return ERR_PWD_ENCRYPT;
 		}
+		g_ptr_array_add(bs->raw_pwds, g_strdup_printf("%s:%s", user, encrypt_pwd));
+		g_free(encrypt_pwd);
+		network_mysqld_proto_password_hash(hashed_password, pwd, strlen(pwd));
 	}
-	g_ptr_array_add(bs->raw_pwds, g_strdup_printf("%s:%s", user, pwd));
 
-	GString* hashed_password = g_string_new(NULL);
-	network_mysqld_proto_password_hash(hashed_password, pwd, strlen(pwd));
 
 	gint index = *(bs->pwd_table_index);
 	GHashTable *old_table = bs->pwd_table[index];
@@ -211,7 +279,7 @@ int network_backends_addpwd(network_backends_t *bs, gchar *address) {
 	g_hash_table_insert(new_table, g_strdup(user), hashed_password);
 	g_atomic_int_set(bs->pwd_table_index, 1-index);
 
-	return 0;
+	return PWD_SUCCESS;
 }
 
 int network_backends_removeclient(network_backends_t *bs, gchar *address) {
@@ -248,27 +316,26 @@ int network_backends_removepwd(network_backends_t *bs, gchar *address) {
 	for (i = 0; i < bs->raw_pwds->len; ++i) {
 		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
 		gchar *pos = strchr(user_pwd, ':');
-		if (pos != NULL) {
-			*pos = '\0';
-			if ((strcmp(address, user_pwd) == 0)) {	//找到相同user才能remove
-				*pos = ':';
-				g_ptr_array_remove_index(bs->raw_pwds, i);
-
-				gint index = *(bs->pwd_table_index);
-				GHashTable *old_table = bs->pwd_table[index];
-				GHashTable *new_table = bs->pwd_table[1-index];
-				g_hash_table_remove_all(new_table);
-				g_hash_table_foreach(old_table, copy_pwd, new_table);
-				g_hash_table_remove(new_table, address);
-				g_atomic_int_set(bs->pwd_table_index, 1-index);
-
-				return 0;
-			}
+		g_assert(pos);
+		*pos = '\0';
+		if ((strcmp(address, user_pwd) == 0)) {	//找到相同user才能remove
 			*pos = ':';
+			g_ptr_array_remove_index(bs->raw_pwds, i);
+
+			gint index = *(bs->pwd_table_index);
+			GHashTable *old_table = bs->pwd_table[index];
+			GHashTable *new_table = bs->pwd_table[1-index];
+			g_hash_table_remove_all(new_table);
+			g_hash_table_foreach(old_table, copy_pwd, new_table);
+			g_hash_table_remove(new_table, address);
+			g_atomic_int_set(bs->pwd_table_index, 1-index);
+
+			return PWD_SUCCESS;
 		}
+		*pos = ':';
 	}
 
-	return -1;
+	return ERR_USER_NOT_EXIST;
 }
 
 void append_key(guint *key, guint *value, GString *str) {
@@ -282,42 +349,6 @@ void append_key(guint *key, guint *value, GString *str) {
 		sum >>= 8;
 		g_string_append_printf(str, ".%u", sum & 0x000000FF);
 	}
-}
-
-char *encrypt(char *in) {
-	EVP_CIPHER_CTX ctx;
-	const EVP_CIPHER *cipher = EVP_des_ecb();
-	unsigned char key[] = "aCtZlHaUs";
-
-	//1. DES加密
-	EVP_CIPHER_CTX_init(&ctx);
-	if (EVP_EncryptInit_ex(&ctx, cipher, NULL, key, NULL) != 1) return NULL;
-
-	int inl = strlen(in);
-
-	unsigned char inter[512] = {};
-	int interl = 0;
-
-	if (EVP_EncryptUpdate(&ctx, inter, &interl, in, inl) != 1) return NULL;
-	int len = interl;
-	if (EVP_EncryptFinal_ex(&ctx, inter+len, &interl) != 1) return NULL;
-	len += interl;
-	EVP_CIPHER_CTX_cleanup(&ctx);
-
-	//2. Base64编码
-	EVP_ENCODE_CTX ectx;
-	EVP_EncodeInit(&ectx);
-
-	char *out = g_malloc0(512);
-	int outl = 0;
-
-	EVP_EncodeUpdate(&ectx, out, &outl, inter, len);
-	len = outl;
-	EVP_EncodeFinal(&ectx, out+len, &outl);
-	len += outl;
-
-	if (out[len-1] == 10) out[len-1] = '\0';
-	return out;
 }
 
 int network_backends_save(network_backends_t *bs) {
@@ -379,11 +410,7 @@ int network_backends_save(network_backends_t *bs) {
 	for (i = 0; i < bs->raw_pwds->len; ++i) {
 		g_string_append_c(pwds, ',');
 		gchar *user_pwd = g_ptr_array_index(bs->raw_pwds, i);
-		char *pos = strchr(user_pwd, ':');
-		g_string_append_len(pwds, user_pwd, pos-user_pwd);
-		gchar *encrypt_pwd = encrypt(pos+1);
-		g_string_append_printf(pwds, ":%s", encrypt_pwd);
-		g_free(encrypt_pwd);
+		g_string_append(pwds, user_pwd);
 	}
 	if (pwds->len != 0) {
 		g_key_file_set_value(keyfile, "mysql-proxy", "pwds", pwds->str+1);

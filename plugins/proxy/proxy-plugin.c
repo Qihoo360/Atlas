@@ -2377,48 +2377,6 @@ void handler(int sig) {
 	}
 }
 
-char* decrypt(char* in) {
-	//1. Base64½âÂë
-	EVP_ENCODE_CTX dctx;
-	EVP_DecodeInit(&dctx);
-
-	int inl = strlen(in);
-	unsigned char inter[512] = {};
-	int interl = 0;
-
-	if (EVP_DecodeUpdate(&dctx, inter, &interl, in, inl) == -1) return NULL;
-	int len = interl;
-	if (EVP_DecodeFinal(&dctx, inter+len, &interl) != 1) return NULL;
-	len += interl;
-
-	//2. DES½âÂë
-	EVP_CIPHER_CTX ctx;
-	EVP_CIPHER_CTX_init(&ctx);
-	const EVP_CIPHER* cipher = EVP_des_ecb();
-
-	unsigned char key[] = "aCtZlHaUs";
-	if (EVP_DecryptInit_ex(&ctx, cipher, NULL, key, NULL) != 1) return NULL;
-
-	char* out = g_malloc0(512);
-	int outl = 0;
-
-	if (EVP_DecryptUpdate(&ctx, out, &outl, inter, len) != 1) {
-		g_free(out);
-		return NULL;
-	}
-	len = outl;
-	if (EVP_DecryptFinal_ex(&ctx, out+len, &outl) != 1) {
-		g_free(out);
-		return NULL;
-	}
-	len += outl;
-
-	EVP_CIPHER_CTX_cleanup(&ctx);
-
-	out[len] = '\0';
-	return out;
-}
-
 void* check_state(network_backends_t* bs) {
 	MYSQL mysql;
 	mysql_init(&mysql);
@@ -2588,8 +2546,9 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 			if (raw_pwd) {
 				GString* hashed_password = g_string_new(NULL);
 				network_mysqld_proto_password_hash(hashed_password, raw_pwd, strlen(raw_pwd));
+				g_free(raw_pwd);
 				g_hash_table_insert(config->pwd_table[config->pwd_table_index], g_strdup(user), hashed_password);
-				g_ptr_array_add(chas->backends->raw_pwds, g_strdup_printf("%s:%s", user, raw_pwd));
+				g_ptr_array_add(chas->backends->raw_pwds, g_strdup_printf("%s:%s", user, pwd));
 			} else {
 				g_critical("password decrypt failed");
 				return -1;

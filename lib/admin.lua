@@ -198,28 +198,51 @@ function read_query(packet)
 				string.sub(user_pwd, pos+1)
 			}
 		end
-	elseif string.find(query:lower(), "^add%s+pwd%s+(.+):(.+)$") then
-		local pwd = string.match(query:lower(), "^add%s+pwd%s+(.+)$")
+	elseif string.find(query, "^add%s+pwd%s+(.+):(.+)$") then
+		local user, pwd = string.match(query, "^add%s+pwd%s+(.+):(.+)$")
+		local ret = proxy.global.backends(user, pwd, 1)
 
-		if proxy.global.pwds(pwd, 0) == 1 then
+		if ret == 1 then
 			set_error("this user is exist")
 			return proxy.PROXY_SEND_RESULT
 		end
 
-		proxy.global.backends.addpwd = pwd
+		if ret == 2 then
+			set_error("failed to encrypt")
+			return proxy.PROXY_SEND_RESULT
+		end
+
 		fields = {
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
-	elseif string.find(query:lower(), "^remove%s+pwd%s+(.+)$") then
-		local pwd = string.match(query:lower(), "^remove%s+pwd%s+(.+)$")
+	elseif string.find(query, "^add%s+enpwd%s+(.+):(.+)$") then
+		local user, pwd = string.match(query, "^add%s+enpwd%s+(.+):(.+)$")
+		local ret = proxy.global.backends(user, pwd, 2)
 
-		if proxy.global.pwds(pwd, 1) == 0 then
+		if ret == 1 then
+			set_error("this user is exist")
+			return proxy.PROXY_SEND_RESULT
+		end
+
+		if ret == 2 then
+			set_error("failed to decrypt")
+			return proxy.PROXY_SEND_RESULT
+		end
+
+		fields = {
+			{ name = "status",
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+	elseif string.find(query, "^remove%s+pwd%s+(.+)$") then
+		local user = string.match(query, "^remove%s+pwd%s+(.+)$")
+		local ret = proxy.global.backends(user, nil, 3)
+
+		if ret == 1 then
 			set_error("this user is NOT exist")
 			return proxy.PROXY_SEND_RESULT
 		end
 
-		proxy.global.backends.removepwd = pwd
 		fields = {
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },

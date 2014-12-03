@@ -26,6 +26,12 @@
 #include "config.h"
 #endif
 
+#define PWD_SUCCESS		0
+#define ERR_USER_EXIST		1
+#define ERR_USER_NOT_EXIST	1
+#define ERR_PWD_ENCRYPT		2
+#define ERR_PWD_DECRYPT		2
+
 #include "network-conn-pool.h"
 #include "network-exports.h"
 
@@ -89,7 +95,7 @@ NETWORK_API int network_backends_add(network_backends_t *backends, gchar *addres
 NETWORK_API int network_backends_remove(network_backends_t *backends, guint index);
 NETWORK_API int network_backends_addclient(network_backends_t *backends, gchar *address);
 NETWORK_API int network_backends_removeclient(network_backends_t *backends, gchar *address);
-NETWORK_API int network_backends_addpwd(network_backends_t *backends, gchar *address);
+NETWORK_API int network_backends_addpwd(network_backends_t *backends, gchar *user, gchar *pwd, gboolean is_encrypt);
 NETWORK_API int network_backends_removepwd(network_backends_t *backends, gchar *address);
 NETWORK_API int network_backends_check(network_backends_t *backends);
 NETWORK_API network_backend_t * network_backends_get(network_backends_t *backends, guint ndx);
@@ -97,5 +103,7 @@ NETWORK_API guint network_backends_count(network_backends_t *backends);
 
 NETWORK_API g_wrr_poll *g_wrr_poll_new();
 NETWORK_API void g_wrr_poll_free(g_wrr_poll *global_wrr);
+
+NETWORK_API char *decrypt(char *in);
 
 #endif /* _BACKEND_H_ */

@@ -198,8 +198,8 @@ function read_query(packet)
 				string.sub(user_pwd, pos+1)
 			}
 		end
-	elseif string.find(query, "^add%s+pwd%s+(.+):(.+)$") then
-		local user, pwd = string.match(query, "^add%s+pwd%s+(.+):(.+)$")
+	elseif string.find(query, "^[aA][dD][dD]%s+[pP][wW][dD]%s+(.+):(.+)$") then
+		local user, pwd = string.match(query, "^[aA][dD][dD]%s+[pP][wW][dD]%s+(.+):(.+)$")
 		local ret = proxy.global.backends(user, pwd, 1)
 
 		if ret == 1 then
@@ -216,8 +216,8 @@ function read_query(packet)
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
-	elseif string.find(query, "^add%s+enpwd%s+(.+):(.+)$") then
-		local user, pwd = string.match(query, "^add%s+enpwd%s+(.+):(.+)$")
+	elseif string.find(query, "^[aA][dD][dD]%s+[eE][nN][pP][wW][dD]%s+(.+):(.+)$") then
+		local user, pwd = string.match(query, "^[aA][dD][dD]%s+[eE][nN][pP][wW][dD]%s+(.+):(.+)$")
 		local ret = proxy.global.backends(user, pwd, 2)
 
 		if ret == 1 then
@@ -234,8 +234,8 @@ function read_query(packet)
 			{ name = "status",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
-	elseif string.find(query, "^remove%s+pwd%s+(.+)$") then
-		local user = string.match(query, "^remove%s+pwd%s+(.+)$")
+	elseif string.find(query, "^[rR][eE][mM][oO][vV][eE]%s+[pP][wW][dD]%s+(.+)$") then
+		local user = string.match(query, "^[rR][eE][mM][oO][vV][eE]%s+[pP][wW][dD]%s+(.+)$")
 		local ret = proxy.global.backends(user, nil, 3)
 
 		if ret == 1 then
@@ -280,7 +280,8 @@ function read_query(packet)
 		rows[#rows + 1] = { "REMOVE CLIENT $client", "example: \"remove client 192.168.1.2\", ..." }
 
 		rows[#rows + 1] = { "SELECT * FROM pwds", "lists the pwds" }
-		rows[#rows + 1] = { "ADD PWD $pwd", "example: \"add pwd user:password\", ..." }
+		rows[#rows + 1] = { "ADD PWD $pwd", "example: \"add pwd user:raw_password\", ..." }
+		rows[#rows + 1] = { "ADD ENPWD $pwd", "example: \"add enpwd user:encrypted_password\", ..." }
 		rows[#rows + 1] = { "REMOVE PWD $pwd", "example: \"remove pwd user\", ..." }
 
 		rows[#rows + 1] = { "SAVE CONFIG", "save the backends to config file" }

@@ -2377,33 +2377,47 @@ void handler(int sig) {
 	}
 }
 
-void* check_state(network_backends_t* bs) {
+gpointer check_state(network_backends_t *bs) {
+	GPtrArray *backends = bs->backends;
+	GPtrArray *raw_pwds = bs->raw_pwds;
 	MYSQL mysql;
 	mysql_init(&mysql);
 	guint i, tm = 1;
 	sleep(1);
 
 	while (TRUE) {
-		GPtrArray* backends = bs->backends;
 		guint len = backends->len;
 
 		for (i = 0; i < len; ++i) {
-			network_backend_t* backend = g_ptr_array_index(backends, i);
+			network_backend_t *backend = g_ptr_array_index(backends, i);
 			if (backend == NULL || backend->state == BACKEND_STATE_UP || backend->state == BACKEND_STATE_OFFLINE) continue;
 
-			gchar* ip = inet_ntoa(backend->addr->addr.ipv4.sin_addr);
+			gchar *ip = inet_ntoa(backend->addr->addr.ipv4.sin_addr);
 			guint port = ntohs(backend->addr->addr.ipv4.sin_port);
 			mysql_options(&mysql, MYSQL_OPT_CONNECT_TIMEOUT, &tm);
-			mysql_real_connect(&mysql, ip, NULL, NULL, NULL, port, NULL, 0);
 
-			if (mysql_errno(&mysql) == 1045 || mysql_errno(&mysql) == 0) backend->state = BACKEND_STATE_UP;
-			else if (backend->state == BACKEND_STATE_UNKNOWN) backend->state = BACKEND_STATE_DOWN;
-
+			gchar *user = NULL, *pwd = NULL;
+			if (raw_pwds->len > 0) {
+				gchar *user_pwd = g_ptr_array_index(raw_pwds, 0);
+				gchar *pos = strchr(user_pwd, ':');
+				g_assert(pos);
+				user = g_strndup(user_pwd, pos-user_pwd);
+				pwd = decrypt(pos+1);
+			}
+			if (mysql_real_connect(&mysql, ip, user, pwd, NULL, port, NULL, 0) && mysql_query(&mysql, "SELECT 1") == 0) {
+				backend->state = BACKEND_STATE_UP;
+			} else if (backend->state == BACKEND_STATE_UNKNOWN) {
+				backend->state = BACKEND_STATE_DOWN;
+			}
 			mysql_close(&mysql);
+			g_free(user);
+			g_free(pwd);
 		}
 
 		sleep(4);
 	}
+
+	return NULL;
 }
 
 /**

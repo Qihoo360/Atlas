@@ -1827,6 +1827,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 					packet.offset = NET_HEADER_SIZE;
 					if (network_mysqld_proto_get_ok_packet(&packet, ok_packet)) {
 						network_mysqld_ok_packet_free(ok_packet);
+						injection_free(inj);
 						return NETWORK_SOCKET_ERROR;
 					}
 

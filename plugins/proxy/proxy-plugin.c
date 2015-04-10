@@ -242,9 +242,12 @@ guint get_table_index(GPtrArray* tokens, gint* d, gint* t) {
 
 	sql_token** ts = (sql_token**)(tokens->pdata);
 	guint len = tokens->len;
+	if (len <= 1) { return 0; }
 
 	guint i = 1, j;
 	while (ts[i]->token_id == TK_COMMENT && ++i < len);
+	if (i >= len) { return 0; } // sql contains TK_COMMENT only.
+
 	sql_token_id token_id = ts[i]->token_id;
 
 	if (token_id == TK_SQL_SELECT || token_id == TK_SQL_DELETE) {
@@ -1086,6 +1089,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 }
 
 int rw_split(GPtrArray* tokens, network_mysqld_con* con) {
+	if (tokens->len <= 1) { return idle_rw(con); }
+
 	sql_token* first_token = tokens->pdata[1];
 	sql_token_id token_id = first_token->token_id;
 	if (token_id == TK_COMMENT && strcasecmp(first_token->text->str, "MASTER") == 0) return idle_rw(con);
@@ -1261,22 +1266,24 @@ void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
 
 gboolean is_in_blacklist(GPtrArray* tokens) {
 	guint len = tokens->len;
-	guint i;
+	if (len > 1) {
+		guint i;
 
-	sql_token* token = tokens->pdata[1];
-	if (token->token_id == TK_SQL_DELETE || token->token_id == TK_SQL_UPDATE) {
+		sql_token* token = tokens->pdata[1];
+		if (token->token_id == TK_SQL_DELETE || token->token_id == TK_SQL_UPDATE) {
+			for (i = 2; i < len; ++i) {
+				token = tokens->pdata[i];
+				if (token->token_id == TK_SQL_WHERE) break;
+			}
+			if (i == len) return TRUE;
+		}
+
 		for (i = 2; i < len; ++i) {
 			token = tokens->pdata[i];
-			if (token->token_id == TK_SQL_WHERE) break;
-		}
-		if (i == len) return TRUE;
-	}
-
-	for (i = 2; i < len; ++i) {
-		token = tokens->pdata[i];
-		if (token->token_id == TK_OBRACE) {
-			token = tokens->pdata[i-1];
-			if (strcasecmp(token->text->str, "SLEEP") == 0) return TRUE;
+			if (token->token_id == TK_OBRACE) {
+				token = tokens->pdata[i-1];
+				if (strcasecmp(token->text->str, "SLEEP") == 0) return TRUE;
+			}
 		}
 	}
 
@@ -1296,9 +1303,9 @@ gboolean sql_is_write(GPtrArray *tokens) {
 		}
 
 		return (token_id != TK_SQL_SELECT && token_id != TK_SQL_SET && token_id != TK_SQL_USE && token_id != TK_SQL_SHOW && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
-	} else {
-		return TRUE;
 	}
+
+	return TRUE;
 }
 
 /**

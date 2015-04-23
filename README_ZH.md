@@ -42,7 +42,7 @@ Atlas是由 Qihoo 360公司Web平台部基础架构团队开发维护的一个�
 
 [7.Atlas功能特点FAQ](https://github.com/Qihoo360/Atlas/wiki/Atlas功能特点FAQ)
 
-[8.Atlas Sharding](https://github.com/winkyao/Atlas/wiki/Atlas-Sharding)
+[8.Atlas Sharding](https://github.com/Qihoo360/Atlas/wiki/Atlas-Sharding)
 
 ###四、Atlas的需求及Bug反馈方式
 

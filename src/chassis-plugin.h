@@ -17,7 +17,7 @@
  02110-1301  USA
 
  $%ENDLICENSE%$ */
- 
+
 
 #ifndef _CHASSIS_PLUGIN_H_
 #define _CHASSIS_PLUGIN_H_
@@ -46,7 +46,7 @@ typedef struct chassis_plugin {
 	gchar    *name;     /**< user visible name of this plugin */
 	gchar    *version;  /**< the plugin's version number */
 	GModule  *module;   /**< the plugin handle when loaded */
-	
+
 	chassis_plugin_stats_t *stats;	/**< contains the plugin-specific statistics */
 
 	chassis_plugin_stats_t *(*new_stats)(void);		/**< handler function to initialize the plugin-specific stats */
@@ -60,7 +60,7 @@ typedef struct chassis_plugin {
 	GOptionEntry * (*get_options)(chassis_plugin_config *user_data); /**< handler function to obtain the command line argument information */
 	int      (*apply_config)(chassis *chas, chassis_plugin_config * user_data); /**< handler function to set the argument values in the plugin's config */
     void*    (*get_global_state)(chassis_plugin_config *user_data, const char* member);     /**< handler function to retrieve the plugin's global state */
-    
+    int       (*get_shard_rules)(GKeyFile *keyfile, chassis *chas, chassis_plugin_config *config);
 } chassis_plugin;
 
 CHASSIS_API chassis_plugin *chassis_plugin_init(void) G_GNUC_DEPRECATED;
@@ -71,7 +71,7 @@ CHASSIS_API GOptionEntry * chassis_plugin_get_options(chassis_plugin *p);
 
 /**
  * Retrieve the chassis plugin for a particular name.
- * 
+ *
  * @param chas        a pointer to the chassis
  * @param plugin_name The name of the plugin to look up.
  * @return A pointer to a chassis_plugin structure

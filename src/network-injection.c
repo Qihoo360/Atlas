@@ -98,11 +98,22 @@ void network_injection_queue_prepend(network_injection_queue *q, injection *inj)
 guint network_injection_queue_len(network_injection_queue *q) {
 	return q->length;
 }
+
+NETWORK_API injection* network_injection_queue_peek_head(network_injection_queue *q) {
+    return g_queue_peek_head(q);
+}
+
 /**
  * Initialize a resultset struct
  */
 proxy_resultset_t *proxy_resultset_init() {
 	return proxy_resultset_new();
+}
+
+void proxy_resultset_init1(proxy_resultset_t* resultset, injection* inj) {
+    resultset->qstat = inj->qstat;
+    resultset->rows = inj->rows;
+    resultset->bytes = inj->bytes;
 }
 
 proxy_resultset_t *proxy_resultset_new() {

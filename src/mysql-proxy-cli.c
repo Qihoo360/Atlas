@@ -17,16 +17,16 @@
  02110-1301  USA
 
  $%ENDLICENSE%$ */
- 
+
 /** @file
  * the user-interface for the MySQL Proxy @see main()
  *
- *  -  command-line handling 
+ *  -  command-line handling
  *  -  config-file parsing
- * 
  *
- * network_mysqld_thread() is the real proxy thread 
- * 
+ *
+ * network_mysqld_thread() is the real proxy thread
+ *
  * @todo move the SQL based help out into a lua script
  */
 
@@ -202,7 +202,7 @@ int chassis_frontend_set_chassis_options(chassis_frontend_t *frontend, chassis_o
 	chassis_options_add(opts, "instance", 0, 0, G_OPTION_ARG_STRING, &(frontend->instance_name), "instance name", "<name>");
 	chassis_options_add(opts, "wait-timeout", 0, 0, G_OPTION_ARG_INT, &(frontend->wait_timeout), "the number of seconds which Atlas waits for activity on a connection before closing it (default:0)", NULL);
 
-	return 0;	
+	return 0;
 }
 
 static void sigsegv_handler(int G_GNUC_UNUSED signum) {
@@ -215,8 +215,10 @@ static void sigsegv_handler(int G_GNUC_UNUSED signum) {
  * For the Windows service case, this will also handle the notifications and set
  * up the logging support appropriately.
  */
+
+extern chassis *srv;
 int main_cmdline(int argc, char **argv) {
-	chassis *srv = NULL;
+//	chassis *srv = NULL;
 #ifdef HAVE_SIGACTION
 	static struct sigaction sigsegv_sa;
 #endif
@@ -225,6 +227,7 @@ int main_cmdline(int argc, char **argv) {
 	GOptionEntry *main_entries = NULL;
 	chassis_frontend_t *frontend = NULL;
 	chassis_options_t *opts = NULL;
+
 
 	GError *gerr = NULL;
 	chassis_log *log = NULL;
@@ -293,7 +296,7 @@ int main_cmdline(int argc, char **argv) {
 #ifndef CHASSIS_BUILD_TAG
 #define CHASSIS_BUILD_TAG PACKAGE_STRING
 #endif
-		g_print("%s" CHASSIS_NEWLINE, CHASSIS_BUILD_TAG); 
+		g_print("%s" CHASSIS_NEWLINE, CHASSIS_BUILD_TAG);
 		chassis_frontend_print_version();
 	}
 
@@ -304,7 +307,7 @@ int main_cmdline(int argc, char **argv) {
 	g_option_context_add_main_entries(option_ctx, main_entries, NULL);
 
 	/**
-	 * parse once to get the basic options 
+	 * parse once to get the basic options
 	 *
 	 * leave the unknown options in the list
 	 */
@@ -371,8 +374,8 @@ int main_cmdline(int argc, char **argv) {
 	srv->base_dir = g_strdup(frontend->base_dir);
 
 	chassis_frontend_init_plugin_dir(&frontend->plugin_dir, srv->base_dir);
-	
-	/* 
+
+	/*
 	 * these are used before we gathered all the options
 	 * from the plugins, thus we need to fix them up before
 	 * dealing with all the rest.
@@ -465,7 +468,7 @@ int main_cmdline(int argc, char **argv) {
 		} else {
 			g_critical("%s: %s (code = %d, domain = %s)", G_STRLOC, gerr->message, gerr->code, g_quark_to_string(gerr->domain));
 		}
-		
+
 		GOTO_EXIT(EXIT_FAILURE);
 	}
 /*
@@ -477,8 +480,8 @@ int main_cmdline(int argc, char **argv) {
 		g_critical("unknown option: %s", argv[1]);
 		GOTO_EXIT(EXIT_FAILURE);
 	}
-	
-#ifndef _WIN32	
+
+#ifndef _WIN32
 	signal(SIGPIPE, SIG_IGN);
 
 	if (frontend->daemon_mode) {
@@ -532,7 +535,7 @@ int main_cmdline(int argc, char **argv) {
 	// we need instance name that read by lua, may be use in lua log and ...
 	srv->instance_name = g_strdup(frontend->instance_name);
 
-	/* the message has to be _after_ the g_option_content_parse() to 
+	/* the message has to be _after_ the g_option_content_parse() to
 	 * hide from the output if the --help is asked for
 	 */
 	g_message("%s started - instance: %s", PACKAGE_STRING, srv->instance_name); /* add tag to the logfile (after we opened the logfile) */
@@ -555,7 +558,7 @@ int main_cmdline(int argc, char **argv) {
 	}
 	g_debug("max open file-descriptors = %"G_GINT64_FORMAT, chassis_fdlimit_get());
 
-	if (chassis_mainloop(srv)) {
+	if (chassis_mainloop(srv, frontend->keyfile)) {
 		/* looks like we failed */
 		g_critical("%s: Failure from chassis_mainloop. Shutting down.", G_STRLOC);
 		GOTO_EXIT(EXIT_FAILURE);
@@ -585,7 +588,7 @@ exit_nicely:
 	if (main_entries) g_free(main_entries);
 
 	chassis_log_free(log);
-	
+
 #ifdef _WIN32
 	if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_STOPPED, 0);
 #endif
@@ -597,13 +600,13 @@ exit_nicely:
 		sigaction(SIGSEGV, &sigsegv_sa, NULL);
 	}
 #endif
-	chassis_frontend_free(frontend);	
-
+	chassis_frontend_free(frontend);
 	return exit_code;
+
 }
 
 /**
- * On Windows we first look if we are started as a service and 
+ * On Windows we first look if we are started as a service and
  * set that up if appropriate.
  * We eventually fall down through to main_cmdline, even on Windows.
  */
@@ -613,5 +616,6 @@ int main(int argc, char **argv) {
 #else
 	return main_cmdline(argc, argv);
 #endif
+
 }
 

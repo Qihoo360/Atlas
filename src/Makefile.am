@@ -131,8 +131,7 @@ libmysql_chassis_la_SOURCES = \
 
 libmysql_chassis_la_LDFLAGS  = -export-dynamic -no-undefined -dynamic
 libmysql_chassis_la_CPPFLAGS = $(MYSQL_CFLAGS) $(EVENT_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS) $(GTHREAD_CFLAGS) -ggdb
-libmysql_chassis_la_LIBADD   = $(EVENT_LIBS)   $(GLIB_LIBS)   $(LUA_LIBS) $(GMODULE_LIBS) $(GTHREAD_LIBS) libmysql-chassis-timing.la libmysql-chassis-glibext.la
-
+libmysql_chassis_la_LIBADD   = $(EVENT_LIBS)   $(GLIB_LIBS)   $(LUA_LIBS) $(GMODULE_LIBS) $(GTHREAD_LIBS) libmysql-chassis-timing.la libmysql-chassis-glibext.la 
 lib_LTLIBRARIES += libmysql-proxy.la
 libmysql_proxy_la_SOURCES = \
 	network-mysqld.c \
@@ -154,6 +153,7 @@ libmysql_proxy_la_SOURCES = \
 	network-injection-lua.c \
 	network-backend.c \
 	network-backend-lua.c \
+	chassis-sharding.c \
 	lua-env.c
 
 libmysql_proxy_la_LDFLAGS  = -export-dynamic -no-undefined -dynamic
@@ -166,6 +166,7 @@ noinst_HEADERS=\
 
 include_HEADERS=\
 	network-mysqld.h \
+	chassis-sharding.h \
 	network-mysqld-lua.h \
 	network-mysqld-proto.h \
 	network-mysqld-binlog.h \

@@ -30,22 +30,22 @@
 #include "network_mysqld_proto_binary.h"
 
 #include "glib-ext.h"
-#include "../lib/sql-tokenizer.h"
+//#include "../lib/sql-tokenizer.h"
 
 #define C(x) x, sizeof(x) - 1
 #define S(x) x->str, x->len
 
-gboolean sql_token_equal(sql_token *token, sql_token_id token_id, const char *text)
-{
-	if( token->token_id != token_id)
-		return FALSE;
-	if(token_id == TK_LITERAL) {
-		g_string_ascii_up(token->text);
-		if( 0 != strcmp(token->text->str, text) ) 
-			return FALSE;
-	}
-	return TRUE;
-}
+/* gboolean sql_token_equal(sql_token *token, sql_token_id token_id, const char *text) */
+/* { */
+/* 	if( token->token_id != token_id) */
+/* 		return FALSE; */
+/* 	if(token_id == TK_LITERAL) { */
+/* 		g_string_ascii_up(token->text); */
+/* 		if( 0 != strcmp(token->text->str, text) ) */ 
+/* 			return FALSE; */
+/* 	} */
+/* 	return TRUE; */
+/* } */
 
 void update_charset(network_mysqld_con* con) {
 	GString* charset_client     = con->charset_client;
@@ -720,6 +720,7 @@ int network_mysqld_proto_get_query_result(network_packet *packet, network_mysqld
 #ifdef DEBUG_TRACE_QUERY
 		g_debug("now con->current_query is %s\n", con->current_query->str);
 #endif
+        // parse.data == network_mysqld_com_query_result_t*
 		is_finished = network_mysqld_proto_get_com_query_result(packet, con->parse.data, con, FALSE);
 		break;
 	case COM_BINLOG_DUMP:
@@ -927,7 +928,7 @@ int network_mysqld_proto_get_ok_packet(network_packet *packet, network_mysqld_ok
 	guint32 capabilities = CLIENT_PROTOCOL_41;
 
 	int err = 0;
-
+    // -- TODO -- the first byte is the packet header, not field_count, details: http://dev.mysql.com/doc/internals/en/packet-OK_Packet.html
 	err = err || network_mysqld_proto_get_int8(packet, &field_count);
 	if (err) return -1;
 

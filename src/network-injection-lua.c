@@ -324,6 +324,7 @@ static int proxy_resultset_rows_iter(lua_State *L) {
 	return 1;
 }
 
+
 /**
  * parse the result-set of the query
  *

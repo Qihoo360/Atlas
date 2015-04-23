@@ -17,7 +17,7 @@
  02110-1301  USA
 
  $%ENDLICENSE%$ */
- 
+
 
 #include <sys/types.h>
 #include <signal.h>
@@ -41,6 +41,7 @@
 #include <pwd.h>	 /* getpwnam() */
 #endif
 
+#include <lemon/sqliteInt.h>
 #include <glib.h>
 #include "chassis-plugin.h"
 #include "chassis-mainloop.h"
@@ -55,8 +56,9 @@ static volatile int signal_shutdown;
 static volatile sig_atomic_t signal_shutdown;
 #endif
 
+chassis *srv = NULL;
 /**
- * check if the libevent headers we built against match the 
+ * check if the libevent headers we built against match the
  * library we run against
  */
 int chassis_check_version(const char *lib_version, const char *hdr_version) {
@@ -74,7 +76,7 @@ int chassis_check_version(const char *lib_version, const char *hdr_version) {
 				G_STRLOC, hdr_version, scanned_fields);
 		return -1;
 	}
-	
+
 	if (lib_maj == hdr_maj &&
 	    lib_min == hdr_min &&
 	    lib_pat >= hdr_pat) {
@@ -100,7 +102,7 @@ chassis *chassis_new() {
 	chas = g_new0(chassis, 1);
 
 	chas->modules = g_ptr_array_new();
-	
+
 	chas->stats = chassis_stats_new();
 
 	/* create a new global timer info */
@@ -111,7 +113,8 @@ chassis *chassis_new() {
 	chas->event_hdr_version = g_strdup(_EVENT_VERSION);
 
 	chas->shutdown_hooks = chassis_shutdown_hooks_new();
-
+    
+    chas->lemon_parse_objs = g_ptr_array_new();
 	return chas;
 }
 
@@ -138,7 +141,7 @@ void chassis_free(chassis *chas) {
 		g_assert(p->destroy);
 		p->destroy(p->config);
 	}
-	
+
 	chassis_shutdown_hooks_call(chas->shutdown_hooks); /* cleanup the global 3rd party stuff before we unload the modules */
 
 	for (i = 0; i < chas->modules->len; i++) {
@@ -146,13 +149,13 @@ void chassis_free(chassis *chas) {
 
 		chassis_plugin_free(p);
 	}
-	
+
 	g_ptr_array_free(chas->modules, TRUE);
 
 	if (chas->base_dir) g_free(chas->base_dir);
 	if (chas->log_path) g_free(chas->log_path);
 	if (chas->user) g_free(chas->user);
-	
+
 	if (chas->stats) chassis_stats_free(chas->stats);
 
 	chassis_timestamps_global_free(NULL);
@@ -189,6 +192,13 @@ void chassis_free(chassis *chas) {
 	network_backends_free(chas->backends);
 
 	g_free(chas);
+
+    for (i = 0; i < chas->lemon_parse_objs->len; i++) {
+        Parse *parse_obj = (Parse*)g_ptr_array_index(chas->lemon_parse_objs, i);
+        sqlite3ParseDelete(parse_obj);
+    }
+
+    g_ptr_array_free(chas->lemon_parse_objs, TRUE);
 }
 
 void chassis_set_shutdown_location(const gchar* location) {
@@ -210,13 +220,13 @@ static void sighup_handler(int G_GNUC_UNUSED fd, short G_GNUC_UNUSED event_type,
 	g_message("received a SIGHUP, closing log file"); /* this should go into the old logfile */
 
 	chassis_log_set_logrotate(chas->log);
-	
+
 	g_message("re-opened log file after SIGHUP"); /* ... and this into the new one */
 }
 
 
 /**
- * forward libevent messages to the glib error log 
+ * forward libevent messages to the glib error log
  */
 static void event_log_use_glib(int libevent_log_level, const char *msg) {
 	/* map libevent to glib log-levels */
@@ -232,7 +242,7 @@ static void event_log_use_glib(int libevent_log_level, const char *msg) {
 }
 
 
-int chassis_mainloop(void *_chas) {
+int chassis_mainloop(void *_chas, GKeyFile *keyfile) {
 	chassis *chas = _chas;
 	guint i;
 	struct event ev_sigterm, ev_sigint;
@@ -265,6 +275,7 @@ int chassis_mainloop(void *_chas) {
 					G_STRLOC, p->name);
 			return -1;
 		}
+                if (i == 1) p->get_shard_rules(keyfile, chas, p->config);
 	}
 
 	/*
@@ -334,8 +345,14 @@ int chassis_mainloop(void *_chas) {
 		chassis_event_thread_t *thread = chassis_event_thread_new(i);
 		chassis_event_threads_init_thread(thread, chas);
 		g_ptr_array_add(chas->threads, thread);
+
 	}
 
+    int j;
+    for (j = 0; j <= (guint)chas->event_thread_count; j++) {
+        Parse *parse_obj = sqlite3ParseNew();
+        g_ptr_array_add(chas->lemon_parse_objs, parse_obj);
+    }
 	/* start the event threads */
 	chassis_event_threads_start(chas->threads);
 

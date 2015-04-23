@@ -44,6 +44,7 @@
 #include "network-conn-pool.h"
 #include "network-conn-pool-lua.h"
 #include "network-injection-lua.h"
+#include "chassis-sharding.h"
 
 #define C(x) x, sizeof(x) - 1
 
@@ -53,7 +54,7 @@ network_mysqld_con_lua_t *network_mysqld_con_lua_new() {
 	st = g_new0(network_mysqld_con_lua_t, 1);
 
 	st->injected.queries = network_injection_queue_new();
-	
+
 	return st;
 }
 
@@ -69,10 +70,10 @@ void network_mysqld_con_lua_free(network_mysqld_con_lua_t *st) {
 /**
  * get the connection information
  *
- * note: might be called in connect_server() before con->server is set 
+ * note: might be called in connect_server() before con->server is set
  */
 static int proxy_connection_get(lua_State *L) {
-	network_mysqld_con *con = *(network_mysqld_con **)luaL_checkself(L); 
+	network_mysqld_con *con = *(network_mysqld_con **)luaL_checkself(L);
 	network_mysqld_con_lua_t *st;
 	gsize keysize = 0;
 	const char *key = luaL_checklstring(L, 2, &keysize);
@@ -115,7 +116,7 @@ static int proxy_connection_get(lua_State *L) {
 /**
  * set the connection information
  *
- * note: might be called in connect_server() before con->server is set 
+ * note: might be called in connect_server() before con->server is set
  */
 static int proxy_connection_set(lua_State *L) {
 	network_mysqld_con *con = *(network_mysqld_con **)luaL_checkself(L);
@@ -130,7 +131,7 @@ static int proxy_connection_set(lua_State *L) {
 		 * in lua-land the ndx is based on 1, in C-land on 0 */
 		int backend_ndx = luaL_checkinteger(L, 3) - 1;
 		network_socket *send_sock;
-			
+
 		if (backend_ndx == -1) {
 			/** drop the backend for now
 			 */
@@ -170,7 +171,7 @@ int network_mysqld_con_getmetatable(lua_State *L) {
 
 /**
  * Set up the global structures for a script.
- * 
+ *
  * @see lua_register_callback - for connection local setup
  */
 void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
@@ -178,7 +179,7 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 
 	int stack_top = lua_gettop(L);
 
-	/* TODO: if we share "proxy." with other plugins, this may fail to initialize it correctly, 
+	/* TODO: if we share "proxy." with other plugins, this may fail to initialize it correctly,
 	 * because maybe they already have registered stuff in there.
 	 * It would be better to have different namespaces, or any other way to make sure we initialize correctly.
 	 */
@@ -187,7 +188,7 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 		lua_pop(L, 1);
 
 		network_mysqld_lua_init_global_fenv(L);
-	
+
 		lua_getglobal(L, "proxy");
 	}
 	g_assert(lua_istable(L, -1));
@@ -197,7 +198,7 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 	 *  - _G.proxy and a bunch of constants in that table
 	 *  - _G.proxy.global
 	 */
-	
+
 	/**
 	 * register proxy.global.backends[]
 	 *
@@ -217,7 +218,7 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 
     lua_pop(L, 1);
 
-    // 
+    //
 	backends_p = lua_newuserdata(L, sizeof(network_backends_t *));
 	*backends_p = chas->backends;
 
@@ -238,6 +239,14 @@ void network_mysqld_lua_setup_global(lua_State *L , chassis *chas) {
 	lua_setmetatable(L, -2);
 	lua_setfield(L, -2, "pwds");
 
+    chassis_plugin *p = chas->modules->pdata[1];/*proxy plugin*/
+    chassis_plugin_config *config = p->config;
+    GPtrArray **db_groups_p = lua_newuserdata(L, sizeof(GPtrArray *));
+	*db_groups_p = config->db_groups;
+	network_dbgroups_lua_getmetatable(L);
+	lua_setmetatable(L, -2);
+	lua_setfield(L, -2, "db_groups");
+
 	lua_pop(L, 2);  /* _G.proxy.global and _G.proxy */
 
 	g_assert(lua_gettop(L) == stack_top);
@@ -253,25 +262,25 @@ int network_mysqld_lua_load_script(lua_scope *sc, const char *lua_script) {
 	int stack_top = lua_gettop(sc->L);
 
 	if (!lua_script) return -1;
-	
+
 	/* a script cache
 	 *
-	 * we cache the scripts globally in the registry and move a copy of it 
+	 * we cache the scripts globally in the registry and move a copy of it
 	 * to the new script scope on success.
 	 */
 	lua_scope_load_script(sc, lua_script);
 
 	if (lua_isstring(sc->L, -1)) {
-		g_critical("%s: lua_load_file(%s) failed: %s", 
-				G_STRLOC, 
+		g_critical("%s: lua_load_file(%s) failed: %s",
+				G_STRLOC,
 				lua_script, lua_tostring(sc->L, -1));
 
 		lua_pop(sc->L, 1); /* remove the error-msg from the stack */
-		
+
 		return -1;
 	} else if (!lua_isfunction(sc->L, -1)) {
-		g_error("%s: luaL_loadfile(%s): returned a %s", 
-				G_STRLOC, 
+		g_error("%s: luaL_loadfile(%s): returned a %s",
+				G_STRLOC,
 				lua_script, lua_typename(sc->L, lua_type(sc->L, -1)));
 	}
 
@@ -416,12 +425,12 @@ network_mysqld_register_callback_ret network_mysqld_con_lua_register_callback(ne
 	 *
 	 * .type = <int>
 	 * .errmsg = <string>
-	 * .resultset = { 
-	 *   fields = { 
-	 *     { type = <int>, name = <string > }, 
-	 *     { ... } }, 
-	 *   rows = { 
-	 *     { ..., ... }, 
+	 * .resultset = {
+	 *   fields = {
+	 *     { type = <int>, name = <string > },
+	 *     { ... } },
+	 *   rows = {
+	 *     { ..., ... },
 	 *     { ..., ... } }
 	 * }
 	 */
@@ -489,15 +498,15 @@ network_mysqld_register_callback_ret network_mysqld_con_lua_register_callback(ne
 }
 
 /**
- * init the global proxy object 
+ * init the global proxy object
  */
 void network_mysqld_lua_init_global_fenv(lua_State *L) {
-	
+
 	lua_newtable(L); /* my empty environment aka {}              (sp += 1) */
 #define DEF(x) \
 	lua_pushinteger(L, x); \
 	lua_setfield(L, -2, #x);
-	
+
 	DEF(PROXY_SEND_QUERY);
 	DEF(PROXY_SEND_RESULT);
 	DEF(PROXY_IGNORE_RESULT);
@@ -586,8 +595,8 @@ void network_mysqld_lua_init_global_fenv(lua_State *L) {
 #undef DEF
 
 	/**
-	 * create 
-	 * - proxy.global 
+	 * create
+	 * - proxy.global
 	 * - proxy.global.config
 	 */
 	lua_newtable(L);
@@ -621,13 +630,13 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 	/**
 	 * on the stack should be the fenv of our function */
 	g_assert(lua_istable(L, -1));
-	
+
 	lua_getfield(L, -1, "proxy"); /* proxy.* from the env  */
 	g_assert(lua_istable(L, -1));
 
 	lua_getfield(L, -1, "response"); /* proxy.response */
 	if (lua_isnil(L, -1)) {
-		g_message("%s.%d: proxy.response isn't set in %s", __FILE__, __LINE__, 
+		g_message("%s.%d: proxy.response isn't set in %s", __FILE__, __LINE__,
 				lua_script);
 
 		lua_pop(L, 2); /* proxy + nil */
@@ -647,7 +656,7 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 		/**
 		 * nil is fine, we expect to get a raw packet in that case
 		 */
-		g_message("%s.%d: proxy.response.type isn't set in %s", __FILE__, __LINE__, 
+		g_message("%s.%d: proxy.response.type isn't set in %s", __FILE__, __LINE__,
 				lua_script);
 
 		lua_pop(L, 3); /* proxy + nil */
@@ -658,7 +667,7 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 		g_message("%s.%d: proxy.response.type has to be a number, is %s in %s", __FILE__, __LINE__,
 				lua_typename(L, lua_type(L, -1)),
 				lua_script);
-		
+
 		lua_pop(L, 3); /* proxy + response + type */
 
 		return -1;
@@ -680,23 +689,23 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 			g_assert(lua_istable(L, -1));
 
 			fields = network_mysqld_proto_fielddefs_new();
-		
+
 			for (i = 1, field_count = 0; ; i++, field_count++) {
 				lua_rawgeti(L, -1, i);
-				
+
 				if (lua_istable(L, -1)) { /** proxy.response.resultset.fields[i] */
 					MYSQL_FIELD *field;
-	
+
 					field = network_mysqld_proto_fielddef_new();
-	
+
 					lua_getfield(L, -1, "name"); /* proxy.response.resultset.fields[].name */
-	
+
 					if (!lua_isstring(L, -1)) {
 						field->name = g_strdup("no-field-name");
-	
+
 						g_warning("%s.%d: proxy.response.type = OK, "
 								"but proxy.response.resultset.fields[%u].name is not a string (is %s), "
-								"using default", 
+								"using default",
 								__FILE__, __LINE__,
 								i,
 								lua_typename(L, lua_type(L, -1)));
@@ -704,16 +713,16 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 						field->name = g_strdup(lua_tostring(L, -1));
 					}
 					lua_pop(L, 1);
-	
+
 					lua_getfield(L, -1, "type"); /* proxy.response.resultset.fields[].type */
 					if (!lua_isnumber(L, -1)) {
 						g_warning("%s.%d: proxy.response.type = OK, "
 								"but proxy.response.resultset.fields[%u].type is not a integer (is %s), "
-								"using MYSQL_TYPE_STRING", 
+								"using MYSQL_TYPE_STRING",
 								__FILE__, __LINE__,
 								i,
 								lua_typename(L, lua_type(L, -1)));
-	
+
 						field->type = MYSQL_TYPE_STRING;
 					} else {
 						field->type = lua_tonumber(L, -1);
@@ -722,53 +731,53 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 					field->flags = PRI_KEY_FLAG;
 					field->length = 32;
 					g_ptr_array_add(fields, field);
-					
+
 					lua_pop(L, 1); /* pop key + value */
 				} else if (lua_isnil(L, -1)) {
 					lua_pop(L, 1); /* pop the nil and leave the loop */
 					break;
 				} else {
-					g_error("proxy.response.resultset.fields[%d] should be a table, but is a %s", 
+					g_error("proxy.response.resultset.fields[%d] should be a table, but is a %s",
 							i,
 							lua_typename(L, lua_type(L, -1)));
 				}
 			}
 			lua_pop(L, 1);
-	
+
 			rows = g_ptr_array_new();
 			lua_getfield(L, -1, "rows"); /* proxy.response.resultset.rows */
 			g_assert(lua_istable(L, -1));
 			for (i = 1; ; i++) {
 				lua_rawgeti(L, -1, i);
-	
+
 				if (lua_istable(L, -1)) { /** proxy.response.resultset.rows[i] */
 					GPtrArray *row;
 					gsize j;
-	
+
 					row = g_ptr_array_new();
-	
+
 					/* we should have as many columns as we had fields */
-		
+
 					for (j = 1; j < field_count + 1; j++) {
 						lua_rawgeti(L, -1, j);
-	
+
 						if (lua_isnil(L, -1)) {
 							g_ptr_array_add(row, NULL);
 						} else {
 							g_ptr_array_add(row, g_strdup(lua_tostring(L, -1)));
 						}
-	
+
 						lua_pop(L, 1);
 					}
-	
+
 					g_ptr_array_add(rows, row);
-	
+
 					lua_pop(L, 1); /* pop value */
 				} else if (lua_isnil(L, -1)) {
 					lua_pop(L, 1); /* pop the nil and leave the loop */
 					break;
 				} else {
-					g_error("proxy.response.resultset.rows[%d] should be a table, but is a %s", 
+					g_error("proxy.response.resultset.rows[%d] should be a table, but is a %s",
 							i,
 							lua_typename(L, lua_type(L, -1)));
 				}
@@ -796,7 +805,7 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 		}
 
 		/**
-		 * someone should cleanup 
+		 * someone should cleanup
 		 */
 		if (fields) {
 			network_mysqld_proto_fielddefs_free(fields);
@@ -819,14 +828,14 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 			rows = NULL;
 		}
 
-		
+
 		lua_pop(L, 1); /* .resultset */
-		
+
 		break; }
 	case MYSQLD_PACKET_ERR: {
 		gint errorcode = ER_UNKNOWN_ERROR;
 		const gchar *sqlstate = "07000"; /** let's call ourself Dynamic SQL ... 07000 is "dynamic SQL error" */
-		
+
 		lua_getfield(L, -1, "errcode"); /* proxy.response.errcode */
 		if (lua_isnumber(L, -1)) {
 			errorcode = lua_tonumber(L, -1);
@@ -878,14 +887,14 @@ int network_mysqld_con_lua_handle_proxy_response(network_mysqld_con *con, const 
 
 				network_mysqld_queue_append(con->client, con->client->send_queue,
 						str, str_len);
-	
+
 				lua_pop(L, 1); /* pop value */
 			} else if (lua_isnil(L, -1)) {
 				lua_pop(L, 1); /* pop the nil and leave the loop */
 				break;
 			} else {
-				g_error("%s.%d: proxy.response.packets should be array of strings, field %u was %s", 
-						__FILE__, __LINE__, 
+				g_error("%s.%d: proxy.response.packets should be array of strings, field %u was %s",
+						__FILE__, __LINE__,
 						i,
 						lua_typename(L, lua_type(L, -1)));
 			}

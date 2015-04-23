@@ -18,7 +18,6 @@ INSTALL(FILES
 
 INSTALL(FILES
 	admin.lua
-	rw-splitting.lua
 
 	DESTINATION lib/mysql-proxy/lua/
 )

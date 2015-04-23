@@ -50,6 +50,7 @@
 
 #include "network-conn-pool.h"
 #include "network-conn-pool-lua.h"
+#include "chassis-sharding.h"
 
 /**
  * lua wrappers around the connection pool
@@ -292,7 +293,10 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 	 */
 
 	backend = network_backends_get(con->srv->backends, backend_ndx);
-	if (!backend) return NULL;
+	if (!backend) { 
+        //g_debug("%s: network_backends_get return NULL, backend_ndx:%d", G_STRLOC, backend_ndx);
+        return NULL; 
+    }
 
 
 	/**
@@ -327,4 +331,58 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 	st->backend_ndx = backend_ndx;
 
 	return send_sock;
+}
+
+
+network_socket* network_connection_pool_get_socket(network_mysqld_con* con, network_backend_t* backend, GHashTable* pwd_table) {
+    network_socket *socket;
+    //network_mysqld_con_lua_t *st = con->plugin_con_state;
+
+	/**
+	 * get a connection from the pool which matches our basic requirements
+	 * - username has to match
+	 * - default_db should match
+	 */
+    network_connection_pool* pool = chassis_event_thread_pool(backend);
+    if (NULL == (socket = network_connection_pool_get(pool))) { // no connection in the pool
+        if (NULL == (socket = self_connect(con, backend, pwd_table))) {
+            return NULL;
+        }
+    }
+
+    return socket;
+}
+
+
+int network_connection_pool_sharding_add_connection(network_mysqld_con* con, void* dbgroup_context) {
+    if (con == NULL || dbgroup_context == NULL) { return 0; }
+    
+    sharding_dbgroup_context_t* group_context = (sharding_dbgroup_context_t*) dbgroup_context;
+    network_socket* server_sock = group_context->backend_sock;
+    network_mysqld_con_lua_t* st = group_context->st;
+
+    if (!server_sock->response) {
+        g_warning("%s: (remove) remove socket from pool, response is NULL, src is %s, dst is %s",
+            G_STRLOC, server_sock->src->name->str, server_sock->dst->name->str);
+
+        server_sock->response = network_mysqld_auth_response_new();
+        g_string_assign_len(server_sock->response->username, C("mysql_proxy_invalid_user"));
+    }
+
+    server_sock->is_authed = 1;
+
+    network_connection_pool* pool = chassis_event_thread_pool(st->backend);
+    network_connection_pool_entry* pool_entry =  chassis_event_thread_pool(st->backend);
+    pool_entry = network_connection_pool_add(pool, server_sock);
+
+    if (pool_entry) {
+		event_set(&(server_sock->event), server_sock->fd, EV_READ, network_mysqld_con_idle_handle, pool_entry);
+		chassis_event_add_local(con->srv, &(server_sock->event)); /* add a event, but stay in the same thread */
+    }
+
+    st->backend = NULL;
+    st->backend_ndx = -1;
+    group_context->backend_sock = NULL;
+
+    return 0;
 }

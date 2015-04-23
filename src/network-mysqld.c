@@ -73,6 +73,7 @@
 #include "lua-scope.h"
 #include "glib-ext.h"
 #include "network-mysqld-lua.h"
+#include "chassis-sharding.h"
 
 #if defined(HAVE_SYS_SDT_H) && defined(ENABLE_DTRACE)
 #include <sys/sdt.h>
@@ -176,6 +177,10 @@ network_mysqld_con *network_mysqld_con_new() {
 
 	con->challenge = g_string_sized_new(20);
 
+    con->sharding_dbgroup_contexts = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, sharding_dbgroup_context_free);
+    con->sharding_context = sharding_context_new();
+    con->trans_context = g_new0(trans_context_t, 1);
+    sharding_reset_trans_context_t(con->trans_context);
 	return con;
 }
 
@@ -204,7 +209,6 @@ void network_mysqld_con_free(network_mysqld_con *con) {
 
 	if (con->server) network_socket_free(con->server);
 	if (con->client) network_socket_free(con->client);
-
 	/* we are still in the conns-array */
 /*
 	g_mutex_lock(&con_mutex);
@@ -237,6 +241,16 @@ void network_mysqld_con_free(network_mysqld_con *con) {
 
 	if (con->challenge) g_string_free(con->challenge, TRUE);
 
+    if (con->sharding_dbgroup_contexts) {
+        g_hash_table_remove_all(con->sharding_dbgroup_contexts);
+        g_hash_table_destroy(con->sharding_dbgroup_contexts);
+    }
+
+    if (con->sharding_context) { sharding_context_free(con->sharding_context); }
+    if (con->trans_context) {
+        sharding_reset_trans_context_t(con->trans_context);
+        g_free(con->trans_context);
+    }
 	g_free(con);
 }
 
@@ -574,7 +588,7 @@ network_socket_retval_t network_mysqld_con_get_packet(chassis G_GNUC_UNUSED*chas
  * with packet-header and everything 
  */
 network_socket_retval_t network_mysqld_read(chassis G_GNUC_UNUSED*chas, network_socket *con) {
-	switch (network_socket_read(con)) {
+	switch (network_socket_read(con)) { // read data and push to recv_raw_queue
 	case NETWORK_SOCKET_WAIT_FOR_EVENT:
 		return NETWORK_SOCKET_WAIT_FOR_EVENT;
 	case NETWORK_SOCKET_ERROR:
@@ -586,7 +600,7 @@ network_socket_retval_t network_mysqld_read(chassis G_GNUC_UNUSED*chas, network_
 		break;
 	}
 
-	return network_mysqld_con_get_packet(chas, con);
+	return network_mysqld_con_get_packet(chas, con); //  get a full packet from the raw queue and move it to the packet queue 
 }
 
 network_socket_retval_t network_mysqld_write(chassis G_GNUC_UNUSED*chas, network_socket *con) {
@@ -724,6 +738,12 @@ network_socket_retval_t plugin_call(chassis *srv, network_mysqld_con *con, int s
 	case CON_STATE_READ_QUERY_RESULT:
 		func = con->plugins.con_read_query_result;
 		break;
+    case CON_STATE_SHARDING_READ_QUERY_RESULT:
+        func = con->plugins.con_sharding_read_query_result;
+        break;
+    case CON_STATE_SHARDING_SEND_QUERY_RESULT:
+        func = con->plugins.con_sharding_send_query_result;
+        break;
 	case CON_STATE_SEND_QUERY_RESULT:
 		func = con->plugins.con_send_query_result;
 
@@ -829,6 +849,375 @@ const char *network_mysqld_con_state_get_name(network_mysqld_con_state_t state) 
 	return "unknown";
 }
 
+G_INLINE_FUNC void __wait_for_event(network_socket* socketobj, gint event_type, gint timeout, network_mysqld_con* con) {
+    event_set(&(socketobj->event), socketobj->fd, event_type, network_mysqld_con_handle, con);
+    chassis_event_add_self(con->srv, &(socketobj->event), timeout);
+}
+
+static gboolean __sharding_send_query_from_readquery(int event_fd, short events, network_mysqld_con* con) {
+    /* send the query to the dbgroups
+     *
+     * this state will loop until all the packets from the dbgroup send-queue are flushed 
+     */
+    chassis* chassis_obj = con->srv;
+    network_mysqld_con_state_t ostate = con->state;
+    sharding_context_t* sharding_context = con->sharding_context;
+    gboolean is_waiting_write_event = FALSE;
+    network_socket* send_sock = NULL;
+    
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, sharding_context->querying_dbgroups);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        sharding_dbgroup_context_t* dbgroup_context = (sharding_dbgroup_context_t*)value;
+        send_sock = dbgroup_context->backend_sock;
+        if (send_sock->send_queue->offset == 0) { 
+            // -- TODO -- 
+            // ?? bug ?? if the packet len is larger than max_packet, and one packet is divided to multi chunks, when sending the second chunks, 
+            // and the send_queue->offset may also be 0 while wait for write event, so in this case it parse twice for one packet?
+            
+            /* only parse the packets once */
+            network_packet packet;
+
+            packet.data = g_queue_peek_head(send_sock->send_queue->chunks);
+            packet.offset = 0;
+
+            if (sharding_parse_command_states_init(&dbgroup_context->parse, con, &packet, dbgroup_context) != 0) {
+                g_debug("%s: tracking mysql protocol states failed", G_STRLOC);
+                con->state = CON_STATE_ERROR;
+                return TRUE;
+            }                      
+        }
+
+        switch (network_mysqld_write(chassis_obj, send_sock)) {
+            case NETWORK_SOCKET_SUCCESS:
+                ++con->sharding_context->query_sent_count;
+                break;
+            case NETWORK_SOCKET_WAIT_FOR_EVENT:
+                __wait_for_event(send_sock, EV_WRITE, 0, con);
+                is_waiting_write_event = TRUE;
+                break; // continue
+            case NETWORK_SOCKET_ERROR_RETRY:
+            case NETWORK_SOCKET_ERROR:
+				g_debug("%s.%d: network_mysqld_write(CON_STATE_SHARDING_SEND_QUERY) returned an error", __FILE__, __LINE__);
+				/**
+				 * write() failed, close the connections 
+				 */
+				con->state = CON_STATE_ERROR;
+				break;
+        }
+        /** -- TODO --
+         * how to handle partial backend is down. if ignore, must reduce the merge_result->shard_num
+         */ 
+        if (con->state != ostate) { /* the state has changed (e.g. CON_STATE_ERROR) */
+            //--sharding_context->merge_result.shard_num;
+            //continue; 
+            return TRUE;
+        } 
+    }
+    if (is_waiting_write_event) { return FALSE; }
+
+    con->state = CON_STATE_SHARDING_READ_QUERY_RESULT;
+    con->sharding_context->is_continue_from_send_query = TRUE;
+    return TRUE;
+}
+
+// from wait_for_event
+static gboolean __sharding_send_query_from_write_event(int event_fd, short events, network_mysqld_con* con) { 
+    chassis* chassis_obj = con->srv;
+    network_mysqld_con_state_t ostate = con->state;
+    sharding_context_t* sharding_context = con->sharding_context;
+    gboolean is_waiting_write_event = FALSE;
+    network_socket* send_sock = NULL;
+
+    sharding_dbgroup_context_t* dbgroup_context = (sharding_dbgroup_context_t*)g_hash_table_lookup(sharding_context->querying_dbgroups, &event_fd);
+    if (dbgroup_context == NULL) { 
+        g_critical("%s, g_hash_table_lookup(sharding_context->querying_dbgroups, event_fd) return NULL", G_STRLOC);
+        con->state = CON_STATE_ERROR;
+        return TRUE; 
+    }
+
+    send_sock = dbgroup_context->backend_sock;
+    if (send_sock->send_queue->offset == 0) { 
+        // -- TODO -- 
+        // ?? bug ?? if the packet len is larger than max_packet, and one packet is divided to multi chunks, when sending the second chunks, 
+        // and the send_queue->offset may also be 0 while wait for write event, so in this case it parse twice for one packet?
+
+        /* only parse the packets once */
+        network_packet packet;
+
+        packet.data = g_queue_peek_head(send_sock->send_queue->chunks);
+        packet.offset = 0;
+
+        if (sharding_parse_command_states_init(&dbgroup_context->parse, con, &packet, dbgroup_context) != 0) {
+            g_debug("%s: tracking mysql protocol states failed", G_STRLOC);
+            con->state = CON_STATE_ERROR;
+            return TRUE;
+        }                      
+    }
+
+    switch (network_mysqld_write(chassis_obj, send_sock)) {
+        case NETWORK_SOCKET_SUCCESS:
+            ++con->sharding_context->query_sent_count;
+            break;
+        case NETWORK_SOCKET_WAIT_FOR_EVENT:
+            __wait_for_event(send_sock, EV_WRITE, 0, con);
+            is_waiting_write_event = TRUE;
+            break; // continue
+        case NETWORK_SOCKET_ERROR_RETRY:
+        case NETWORK_SOCKET_ERROR:
+            g_debug("%s.%d: network_mysqld_write(CON_STATE_SEND_QUERY) returned an error", __FILE__, __LINE__);
+            /**
+             * write() failed, close the connections 
+             */
+            con->state = CON_STATE_ERROR;
+            break;
+    }
+    /** -- TODO --
+     * how to handle partial backend is down. if ignore, must reduce the merge_result->shard_num
+     */ 
+    if (con->state != ostate) { /* the state has changed (e.g. CON_STATE_ERROR) */
+        //--sharding_context->merge_result.shard_num;
+        return TRUE;
+    }
+    if (is_waiting_write_event || sharding_context->query_sent_count < sharding_context->merge_result.shard_num) { 
+        return FALSE; 
+    }
+
+    con->state = CON_STATE_SHARDING_READ_QUERY_RESULT;
+    con->sharding_context->is_continue_from_send_query = TRUE;
+    return TRUE;
+}
+
+/**
+ * @return:  means if continue the network_mysqld_con_handle loop
+ *      TRUE  : continue
+ *      FALSE : don't continue, e.g. wait for the event
+ */  
+static gboolean __network_sharding_send_query(int event_fd, short events, network_mysqld_con* con) {
+    if (event_fd == con->client->fd) {
+        return __sharding_send_query_from_readquery(event_fd, events, con);
+    } else {
+        return __sharding_send_query_from_write_event(event_fd, events, con);
+    }
+}
+
+static network_socket_retval_t __network_sharding_sending_next_injection(sharding_dbgroup_context_t* dbgroup_context, network_mysqld_con* con) {
+    chassis* chassis_obj = con->srv;
+    network_mysqld_con_state_t ostate = con->state;
+    sharding_context_t* sharding_context = con->sharding_context;
+
+    network_socket* send_sock = dbgroup_context->backend_sock;
+    if (send_sock->send_queue->offset == 0) {
+        // -- TODO -- 
+        // ?? bug ?? if the packet len is larger than max_packet, and one packet is divided to multi chunks, when sending the second chunks, 
+        // and the send_queue->offset may also be 0 while wait for write event, so in this case it parse twice for one packet?
+
+        /* only parse the packets once */
+        network_packet packet;
+
+        packet.data = g_queue_peek_head(send_sock->send_queue->chunks);
+        packet.offset = 0;
+
+        if (sharding_parse_command_states_init(&dbgroup_context->parse, con, &packet, dbgroup_context) != 0) {
+            g_debug("%s: tracking mysql protocol states failed", G_STRLOC);
+            con->state = CON_STATE_ERROR;
+            return NETWORK_SOCKET_ERROR;
+        }                      
+    }
+    network_socket_retval_t ret = network_mysqld_write(chassis_obj, send_sock);
+    switch(ret) {
+        case NETWORK_SOCKET_SUCCESS:
+            dbgroup_context->cur_injection_finished = FALSE;
+            break;
+        case NETWORK_SOCKET_WAIT_FOR_EVENT:
+            __wait_for_event(send_sock, EV_WRITE, 0, con);
+            return ret;
+        case NETWORK_SOCKET_ERROR_RETRY:
+        case NETWORK_SOCKET_ERROR:
+            g_debug("%s.%d: network_mysqld_write(CON_STATE_SEND_QUERY) returned an error", __FILE__, __LINE__);
+            /**
+             * write() failed, close the connections 
+             */
+            con->state = CON_STATE_ERROR;
+            break;
+    }
+    /** -- TODO --
+     * how to handle partial backend is down. if ignore, must reduce the merge_result->shard_num
+     */ 
+    if (con->state != ostate) { /* the state has changed (e.g. CON_STATE_ERROR) */
+        //--sharding_context->merge_result.shard_num;
+        return ret;
+    }
+    
+    return ret;
+}
+
+static network_socket_retval_t __dbgroup_read_query_result(sharding_dbgroup_context_t* dbgroup_context, network_mysqld_con* con) {
+    chassis* chassis_obj = con->srv;
+    network_mysqld_con_state_t ostate = con->state;
+    network_socket_retval_t ret = NETWORK_SOCKET_SUCCESS;
+
+    do {
+        network_socket* recv_sock = dbgroup_context->backend_sock;
+        ret = network_mysqld_read(chassis_obj, recv_sock);
+        switch(ret) {
+            case NETWORK_SOCKET_SUCCESS:
+                break;
+            case NETWORK_SOCKET_WAIT_FOR_EVENT:
+                __wait_for_event(recv_sock, EV_READ, 0, con);
+                return ret;
+            case NETWORK_SOCKET_ERROR_RETRY:
+            case NETWORK_SOCKET_ERROR:
+                g_critical("%s.%d: network_mysqld_read(CON_STATE_SHARDING_READ_QUERY_RESULT) returned an error", __FILE__, __LINE__);
+                con->state = CON_STATE_ERROR;
+                break;
+        }
+        if (con->state != ostate) { break; }/* the state has changed (e.g. CON_STATE_ERROR) */
+        
+        con->event_dbgroup_context = dbgroup_context;
+        ret = plugin_call(chassis_obj, con, con->state);
+        switch(ret) {
+            case NETWORK_SOCKET_SUCCESS:
+                /* if we don't need the resultset, forward it to the client */
+                /* if (!con->resultset_is_finished && !con->resultset_is_needed) { */
+                /*     /1* check how much data we have in the queue waiting, no need to send 5 bytes, prevent too small network packets *1/ */
+                /*     if (con->client->send_queue->len > 64 * 1024) { */ 
+                /*         con->state = CON_STATE_SHARDING_SEND_QUERY_RESULT; */
+                /*     } */
+                /* } */
+                break;
+            case NETWORK_SOCKET_ERROR:
+                /* something nasty happend, let's close the connection */
+                con->state = CON_STATE_ERROR;
+                break;
+            case NETWORK_SOCKET_SHARDING_AVAILABLE_SEND_NEXT_INJECTION:
+                return ret;
+            case NETWORK_SOCKET_SHARDING_NOMORE_INJECTION:
+                return ret;
+            default:
+                g_critical("%s.%d: ...", __FILE__, __LINE__);
+                con->state = CON_STATE_ERROR;
+                break;
+        }
+    } while (con->state == CON_STATE_SHARDING_READ_QUERY_RESULT);
+    con->event_dbgroup_context = NULL;
+    return ret;
+}
+
+static network_socket_retval_t __dbgroup_read_query_result_wrapper(short events, sharding_dbgroup_context_t* dbgroup_context, network_mysqld_con* con) {
+    network_socket_retval_t ret = NETWORK_SOCKET_SUCCESS;
+    do {
+        if (events == EV_READ) {
+            ret = __dbgroup_read_query_result(dbgroup_context, con);
+            if (ret == NETWORK_SOCKET_WAIT_FOR_EVENT) {
+                return ret;
+            } else if (ret == NETWORK_SOCKET_SHARDING_AVAILABLE_SEND_NEXT_INJECTION) {
+                goto send_next_injection;
+            } else if(ret == NETWORK_SOCKET_SHARDING_NOMORE_INJECTION) { // ostate is not change, will exit network_mysqld_con_handle loop
+                return ret;
+            }         
+        } else if (events == EV_WRITE && dbgroup_context->cur_injection_finished == TRUE) {
+            /* for this dbgroup, last injection is finished, sending next injection*/
+            goto send_next_injection;
+        } else {
+            break;
+        }
+
+        continue; // don't reach send_next_injection automatically
+send_next_injection:
+        ret = __network_sharding_sending_next_injection(dbgroup_context, con);
+        if (ret == NETWORK_SOCKET_WAIT_FOR_EVENT) {
+            return FALSE;
+        } else if (ret == NETWORK_SOCKET_SUCCESS) {
+            events = EV_READ; // let it read query result
+            continue;
+        } else {
+            break;
+        }
+    } while (con->state == CON_STATE_SHARDING_READ_QUERY_RESULT);
+
+    return ret;
+}
+
+/**
+ * @return:  means if continue the network_mysqld_con_handle loop
+ *      TRUE  : continue
+ *      FALSE : don't continue, e.g. wait for the event
+ */  
+static gboolean __network_sharding_read_query_result(int event_fd, short events, network_mysqld_con* con) {
+    sharding_context_t* sharding_context = con->sharding_context;
+    
+    if (con->sharding_context->is_continue_from_send_query) { // from send_query
+        con->sharding_context->is_continue_from_send_query = FALSE;
+        gboolean is_someone_dont_wait_event = FALSE;
+        GHashTableIter iter;
+        gpointer key, value;
+        g_hash_table_iter_init(&iter, sharding_context->querying_dbgroups);
+        while(g_hash_table_iter_next(&iter, &key, &value)) {
+            sharding_dbgroup_context_t* dbgroup_context = (sharding_dbgroup_context_t*)value;
+            events = EV_READ;
+            if (__dbgroup_read_query_result_wrapper(events, dbgroup_context, con) != NETWORK_SOCKET_WAIT_FOR_EVENT) { 
+                // if error occured, the con->state will change to CON_STATE_ERROR, the network_mysqld_con_handle loop is not continue.
+                // no need to handle the error in this.
+                is_someone_dont_wait_event = TRUE;
+            }
+        }
+
+        // some one sucess, is available to continue the network_mysqld_con_handle loop
+        if (is_someone_dont_wait_event == FALSE) {  return FALSE; } // all is wait for event, exit network_mysqld_con_handle
+    } else { // from epoll event
+        sharding_dbgroup_context_t* dbgroup_context = (sharding_dbgroup_context_t*)g_hash_table_lookup(sharding_context->querying_dbgroups, &event_fd);
+        if (dbgroup_context == NULL) { 
+            g_critical("%s, g_hash_table_lookup(sharding_context->querying_dbgroups, event_fd) return NULL", G_STRLOC);
+            con->state = CON_STATE_ERROR;
+            return TRUE; 
+        }
+        
+        network_socket_retval_t ret;
+        if (( ret = __dbgroup_read_query_result_wrapper(events, dbgroup_context, con)) == NETWORK_SOCKET_WAIT_FOR_EVENT) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static gboolean __network_sharding_send_query_result(int event_fd, short events, network_mysqld_con* con) {
+    chassis* chassis_obj = con->srv;
+    network_mysqld_con_state_t ostate = con->state;
+
+    /**
+     * send the query result-set to the client */
+    switch (network_mysqld_write(chassis_obj, con->client)) {
+        case NETWORK_SOCKET_SUCCESS:
+            break;
+        case NETWORK_SOCKET_WAIT_FOR_EVENT:
+            __wait_for_event(con->client, EV_WRITE, 0, con);
+            return FALSE;
+        case NETWORK_SOCKET_ERROR_RETRY:
+        case NETWORK_SOCKET_ERROR:
+            /**
+             * client is gone away
+             *
+             * close the connection and clean up
+             */
+            con->state = CON_STATE_ERROR;
+            break;
+    }
+
+    /* if the write failed, don't call the plugin handlers */
+    if (con->state != ostate) { return TRUE; }/* the state has changed (e.g. CON_STATE_ERROR) */
+
+    switch (plugin_call(chassis_obj, con, con->state)) {
+        case NETWORK_SOCKET_SUCCESS:
+            break;
+        default:
+            con->state = CON_STATE_ERROR;
+            break;
+    }
+    return TRUE;
+}
+
 /**
  * handle the different states of the MySQL protocol
  *
@@ -882,16 +1271,23 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 				con->client->to_read = b;
 			} else if (con->server && event_fd == con->server->fd) {
 				con->server->to_read = b;
-			} else {
-				g_error("%s.%d: neither nor", __FILE__, __LINE__);
+			} else { // sharding event
+                sharding_context_t* sharding_ctx = con->sharding_context;
+                sharding_dbgroup_context_t* dbgroup_ctx = (sharding_dbgroup_context_t*)g_hash_table_lookup(sharding_ctx->querying_dbgroups, &event_fd);
+                if (dbgroup_ctx == NULL) {
+                    g_error("%s.%d: neither nor", __FILE__, __LINE__);
+                }
+
+                dbgroup_ctx->backend_sock->to_read = b;
 			}
-		} else { /* Linux */
+		} else { /* Linux */ // connection is closed
 			if (con->client && event_fd == con->client->fd) {
 				/* the client closed the connection, let's keep the server side open */
 				con->state = CON_STATE_CLOSE_CLIENT;
 			} else if (con->server && event_fd == con->server->fd && con->com_quit_seen) {
 				con->state = CON_STATE_CLOSE_SERVER;
-			} else {
+			} else { // -- TODO -- CON_STATE_CLOSE_SHARDING_BACKEND
+    
 				/* server side closed on use, oops, close both sides */
 				con->state = CON_STATE_ERROR;
 			}
@@ -921,7 +1317,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 				getpid(),
 				network_mysqld_con_state_get_name(con->state));
 #endif
-
+        network_socket_retval_t rettmp;
 		MYSQLPROXY_STATE_CHANGE(event_fd, events, con->state);
 		switch (con->state) {
 		case CON_STATE_ERROR:
@@ -1379,8 +1775,9 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 					break;
 				}
 			}
-
-			switch (plugin_call(srv, con, con->state)) {
+            
+            rettmp = plugin_call(srv, con, con->state);
+	    	switch (rettmp) {
 			case NETWORK_SOCKET_SUCCESS:
 				break;
 			default:
@@ -1391,12 +1788,12 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			}
 
 			/**
-			 * there should be 3 possible next states from here:
+			 * there should be 4 possible next states from here:
 			 *
 			 * - CON_STATE_ERROR (if something went wrong and we want to close the connection
 			 * - CON_STATE_SEND_QUERY (if we want to send data to the con->server)
 			 * - CON_STATE_SEND_QUERY_RESULT (if we want to send data to the con->client)
-			 *
+			 * - CON_STATE_SHARDING_SEND_QUERY (if we querying a sharding table)
 			 * @todo verify this with a clean switch ()
 			 */
 
@@ -1407,7 +1804,10 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			 */
 			if (con->state == CON_STATE_SEND_QUERY) {
 				network_mysqld_con_reset_command_response_state(con);
-			}
+            } else if (con->state == CON_STATE_SHARDING_SEND_QUERY) {
+                // sharding_dbgroup_reset_command_response_state already reset in proxy-plugin.c: __forwaring_sql_to_dbgroup func
+                goto avoid_reset_event;
+            }
 
 			break; }
 		case CON_STATE_SEND_QUERY:
@@ -1466,7 +1866,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			}
 				
 			break; 
-		case CON_STATE_READ_QUERY_RESULT: 
+        case CON_STATE_READ_QUERY_RESULT: 
 			/* read all packets of the resultset 
 			 *
 			 * depending on the backend we may forward the data to the client right away
@@ -1517,7 +1917,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			} while (con->state == CON_STATE_READ_QUERY_RESULT);
 	
 			break; 
-		case CON_STATE_SEND_QUERY_RESULT:
+        case CON_STATE_SEND_QUERY_RESULT:
 			/**
 			 * send the query result-set to the client */
 			switch (network_mysqld_write(srv, con->client)) {
@@ -1564,6 +1964,25 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			}
 
 			break;
+        case CON_STATE_SHARDING_SEND_QUERY: 
+            if(__network_sharding_send_query(event_fd, events, con) == FALSE) { // return means is_coninue the loop?
+                return;
+            } else {
+                goto avoid_reset_event;// don't set event_fd to -1
+            }
+            break;
+        case CON_STATE_SHARDING_READ_QUERY_RESULT:
+            if(__network_sharding_read_query_result(event_fd, events, con) == FALSE) { // return means is_coninue the loop?
+                return;
+            } else {
+                goto avoid_reset_event; // don't set event_fd to -1
+            }
+            break;
+        case CON_STATE_SHARDING_SEND_QUERY_RESULT:
+            if (__network_sharding_send_query_result(event_fd, events, con) == FALSE) { // return means is_coninue the loop?
+                return;
+            }  
+            break;
 		case CON_STATE_READ_LOCAL_INFILE_DATA: {
 			/**
 			 * read the file content from the client 
@@ -1753,6 +2172,8 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 
 		event_fd = -1;
 		events   = 0;
+avoid_reset_event:
+        continue;
 	} while (ostate != con->state);
 	NETWORK_MYSQLD_CON_TRACK_TIME(con, "con_handle_end");
 
@@ -1796,7 +2217,7 @@ void network_mysqld_con_accept(int G_GNUC_UNUSED event_fd, short events, void *u
 //	client_con->config  = listen_con->config;
 
 	//network_mysqld_con_handle(-1, 0, client_con);
-	//此处将client_con放入异步队列，然后ping工作线程，由工作线程去执行network_mysqld_con_handle，不再由主线程直接执行network_mysqld_con_handle
+	//姝ゅ灏哻lient_con鏀惧叆寮傛闃熷垪锛岀劧鍚巔ing宸ヤ綔绾跨▼锛岀敱宸ヤ綔绾跨▼鍘绘墽琛宯etwork_mysqld_con_handle锛屼笉鍐嶇敱涓荤嚎绋嬬洿鎺ユ墽琛宯etwork_mysqld_con_handle
 	chassis_event_add(client_con);
 }
 

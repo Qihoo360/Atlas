@@ -17,7 +17,7 @@
  02110-1301  USA
 
  $%ENDLICENSE%$ */
- 
+
 
 #ifndef _CHASSIS_MAINLOOP_H_
 #define _CHASSIS_MAINLOOP_H_
@@ -47,7 +47,7 @@
 #include "network-backend.h"
 
 /** @defgroup chassis Chassis
- * 
+ *
  * the chassis contains the set of functions that are used by all programs
  *
  * */
@@ -66,7 +66,7 @@ struct chassis {
 	gchar *instance_name;					/**< instance name*/
 
 	chassis_log *log;
-	
+
 	chassis_stats_t *stats;			/**< the overall chassis stats, includes lua and glib allocation stats */
 
 	/* network-io threads */
@@ -81,6 +81,7 @@ struct chassis {
 	network_backends_t *backends;
 
 	gint wait_timeout;
+    GPtrArray *lemon_parse_objs; /** item is struct Parse */
 };
 
 CHASSIS_API chassis *chassis_new(void);
@@ -88,11 +89,11 @@ CHASSIS_API void chassis_free(chassis *chas);
 CHASSIS_API int chassis_check_version(const char *lib_version, const char *hdr_version);
 
 /**
- * the mainloop for all chassis apps 
+ * the mainloop for all chassis apps
  *
- * can be called directly or as gthread_* functions 
+ * can be called directly or as gthread_* functions
  */
-CHASSIS_API int chassis_mainloop(void *user_data);
+CHASSIS_API int chassis_mainloop(void *user_data, GKeyFile *keyfile);
 
 CHASSIS_API void chassis_set_shutdown_location(const gchar* location);
 CHASSIS_API gboolean chassis_is_shutdown(void);

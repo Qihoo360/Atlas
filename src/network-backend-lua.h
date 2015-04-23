@@ -26,5 +26,6 @@
 
 NETWORK_API int network_backend_lua_getmetatable(lua_State *L);
 NETWORK_API int network_backends_lua_getmetatable(lua_State *L);
+NETWORK_API int network_dbgroups_lua_getmetatable(lua_State *L);
 
 #endif

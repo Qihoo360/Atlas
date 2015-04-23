@@ -40,10 +40,7 @@ subdir = plugins/proxy
 DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/sed.m4 $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -75,7 +72,8 @@ am__installdirs = "$(DESTDIR)$(plugindir)"
 LTLIBRARIES = $(plugin_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libproxy_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(top_builddir)/src/libmysql-proxy.la
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(top_builddir)/src/libmysql-proxy.la
 am_libproxy_la_OBJECTS = libproxy_la-proxy-plugin.lo
 libproxy_la_OBJECTS = $(am_libproxy_la_OBJECTS)
 libproxy_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -172,6 +170,7 @@ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
 PACKAGE_NAME = @PACKAGE_NAME@
 PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
+PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
@@ -241,11 +240,14 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 plugindir = ${pkglibdir}/plugins
+
+#LEMON_LIBS = -llemon_parser
+#LEMON_CFLAGS = -L/usr/local/lib
 plugin_LTLIBRARIES = libproxy.la
 libproxy_la_LDFLAGS = -export-dynamic -no-undefined -avoid-version -dynamic
 libproxy_la_SOURCES = proxy-plugin.c
-libproxy_la_LIBADD = $(EVENT_LIBS) $(GLIB_LIBS) $(GMODULE_LIBS) $(MYSQL_LIBS) $(top_builddir)/src/libmysql-proxy.la $(top_builddir)/src/libsql-tokenizer.la
-libproxy_la_CPPFLAGS = $(MYSQL_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS) -I$(top_srcdir)/src/
+libproxy_la_LIBADD = $(MYSQL_LIBS) $(EVENT_LIBS) $(GLIB_LIBS) $(GMODULE_LIBS) $(top_builddir)/src/libmysql-proxy.la 
+libproxy_la_CPPFLAGS = $(MYSQL_CFLAGS) $(MYSQL_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS) -I$(top_srcdir)/src/
 noinst_HEADERS = proxy-plugin.h
 EXTRA_DIST = CMakeLists.txt
 all: all-am

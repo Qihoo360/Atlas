@@ -54,10 +54,7 @@ subdir = src
 DIST_COMMON = $(include_HEADERS) $(noinst_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in sql-tokenizer.c
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/sed.m4 $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -159,6 +156,7 @@ am_libmysql_proxy_la_OBJECTS = libmysql_proxy_la-network-mysqld.lo \
 	libmysql_proxy_la-network-injection-lua.lo \
 	libmysql_proxy_la-network-backend.lo \
 	libmysql_proxy_la-network-backend-lua.lo \
+	libmysql_proxy_la-chassis-sharding.lo \
 	libmysql_proxy_la-lua-env.lo
 nodist_libmysql_proxy_la_OBJECTS =
 libmysql_proxy_la_OBJECTS = $(am_libmysql_proxy_la_OBJECTS) \
@@ -316,6 +314,7 @@ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
 PACKAGE_NAME = @PACKAGE_NAME@
 PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
+PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
@@ -346,7 +345,6 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 builddir = @builddir@
-confdir = @confdir@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
@@ -365,7 +363,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-logdir = @logdir@
 lt_ECHO = @lt_ECHO@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
@@ -436,7 +433,7 @@ libmysql_chassis_glibext_la_SOURCES = \
 	glib-ext-ref.c
 
 libmysql_chassis_glibext_la_LDFLAGS = -export-dynamic -no-undefined -dynamic
-libmysql_chassis_glibext_la_CPPFLAGS = $(MYSQL_CFLAGS) $(GLIB_CFLAGS) $(GMODULE_CFLAGS)
+libmysql_chassis_glibext_la_CPPFLAGS = $(MYSQL_CFLAGS) $(GLIB_CFLAGS) $(GMODULE_CFLAGS) -ggdb
 libmysql_chassis_glibext_la_LIBADD = $(GLIB_LIBS)
 libmysql_chassis_timing_la_SOURCES = \
 	chassis-timings.c \
@@ -445,7 +442,7 @@ libmysql_chassis_timing_la_SOURCES = \
 
 libmysql_chassis_timing_la_LDFLAGS = -export-dynamic -no-undefined -dynamic
 libmysql_chassis_timing_la_CPPFLAGS = $(MYSQL_CFLAGS) $(GLIB_CFLAGS) \
-	$(LUA_CFLAGS) $(GMODULE_CFLAGS) $(am__append_1)
+	$(LUA_CFLAGS) $(GMODULE_CFLAGS) -ggdb $(am__append_1)
 libmysql_chassis_timing_la_LIBADD = $(GLIB_LIBS) libmysql-chassis-glibext.la
 libsql_tokenizer_la_SOURCES = \
 	../lib/sql-tokenizer-keywords.c \
@@ -483,8 +480,8 @@ libmysql_chassis_la_SOURCES = \
 	chassis-win32-service.c
 
 libmysql_chassis_la_LDFLAGS = -export-dynamic -no-undefined -dynamic
-libmysql_chassis_la_CPPFLAGS = $(MYSQL_CFLAGS) $(EVENT_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS) $(GTHREAD_CFLAGS)
-libmysql_chassis_la_LIBADD = $(EVENT_LIBS)   $(GLIB_LIBS)   $(LUA_LIBS) $(GMODULE_LIBS) $(GTHREAD_LIBS) libmysql-chassis-timing.la libmysql-chassis-glibext.la
+libmysql_chassis_la_CPPFLAGS = $(MYSQL_CFLAGS) $(EVENT_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS) $(GTHREAD_CFLAGS) -ggdb
+libmysql_chassis_la_LIBADD = $(EVENT_LIBS)   $(GLIB_LIBS)   $(LUA_LIBS) $(GMODULE_LIBS) $(GTHREAD_LIBS) libmysql-chassis-timing.la libmysql-chassis-glibext.la 
 libmysql_proxy_la_SOURCES = \
 	network-mysqld.c \
 	network-mysqld-lua.c \
@@ -505,10 +502,11 @@ libmysql_proxy_la_SOURCES = \
 	network-injection-lua.c \
 	network-backend.c \
 	network-backend-lua.c \
+	chassis-sharding.c \
 	lua-env.c
 
 libmysql_proxy_la_LDFLAGS = -export-dynamic -no-undefined -dynamic
-libmysql_proxy_la_CPPFLAGS = $(MYSQL_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS)
+libmysql_proxy_la_CPPFLAGS = $(MYSQL_CFLAGS) $(GLIB_CFLAGS) $(LUA_CFLAGS) $(GMODULE_CFLAGS) -ggdb
 libmysql_proxy_la_LIBADD = $(EVENT_LIBS) $(GLIB_LIBS) $(GMODULE_LIBS) \
 	libmysql-chassis.la libmysql-chassis-timing.la \
 	libmysql-chassis-glibext.la $(am__append_3)
@@ -517,6 +515,7 @@ noinst_HEADERS = \
 
 include_HEADERS = \
 	network-mysqld.h \
+	chassis-sharding.h \
 	network-mysqld-lua.h \
 	network-mysqld-proto.h \
 	network-mysqld-binlog.h \
@@ -815,6 +814,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_chassis_timing_la-chassis-gtimeval.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_chassis_timing_la-chassis-timings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_chassis_timing_la-my_rdtsc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_proxy_la-chassis-sharding.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_proxy_la-lua-env.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_proxy_la-network-address-lua.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmysql_proxy_la-network-address.Plo@am__quote@
@@ -1145,6 +1145,13 @@ libmysql_proxy_la-network-backend-lua.lo: network-backend-lua.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmysql_proxy_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmysql_proxy_la-network-backend-lua.lo `test -f 'network-backend-lua.c' || echo '$(srcdir)/'`network-backend-lua.c
 
+libmysql_proxy_la-chassis-sharding.lo: chassis-sharding.c
+@am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmysql_proxy_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmysql_proxy_la-chassis-sharding.lo -MD -MP -MF $(DEPDIR)/libmysql_proxy_la-chassis-sharding.Tpo -c -o libmysql_proxy_la-chassis-sharding.lo `test -f 'chassis-sharding.c' || echo '$(srcdir)/'`chassis-sharding.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/libmysql_proxy_la-chassis-sharding.Tpo $(DEPDIR)/libmysql_proxy_la-chassis-sharding.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='chassis-sharding.c' object='libmysql_proxy_la-chassis-sharding.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmysql_proxy_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmysql_proxy_la-chassis-sharding.lo `test -f 'chassis-sharding.c' || echo '$(srcdir)/'`chassis-sharding.c
+
 libmysql_proxy_la-lua-env.lo: lua-env.c
 @am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmysql_proxy_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmysql_proxy_la-lua-env.lo -MD -MP -MF $(DEPDIR)/libmysql_proxy_la-lua-env.Tpo -c -o libmysql_proxy_la-lua-env.lo `test -f 'lua-env.c' || echo '$(srcdir)/'`lua-env.c
 @am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/libmysql_proxy_la-lua-env.Tpo $(DEPDIR)/libmysql_proxy_la-lua-env.Plo
@@ -1366,13 +1373,11 @@ all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 install-binPROGRAMS: install-libLTLIBRARIES
 
 installdirs:
-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(confdir)" "$(DESTDIR)$(logdir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(includedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-installscript:
-	cd $(top_srcdir)/script;make;cp -f encrypt mysql-proxyd "$(DESTDIR)$(bindir)"
 install: $(BUILT_SOURCES)
-	$(MAKE) $(AM_MAKEFLAGS) install-am installdirs installscript
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -1405,10 +1410,7 @@ clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
 	clean-libexecPROGRAMS clean-libtool clean-noinstPROGRAMS \
-	mostlyclean-am clean-script
-
-clean-script:
-	cd $(top_srcdir)/script;make clean
+	mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)

@@ -35,15 +35,18 @@
 #include "network-backend-lua.h"
 #include "network-address-lua.h"
 #include "network-mysqld-lua.h"
+#include "chassis-mainloop.h"
+#include "chassis-sharding.h"
 
+extern chassis *srv;
 /**
  * get the info about a backend
  *
  * proxy.backend[0].
  *   connected_clients => clients using this backend
  *   address           => ip:port or unix-path of to the backend
- *   state             => int(BACKEND_STATE_UP|BACKEND_STATE_DOWN) 
- *   type              => int(BACKEND_TYPE_RW|BACKEND_TYPE_RO) 
+ *   state             => int(BACKEND_STATE_UP|BACKEND_STATE_DOWN)
+ *   type              => int(BACKEND_TYPE_RW|BACKEND_TYPE_RO)
  *
  * @return nil or requested information
  * @see backend_state_t backend_type_t
@@ -110,6 +113,67 @@ int network_backend_lua_getmetatable(lua_State *L) {
 	return proxy_getmetatable(L, methods);
 }
 
+static int proxy_dbgroup_get(lua_State *L) {
+	db_group_t *db_group = *(db_group_t **)luaL_checkself(L);
+	gsize keysize = 0;
+	const char *key = luaL_checklstring(L, 2, &keysize);
+
+	if (strleq(key, keysize, C("group_id"))) {
+		lua_pushinteger(L, db_group->group_id);
+	} else if (strleq(key, keysize, C("bs"))) {
+        network_backends_t **backends_p = lua_newuserdata(L, sizeof(network_backends_t*));
+        *backends_p = db_group->bs;
+        network_backends_lua_getmetatable(L);
+        lua_setmetatable(L, -2);
+	} else {
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
+int network_dbgroup_lua_getmetatable(lua_State *L) {
+	static const struct luaL_reg methods[] = {
+		{ "__index", proxy_dbgroup_get },
+//		{ "__newindex", proxy_dbgroup_set },
+		{ NULL, NULL },
+	};
+
+	return proxy_getmetatable(L, methods);
+}
+
+int proxy_dbgroups_get(lua_State *L) {
+	db_group_t *db_group;
+	db_group_t **db_group_p;
+
+	GPtrArray *db_group_array = *(GPtrArray **)luaL_checkself(L);
+	int db_group_ndx = luaL_checkinteger(L, 2) - 1; /** lua is indexes from 1, C from 0 */
+
+    db_group = (db_group_t*)(g_ptr_array_index(db_group_array, db_group_ndx));
+	db_group_p = lua_newuserdata(L, sizeof(db_group_t*));
+	*db_group_p = db_group;
+
+	network_dbgroup_lua_getmetatable(L);
+	lua_setmetatable(L, -2);
+
+	return 1;
+}
+
+int proxy_dbgroups_len(lua_State *L) {
+	GPtrArray *db_group_array = *(GPtrArray **)luaL_checkself(L);
+	lua_pushinteger(L, db_group_array->len);
+	return 1;
+}
+
+int network_dbgroups_lua_getmetatable(lua_State *L) {
+	static const struct luaL_reg methods[] = {
+		{ "__index", proxy_dbgroups_get },
+		{ "__len", proxy_dbgroups_len },
+		{ NULL, NULL },
+	};
+
+    return proxy_getmetatable(L, methods);
+}
 /**
  * get proxy.global.backends[ndx]
  *
@@ -119,12 +183,12 @@ int network_backend_lua_getmetatable(lua_State *L) {
  * @see proxy_backend_get
  */
 static int proxy_backends_get(lua_State *L) {
-	network_backend_t *backend; 
+	network_backend_t *backend;
 	network_backend_t **backend_p;
 
 	network_backends_t *bs = *(network_backends_t **)luaL_checkself(L);
 	int backend_ndx = luaL_checkinteger(L, 2) - 1; /** lua is indexes from 1, C from 0 */
-	
+
 	/* check that we are in range for a _int_ */
 	if (NULL == (backend = network_backends_get(bs, backend_ndx))) {
 		lua_pushnil(L);
@@ -177,6 +241,41 @@ static int proxy_backends_set(lua_State *L) {
 		gchar *address = g_strdup(lua_tostring(L, -1));
 		network_backends_add(bs, address, BACKEND_TYPE_RW);
 		g_free(address);
+	} else if (strleq(key, keysize, C("addgmaster"))) {
+		gchar *address = g_strdup(lua_tostring(L, -1));
+        gchar **vec = g_strsplit(address, " ", 2);
+        chassis_plugin *p = srv->modules->pdata[1];/*proxy plugin*/
+        chassis_plugin_config *config = p->config;
+        if(vec && vec[0] && vec[1]) {
+            gint db_group_ndx = atoi(vec[0]);
+            db_group_t *db_group = (db_group_t*)(g_ptr_array_index(config->db_groups, db_group_ndx));
+            network_backends_add(db_group->bs, vec[1], BACKEND_TYPE_RW);
+        }
+		g_free(address);
+	} else if (strleq(key, keysize, C("addgslave"))) {
+		gchar *address = g_strdup(lua_tostring(L, -1));
+        gchar **vec = g_strsplit(address, " ", 2);
+        chassis_plugin *p = srv->modules->pdata[1];/*proxy plugin*/
+        chassis_plugin_config *config = p->config;
+        if(vec && vec[0] && vec[1]) {
+            gint db_group_ndx = atoi(vec[0]);
+            db_group_t *db_group = (db_group_t*)(g_ptr_array_index(config->db_groups, db_group_ndx));
+            network_backends_add(db_group->bs, vec[1], BACKEND_TYPE_RO);
+        }
+		g_free(address);
+        g_strfreev(vec);
+	} else if (strleq(key, keysize, C("removegbackend"))) {
+		gchar *group_backend = g_strdup(lua_tostring(L, -1));
+        gchar **vec = g_strsplit(group_backend, " ", 2);
+        chassis_plugin *p = srv->modules->pdata[1];/*proxy plugin*/
+        chassis_plugin_config *config = p->config;
+        if(vec && vec[0] && vec[1]) {
+            gint db_group_ndx = atoi(vec[0]);
+            db_group_t *db_group = (db_group_t*)(g_ptr_array_index(config->db_groups, db_group_ndx));
+            network_backends_remove(db_group->bs, atoi(vec[1]) - 1);
+        }
+        g_strfreev(vec);
+		g_free(group_backend);
 	} else if (strleq(key, keysize, C("removebackend"))) {
 		network_backends_remove(bs, lua_tointeger(L, -1));
 	} else if (strleq(key, keysize, C("addclient"))) {
@@ -301,14 +400,13 @@ int network_backends_lua_getmetatable(lua_State *L) {
 }
 
 int network_clients_lua_getmetatable(lua_State *L) {
-	static const struct luaL_reg methods[] = {
-		{ "__index", proxy_clients_get },
-		{ "__len", proxy_clients_len },
-		{ "__call", proxy_clients_exist },
-		{ NULL, NULL },
-	};
-
-	return proxy_getmetatable(L, methods);
+    static const struct luaL_reg methods[] = {
+        { "__index", proxy_clients_get },
+        { "__len", proxy_clients_len },
+        { "__call", proxy_clients_exist },
+        { NULL, NULL },
+    };
+    return proxy_getmetatable(L, methods);
 }
 
 int network_pwds_lua_getmetatable(lua_State *L) {

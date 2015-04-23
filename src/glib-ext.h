@@ -47,4 +47,6 @@ CHASSIS_API void ge_gtimeval_diff(GTimeVal *old, GTimeVal *new, gint64 *delay);
 CHASSIS_API GString *g_string_assign_len(GString *s, const char *, gsize );
 CHASSIS_API void g_debug_hexdump(const char *msg, const void *s, size_t len);
 
+// below is added by wink at 2015-1-5
+CHASSIS_API GArray* g_array_unique_append_val(GArray *array, gconstpointer value, GCompareFunc compare_func);
 #endif

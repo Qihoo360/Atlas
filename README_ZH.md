@@ -42,6 +42,8 @@ Atlas是由 Qihoo 360公司Web平台部基础架构团队开发维护的一个�
 
 [7.Atlas功能特点FAQ](https://github.com/Qihoo360/Atlas/wiki/Atlas功能特点FAQ)
 
+[8.Atlas Sharding](https://github.com/winkyao/Atlas/wiki/Atlas-Sharding)
+
 ###四、Atlas的需求及Bug反馈方式
 
 如果用户在实际的应用场景中对Atlas有新的功能需求，或者在使用Atlas的过程中发现了bug，欢迎用户发邮件至zhuchao[AT]360.cn，与我们取得联系，我们将及时回复。另外有热心网友建立了QQ群326544838，开发者也已经加入，方便讨论。

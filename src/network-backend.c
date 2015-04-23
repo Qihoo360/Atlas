@@ -18,7 +18,7 @@
 
  $%ENDLICENSE%$ */
 
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <string.h>
 #include <openssl/evp.h>
 #include <glib.h>
@@ -26,8 +26,12 @@
 #include "network-mysqld-packet.h"
 #include "network-backend.h"
 #include "chassis-plugin.h"
+#include "chassis-sharding.h"
+#include "network-conn-pool-lua.h"
+#include "chassis-mainloop.h"
 #include "glib-ext.h"
 
+extern chassis *srv;
 #define C(x) x, sizeof(x) - 1
 #define S(x) x->str, x->len
 
@@ -87,7 +91,7 @@ g_wrr_poll *g_wrr_poll_new() {
     global_wrr->max_weight = 0;
     global_wrr->cur_weight = 0;
     global_wrr->next_ndx = 0;
-    
+
     return global_wrr;
 }
 
@@ -103,7 +107,7 @@ void network_backends_free(network_backends_t *bs) {
 	g_mutex_lock(bs->backends_mutex);	/*remove lock*/
 	for (i = 0; i < bs->backends->len; i++) {
 		network_backend_t *backend = bs->backends->pdata[i];
-		
+
 		network_backend_free(backend);
 	}
 	g_mutex_unlock(bs->backends_mutex);	/*remove lock*/
@@ -118,6 +122,20 @@ void network_backends_free(network_backends_t *bs) {
 	g_ptr_array_free(bs->raw_pwds, TRUE);
 
 	g_free(bs);
+}
+
+int network_group_backends_remove(network_backends_t *bs, gint db_group_index, guint index) {
+    if(db_group_index == -1) {
+        network_backends_remove(bs, index);
+    }else {
+        chassis_plugin *p = srv->modules->pdata[1];/*proxy plugin*/
+        chassis_plugin_config *config = p->config;
+        db_group_t *db_group = (db_group_t*)(g_ptr_array_index(config->db_groups, db_group_index));
+        if(db_group != NULL) {
+            network_backends_remove(db_group->bs, index);
+        }
+    }
+    return 0;
 }
 
 int network_backends_remove(network_backends_t *bs, guint index) {
@@ -351,6 +369,70 @@ void append_key(guint *key, guint *value, GString *str) {
 	}
 }
 
+int network_dbgroups_save_config(GKeyFile* keyfile, chassis *srv) {
+    int i;
+    chassis_plugin *p = srv->modules->pdata[1];/*proxy plugin*/
+    chassis_plugin_config *config = p->config;
+    for(i = 0; i < config->db_groups->len; i++) {
+        db_group_t *db_group = (db_group_t*)(g_ptr_array_index(config->db_groups, i));
+        if(db_group != NULL) {
+            GString *group_name = g_string_new("group-");
+            g_string_append_printf(group_name, "%d", db_group->group_id);
+            network_gbackends_save_config(keyfile, db_group->bs, group_name->str);
+            g_string_free(group_name, TRUE);
+        }
+    }
+    return 0;
+}
+
+int network_gbackends_save_config(GKeyFile* keyfile, network_backends_t *bs, gchar* group_name) {
+    int i, len, first_append_master = 1, first_append_slave = 1;
+    network_backend_t *backend;
+    GString *master, *slave;
+
+    master = g_string_new(NULL);
+    slave = g_string_new(NULL);
+
+    g_mutex_lock(bs->backends_mutex);
+    len = bs->backends->len;
+    for (i = 0; i < len; i++) {
+        backend = g_ptr_array_index(bs->backends, i);
+        if (backend->type == BACKEND_TYPE_RW) {
+            if (first_append_master) {
+                g_string_append(master, backend->addr->name->str);
+                first_append_master = 0;
+            } else {
+                g_string_append_c(master, ',');
+                g_string_append(master, backend->addr->name->str);
+            }
+        } else if (backend->type == BACKEND_TYPE_RO) {
+            if (first_append_slave) {
+                g_string_append(slave, backend->addr->name->str);
+                first_append_slave = 0;
+            } else {
+                g_string_append_c(slave, ',');
+                g_string_append(slave, backend->addr->name->str);
+            }
+        }
+    }
+    g_mutex_unlock(bs->backends_mutex);
+
+    if (master->len != 0)
+        g_key_file_set_string(keyfile, group_name, "proxy-backend-addresses", master->str);
+    else
+        g_key_file_set_string(keyfile, group_name, "proxy-backend-addresses", "");
+
+    if (slave->len != 0)
+        g_key_file_set_string(keyfile, group_name, "proxy-read-only-backend-addresses", slave->str);
+    else
+        g_key_file_set_string(keyfile, group_name, "proxy-read-only-backend-addresses", "");
+
+    g_string_free(master, TRUE);
+    g_string_free(slave, TRUE);
+
+    return 0;
+}
+
 int network_backends_save(network_backends_t *bs) {
 	GKeyFile *keyfile = g_key_file_new();
 	g_key_file_set_list_separator(keyfile, ',');
@@ -418,7 +500,7 @@ int network_backends_save(network_backends_t *bs) {
 		g_key_file_set_value(keyfile, "mysql-proxy", "pwds", "");
 	}
 	g_string_free(pwds, TRUE);
-
+    network_dbgroups_save_config(keyfile, srv);
 	gsize file_size = 0;
 	gchar *file_buf = g_key_file_to_data(keyfile, &file_size, NULL);
 	if (FALSE == g_file_set_contents(bs->default_file, file_buf, file_size, &gerr)) {
@@ -497,7 +579,7 @@ int network_backends_add(network_backends_t *bs, /* const */ gchar *address, bac
 network_backend_t *network_backends_get(network_backends_t *bs, guint ndx) {
 	if (ndx >= network_backends_count(bs)) return NULL;
 
-	/* FIXME: shouldn't we copy the backend or add ref-counting ? */	
+	/* FIXME: shouldn't we copy the backend or add ref-counting ? */
 	return bs->backends->pdata[ndx];
 }
 

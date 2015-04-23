@@ -30,6 +30,21 @@
 
 #include "network-exports.h"
 
+typedef enum {
+	INJECTION_ORIGINAL_SQL = 1,
+	INJECTION_INIT_DB,
+	INJECTION_SET_CHARACTER_SET_CLIENT_SQL,
+	INJECTION_SET_CHARACTER_SET_RESULTS_SQL,
+	INJECTION_SET_CHARACTER_SET_CONNECTION_SQL,
+	INJECTION_MODIFY_USER_SQL,
+	INJECTION_READ_SQL,
+	INJECTION_WRITE_SQL,
+    INJECTION_SHARDING_WRITE_SQL,
+    INJECTION_SHARDING_READ_SQL,
+    INJECTION_TRANS_BEGIN_SQL,
+    INJECTION_TRANS_FINISH_SQL, // include commit and rollback
+}injection_id_t;
+
 typedef struct {
 	/**
 	 * the content of the OK packet 
@@ -80,6 +95,7 @@ NETWORK_API void network_injection_queue_reset(network_injection_queue *q);
 NETWORK_API void network_injection_queue_prepend(network_injection_queue *q, injection *inj);
 NETWORK_API void network_injection_queue_append(network_injection_queue *q, injection *inj);
 NETWORK_API guint network_injection_queue_len(network_injection_queue *q);
+NETWORK_API injection* network_injection_queue_peek_head(network_injection_queue *q);
 
 /**
  * parsed result set
@@ -101,6 +117,7 @@ typedef struct {
 NETWORK_API injection *injection_new(int id, GString *query);
 NETWORK_API void injection_free(injection *i);
 
+NETWORK_API void proxy_resultset_init1(proxy_resultset_t* resultset, injection* inj);
 NETWORK_API proxy_resultset_t *proxy_resultset_init() G_GNUC_DEPRECATED;
 NETWORK_API proxy_resultset_t *proxy_resultset_new();
 NETWORK_API void proxy_resultset_free(proxy_resultset_t *res);

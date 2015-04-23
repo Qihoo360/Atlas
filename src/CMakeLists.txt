@@ -17,6 +17,7 @@
 # 02110-1301  USA
 # $%ENDLICENSE%$
 
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
 INCLUDE_DIRECTORIES(${PROJECT_BINARY_DIR}) # for config.h
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -35,7 +36,26 @@ LINK_DIRECTORIES(${EVENT_LIBRARY_DIRS})
 STRING(REPLACE "." "" SHARED_LIBRARY_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
 ADD_DEFINITIONS(-DSHARED_LIBRARY_SUFFIX="${SHARED_LIBRARY_SUFFIX}")
 
-SET(chassis_sources 
+SET(chassis_sources
+	chassis-sharding.c
+	network-conn-pool.c
+	network_mysqld_type.c
+	network-queue.c
+	network-socket.c
+	network-address.c
+	network_mysqld_proto_binary.c
+    network-mysqld-packet.c	
+	network-backend.c
+	network-mysqld.c
+    network-injection.c
+    network-mysqld-lua.c
+    network-conn-pool-lua.c
+    network-backend-lua.c
+    network-socket-lua.c
+    network-address-lua.c
+    lua-env.c
+    network-injection-lua.c
+	network-mysqld-proto.c # above is added by wink
 	lua-load-factory.c
 	lua-scope.c
 	chassis-plugin.c
@@ -100,10 +120,17 @@ IF(WIN32)
 	SET(WINSOCK_LIBRARIES ws2_32)
 ENDIF()
 
+# add by wink, I'll remove these ugly syntaxs when I am familiar with cmake
 TARGET_LINK_LIBRARIES(mysql-chassis-glibext
 	${GLIB_LIBRARIES} 
 	${GMODULE_LIBRARIES} 
-	${GTHREAD_LIBRARIES} 
+	${GTHREAD_LIBRARIES}
+	jemalloc
+	m
+	dl
+	crypto
+	jemalloc
+	lua
 )
 
 TARGET_LINK_LIBRARIES(mysql-chassis-timing

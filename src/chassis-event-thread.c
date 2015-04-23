@@ -252,3 +252,8 @@ network_connection_pool* chassis_event_thread_pool(network_backend_t* backend) {
 	guint index = GPOINTER_TO_UINT(g_private_get(&tls_index));
 	return g_ptr_array_index(backend->pools, index);
 }
+
+CHASSIS_API void* chassis_thread_lemon_parse_obj(chassis* chas) {
+	guint index = GPOINTER_TO_UINT(g_private_get(&tls_index));
+	return g_ptr_array_index(chas->lemon_parse_objs, index);
+}

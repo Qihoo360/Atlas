@@ -138,6 +138,16 @@ typedef struct {
 	 * Called when MySQL Proxy receives a result set from the server.
 	 */
 	NETWORK_MYSQLD_PLUGIN_FUNC(con_read_query_result);
+
+	/**
+	 * Called when MySQL Proxy receives a result set from the dbgroup.
+	 */
+	NETWORK_MYSQLD_PLUGIN_FUNC(con_sharding_read_query_result);
+
+	/**
+	 * Called when MySQL Proxy send query result to client
+	 */
+	NETWORK_MYSQLD_PLUGIN_FUNC(con_sharding_send_query_result);
 	/**
 	 * Called when MySQL Proxy sends a result set to the client.
 	 * 
@@ -224,7 +234,14 @@ typedef enum {
 	CON_STATE_READ_LOCAL_INFILE_DATA = 18,
 	CON_STATE_SEND_LOCAL_INFILE_DATA = 19,
 	CON_STATE_READ_LOCAL_INFILE_RESULT = 20,
-	CON_STATE_SEND_LOCAL_INFILE_RESULT = 21
+	CON_STATE_SEND_LOCAL_INFILE_RESULT = 21,
+
+    /* handling the sharding states*/
+    CON_STATE_SHARDING_SEND_QUERY,
+    CON_STATE_SHARDING_READ_QUERY_RESULT,
+    CON_STATE_SHARDING_SEND_QUERY_RESULT,
+
+    CON_STATE_CLOSE_SHARDING_BACKEND,
 } network_mysqld_con_state_t;
 
 /**
@@ -240,6 +257,11 @@ typedef struct {
 	guint64 affected_rows;
 	guint16 warnings;
 } merge_res_t;
+
+// forward declare
+typedef struct sharding_context_t sharding_context_t;
+typedef struct sharding_dbgroup_context_t sharding_dbgroup_context_t;
+typedef struct trans_context_t trans_context_t;
 
 /**
  * Encapsulates the state and callback functions for a MySQL protocol-based connection to and from MySQL Proxy.
@@ -366,6 +388,14 @@ struct network_mysqld_con {
 	merge_res_t* merge_res;
 
 	GString* challenge;
+
+    /**
+     * sharding fields
+     */  
+    GHashTable* sharding_dbgroup_contexts;  /*GHashTable<dbgroup_id, sharding_dbgroup_context_t*>*/
+    sharding_context_t* sharding_context;
+    sharding_dbgroup_context_t* event_dbgroup_context;    // store current trigered event dbgroup_context
+    trans_context_t* trans_context;
 };
 
 

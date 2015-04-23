@@ -17,16 +17,16 @@
  02110-1301  USA
 
  $%ENDLICENSE%$ */
- 
+
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-/** 
+/**
  * @page page-plugin-proxy Proxy plugin
  *
- * The MySQL Proxy implements the MySQL Protocol in its own way. 
+ * The MySQL Proxy implements the MySQL Protocol in its own way.
  *
  *   -# connect @msc
  *   client, proxy, backend;
@@ -54,34 +54,34 @@
  * @endmsc
  *
  *   - network_mysqld_proxy_connection_init()
- *     -# registers the callbacks 
+ *     -# registers the callbacks
  *   - proxy_connect_server() (CON_STATE_CONNECT_SERVER)
  *     -# calls the connect_server() function in the lua script which might decide to
  *       -# send a handshake packet without contacting the backend server (CON_STATE_SEND_HANDSHAKE)
  *       -# closing the connection (CON_STATE_ERROR)
  *       -# picking a active connection from the connection pool
  *       -# pick a backend to authenticate against
- *       -# do nothing 
+ *       -# do nothing
  *     -# by default, pick a backend from the backend list on the backend with the least active connctions
  *     -# opens the connection to the backend with connect()
- *     -# when done CON_STATE_READ_HANDSHAKE 
+ *     -# when done CON_STATE_READ_HANDSHAKE
  *   - proxy_read_handshake() (CON_STATE_READ_HANDSHAKE)
- *     -# reads the handshake packet from the server 
+ *     -# reads the handshake packet from the server
  *   - proxy_read_auth() (CON_STATE_READ_AUTH)
- *     -# reads the auth packet from the client 
+ *     -# reads the auth packet from the client
  *   - proxy_read_auth_result() (CON_STATE_READ_AUTH_RESULT)
- *     -# reads the auth-result packet from the server 
+ *     -# reads the auth-result packet from the server
  *   - proxy_send_auth_result() (CON_STATE_SEND_AUTH_RESULT)
  *   - proxy_read_query() (CON_STATE_READ_QUERY)
- *     -# reads the query from the client 
+ *     -# reads the query from the client
  *   - proxy_read_query_result() (CON_STATE_READ_QUERY_RESULT)
- *     -# reads the query-result from the server 
+ *     -# reads the query-result from the server
  *   - proxy_send_query_result() (CON_STATE_SEND_QUERY_RESULT)
  *     -# called after the data is written to the client
  *     -# if scripts wants to close connections, goes to CON_STATE_ERROR
  *     -# if queries are in the injection queue, goes to CON_STATE_SEND_QUERY
  *     -# otherwise goes to CON_STATE_READ_QUERY
- *     -# does special handling for COM_BINLOG_DUMP (go to CON_STATE_READ_QUERY_RESULT) 
+ *     -# does special handling for COM_BINLOG_DUMP (go to CON_STATE_READ_QUERY_RESULT)
 
  */
 
@@ -129,6 +129,7 @@ typedef int socklen_t;
 
 #include <math.h>
 #include <openssl/evp.h>
+#include <lemon/sqliteInt.h>
 
 #include "network-mysqld.h"
 #include "network-mysqld-proto.h"
@@ -153,8 +154,9 @@ typedef int socklen_t;
 #include "chassis-timings.h"
 #include "chassis-gtimeval.h"
 
-#include "lib/sql-tokenizer.h"
+//#include "lib/sql-tokenizer.h"
 #include "chassis-event-thread.h"
+#include "chassis-sharding.h"
 
 #define C(x) x, sizeof(x) - 1
 #define S(x) x->str, x->len
@@ -193,354 +195,245 @@ SQL_LOG_TYPE sql_log_type = OFF;
 
 char* charset[64] = {NULL, "big5", NULL, NULL, NULL, NULL, NULL, NULL, "latin1", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "gb2312", NULL, NULL, NULL, "gbk", NULL, NULL, NULL, NULL, "utf8", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "utf8mb4", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "binary"};
 
-struct chassis_plugin_config {
-	gchar *address;                   /**< listening address of the proxy */
-
-	gchar **backend_addresses;        /**< read-write backends */
-	gchar **read_only_backend_addresses; /**< read-only  backends */
-
-	gint fix_bug_25371;               /**< suppress the second ERR packet of bug #25371 */
-
-	gint profiling;                   /**< skips the execution of the read_query() function */
-
-	gchar *lua_script;                /**< script to load at the start the connection */
-
-	gint pool_change_user;            /**< don't reset the connection, when a connection is taken from the pool
-					    - this safes a round-trip, but we also don't cleanup the connection
-					    - another name could be "fast-pool-connect", but that's too friendly
-					   */
-
-	gint start_proxy;
-
-	gchar **client_ips;
-	GHashTable *ip_table[2];
-	gint ip_table_index;
-
-	gchar **lvs_ips;
-	GHashTable *lvs_table;
-
-	gchar **tables;
-	GHashTable *dt_table;
-
-	gchar **pwds;
-	GHashTable *pwd_table[2];
-	gint pwd_table_index;
-
-	network_mysqld_con *listen_con;
-
-	FILE *sql_log;
-	gchar *sql_log_type;
-	gint sql_log_slow_ms;
-
-	gchar *charset;
-};
 
 chassis_plugin_config *config = NULL;
 
-guint get_table_index(GPtrArray* tokens, gint* d, gint* t) {
-	*d = *t = -1;
 
-	sql_token** ts = (sql_token**)(tokens->pdata);
-	guint len = tokens->len;
-	if (len <= 1) { return 0; }
+/**
+ * find the first split key column, only handle the first one
+ */
+void find_column_expr_inwhere(Expr *expr, gchar *split_column, Expr **column_expr) {
+    if (expr == NULL) return;
 
-	guint i = 1, j;
-	while (ts[i]->token_id == TK_COMMENT && ++i < len);
-	if (i >= len) { return 0; } // sql contains TK_COMMENT only.
+    if (expr->op == TK_EQ ) {
+        if (expr->pLeft != NULL && LEMON_TOKEN_STRING(expr->pLeft->op) &&
+            expr->pRight != NULL && expr->pRight->op == TK_INTEGER && 
+            strncasecmp(split_column, (const char*)expr->pLeft->token.z, expr->pLeft->token.n) == 0) 
+        {
+            *column_expr = expr;
+            return;
+        }
+    } else if (expr->op == TK_IN ) {
+        if (expr->pLeft != NULL && LEMON_TOKEN_STRING(expr->pLeft->op) && expr->pList != NULL && 
+                strncasecmp(split_column, (const char*)expr->pLeft->token.z, expr->pLeft->token.n) == 0) 
+        {
+            *column_expr = expr;
+            return;
+        }
+    }
 
-	sql_token_id token_id = ts[i]->token_id;
+    if (expr->pLeft != NULL) {
+         find_column_expr_inwhere(expr->pLeft, split_column, column_expr);
+         if (*column_expr != NULL) { return; }
+    }
 
-	if (token_id == TK_SQL_SELECT || token_id == TK_SQL_DELETE) {
-		for (; i < len; ++i) {
-			if (ts[i]->token_id == TK_SQL_FROM) {
-				for (j = i+1; j < len; ++j) {
-					if (ts[j]->token_id == TK_SQL_WHERE) break;
-
-					if (ts[j]->token_id == TK_LITERAL) {
-						if (j + 2 < len && ts[j+1]->token_id == TK_DOT) {
-							*d = j;
-							*t = j + 2;
-						} else {
-							*t = j;
-						}
-
-						break;
-					}
-				}
-
-				break;
-			}
-		}
-
-		return 1;
-	} else if (token_id == TK_SQL_UPDATE) {
-		for (; i < len; ++i) {
-			if (ts[i]->token_id == TK_SQL_SET) break;
-
-			if (ts[i]->token_id == TK_LITERAL) {
-				if (i + 2 < len && ts[i+1]->token_id == TK_DOT) {
-					*d = i;
-					*t = i + 2;
-				} else {
-					*t = i;
-				}
-
-				break;
-			}
-		}
-
-		return 2;
-	} else if (token_id == TK_SQL_INSERT || token_id == TK_SQL_REPLACE) {
-		for (; i < len; ++i) {
-			gchar* str = ts[i]->text->str;
-			if (strcasecmp(str, "VALUES") == 0 || strcasecmp(str, "VALUE") == 0) break;
-
-			sql_token_id token_id = ts[i]->token_id;
-			if (token_id == TK_LITERAL && i + 2 < len && ts[i+1]->token_id == TK_DOT) {
-				*d = i;
-				*t = i + 2;
-				break;
-			} else if (token_id == TK_LITERAL || token_id == TK_FUNCTION) {
-				if (i == len - 1) {
-					*t = i;
-					break;
-				} else {
-					str = ts[i+1]->text->str;
-					token_id = ts[i+1]->token_id;
-					if (strcasecmp(str, "VALUES") == 0 || strcasecmp(str, "VALUE") == 0 || token_id == TK_OBRACE || token_id == TK_SQL_SET) {
-						*t = i;
-						break;
-					}
-				}
-			}
-		}
-
-		return 3;
-	}
-
-	return 0;
+    if (expr->pRight != NULL) {
+        find_column_expr_inwhere(expr->pRight, split_column, column_expr);
+        if (*column_expr != NULL) { return; }
+    }
 }
 
-GArray* get_column_index(GPtrArray* tokens, gchar* table_name, gchar* column_name, guint sql_type, gint start) {
-	GArray* columns = g_array_new(FALSE, FALSE, sizeof(guint));
+typedef struct InsertValues{
+    int key_index;
+    ValuesList *values_list;
+    ExprList *set_list;
+}InsertValues;
 
-	sql_token** ts = (sql_token**)(tokens->pdata);
-	guint len = tokens->len;
-	guint i, j, k;
+void find_column_expr(Parse *parse_obj, gchar *split_column, Expr **column_expr, InsertValues **insert_values) {
+    int sqltype = parse_obj->parsed.array[0].sqltype;
+    if (sqltype == SQLTYPE_SELECT || sqltype == SQLTYPE_DELETE || sqltype == SQLTYPE_UPDATE) { // find where
+        Expr *where_expr = parse_get_where_expr(parse_obj);
+        if (where_expr == NULL || column_expr == NULL) return;
+        
+        find_column_expr_inwhere(where_expr, split_column, column_expr);
+    } else if (sqltype == SQLTYPE_INSERT || sqltype == SQLTYPE_REPLACE) {
+        if (insert_values == NULL) { return; }
+        
+        *insert_values = NULL;
+        Insert *insert_obj = parse_obj->parsed.array[0].result.insertObj;
+        int i = 0;
+        if (insert_obj->pValuesList) {
+            for (i = 0; i < insert_obj->pColumn->nId; i++) {
+                if (strcmp(split_column, insert_obj->pColumn->a[i].zName) == 0) {
+                    break;
+                }
+            }
 
-	if (sql_type == 1) {
-		for (i = start; i < len; ++i) {
-			if (ts[i]->token_id == TK_SQL_WHERE) {
-				for (j = i+1; j < len-2; ++j) {
-					if (ts[j]->token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0) {
-						if (ts[j+1]->token_id == TK_EQ) {
-							if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
-								k = j + 2;
-								g_array_append_val(columns, k);
-								break;
-							}
-						} else if (j + 3 < len && strcasecmp(ts[j+1]->text->str, "IN") == 0 && ts[j+2]->token_id == TK_OBRACE) {
-							k = j + 3;
-							g_array_append_val(columns, k);
-							while ((k += 2) < len && ts[k-1]->token_id != TK_CBRACE) {
-								g_array_append_val(columns, k);
-							}
-							break;
-						}
-					}
-				}
-				break;
-			}
-		}
-	} else if (sql_type == 2) {
-		for (i = start; i < len; ++i) {
-			if (ts[i]->token_id == TK_SQL_WHERE) {
-				for (j = i+1; j < len-2; ++j) {
-					if (ts[j]->token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0) {
-						if (ts[j+1]->token_id == TK_EQ) {
-							if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
-								k = j + 2;
-								g_array_append_val(columns, k);
-								break;
-							}
-						} else if (j + 3 < len && strcasecmp(ts[j+1]->text->str, "IN") == 0 && ts[j+2]->token_id == TK_OBRACE) {
-							k = j + 3;
-							g_array_append_val(columns, k);
-							while ((k += 2) < len && ts[k-1]->token_id != TK_CBRACE) {
-								g_array_append_val(columns, k);
-							}
-							break;
-						}
-					}
-				}
-				break;
-			}
-		}
-	} else if (sql_type == 3) {
-		sql_token_id token_id = ts[start]->token_id;
+            if (i == insert_obj->pColumn->nId) { return; } // no split_column
+        } else if (insert_obj->pSetList) {
+            for (i = 0; i < insert_obj->pSetList->nExpr; i++) {
+                if (strcmp(split_column, insert_obj->pSetList->a[i].zName) == 0) {
+                    break;
+                }
+            }
 
-		if (token_id == TK_SQL_SET) {
-			for (i = start+1; i < len-2; ++i) {
-				if (ts[i]->token_id == TK_LITERAL && strcasecmp(ts[i]->text->str, column_name) == 0) {
-					k = i + 2;
-					g_array_append_val(columns, k);
-					break;
-				}
-			}
-		} else {
-			k = 2;
-			if (token_id == TK_OBRACE) {
-				gint found = -1;
-				for (j = start+1; j < len; ++j) {
-					token_id = ts[j]->token_id;
-					if (token_id == TK_CBRACE) break;
-					if (token_id == TK_LITERAL && strcasecmp(ts[j]->text->str, column_name) == 0) {
-						if (ts[j-1]->token_id != TK_DOT || strcasecmp(ts[j-2]->text->str, table_name) == 0) {
-							found = j;
-							break;
-						}
-					}
-				}
-				k = found - start + 1;
-			}
-
-			for (i = start; i < len-1; ++i) {
-				gchar* str = ts[i]->text->str;
-				if ((strcasecmp(str, "VALUES") == 0 || strcasecmp(str, "VALUE") == 0) && ts[i+1]->token_id == TK_OBRACE) {
-					k += i;
-					if (k < len) g_array_append_val(columns, k);
-					break;
-				}
-			}
-		}
-	}
-
-	return columns;
+            if (i == insert_obj->pSetList->nExpr) { return; }
+        } else { 
+            return; 
+        }
+    
+        *insert_values = g_new0(InsertValues, 1);
+        (*insert_values)->key_index = i;
+        (*insert_values)->values_list = insert_obj->pValuesList; // values_list and set_list never be not null the same time.
+        (*insert_values)->set_list = insert_obj->pSetList;
+    }   
 }
 
-GPtrArray* combine_sql(GPtrArray* tokens, gint table, GArray* columns, guint num) {
-	GPtrArray* sqls = g_ptr_array_new();
+void rewrite_sql_from_in(parse_info_t *parse_info, Expr *column_expr, guint subtable_num, GPtrArray *sqls) {
+    char value[64] = {0};
+    char *orig_sql = parse_info->orig_sql;
+    char *orig_sql_end = orig_sql + parse_info->orig_sql_len;
+    Token table_token = parse_info->table_token;
+    char *str_after_table = (char*)table_token.z + table_token.n;
+    gchar op = COM_QUERY;
 
-	sql_token** ts = (sql_token**)(tokens->pdata);
-	guint len = tokens->len;
-	guint i;
+    if ( column_expr->pList->nExpr == 1) {
+        Expr *value_expr = column_expr->pList->a[0].pExpr;
+        dup_token2buff(value, sizeof(value), value_expr->token);
+        guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
+        GString *sql = g_string_new(&op);
+        g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
+                parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
 
-	if (columns->len == 1) {
-		GString* sql = g_string_new(&op);
+        g_ptr_array_add(sqls, sql);
+    } else if (column_expr->pList->nExpr > 1) {
+        GArray *multi_value[subtable_num];
+        int i;
+        for (i = 0; i < subtable_num; i++) { 
+            multi_value[i] = g_array_new(FALSE, FALSE, sizeof(guint));
+        }
 
-		if (ts[1]->token_id == TK_COMMENT) {
-			g_string_append_printf(sql, "/*%s*/", ts[1]->text->str);
-		} else {
-			g_string_append(sql, ts[1]->text->str);
-		}
+        for (i = 0; i < column_expr->pList->nExpr; i++) {
+            dup_token2buff(value, sizeof(value), column_expr->pList->a[i].pExpr->token);                     
+            guint column_value = atoi(value);
+            g_array_append_val(multi_value[column_value%subtable_num], column_value);
+        }
 
-		for (i = 2; i < len; ++i) {
-			sql_token_id token_id = ts[i]->token_id;
+        int j, k;
+        for (j = 0; j < subtable_num; i++) {
+            GString *tmp = g_string_new("IN(");
+            g_string_append_printf(tmp, "%u", g_array_index(multi_value[j], guint, 0));
 
-			if (token_id != TK_OBRACE) g_string_append_c(sql, ' '); 
+            for (k = 0; k < multi_value[j]->len; k++) {
+                g_string_append_printf(tmp, "%u", g_array_index(multi_value[j], guint, k));
+            }
+            g_string_append_c(tmp, ')');
 
-			if (i == table) {
-				g_string_append_printf(sql, "%s_%u", ts[i]->text->str, atoi(ts[g_array_index(columns, guint, 0)]->text->str) % num);
-			} else if (token_id == TK_STRING) {
-				g_string_append_printf(sql, "'%s'", ts[i]->text->str);
-			} else if (token_id == TK_COMMENT) {
-				g_string_append_printf(sql, "/*%s*/", ts[i]->text->str);
-			} else {
-				g_string_append(sql, ts[i]->text->str);
-			}
-		}
+            GString* sql = g_string_new(&op);
+            g_string_append_printf(sql, "%.*s%s_%u", (const char*)table_token.z - orig_sql, orig_sql, parse_info->table_name, j);
+            // append str before IN
+            g_string_append_printf(sql, "%.*s", (const char*)column_expr->span.z - str_after_table, str_after_table);
+            char *str_after_in = (char*)column_expr->span.z + column_expr->span.n;
+            g_string_append_printf(sql, "%s", tmp);
+            g_string_append_printf(sql, "%.*s", orig_sql_end - str_after_in, str_after_in);
 
-		g_ptr_array_add(sqls, sql);
-	} else {
-		GArray* mt[num];
-		for (i = 0; i < num; ++i) mt[i] = g_array_new(FALSE, FALSE, sizeof(guint));
+            g_ptr_array_add(sqls, sql);
+        }
 
-		guint clen = columns->len;
-		for (i = 0; i < clen; ++i) {
-			guint column_value = atoi(ts[g_array_index(columns, guint, i)]->text->str);
-			g_array_append_val(mt[column_value%num], column_value);
-		}
-
-		guint property_index   = g_array_index(columns, guint, 0) - 3;
-		guint start_skip_index = property_index + 1;
-		guint end_skip_index   = property_index + (clen + 1) * 2;
-
-		guint m;
-		for (m = 0; m < num; ++m) {
-			if (mt[m]->len > 0) {
-				GString* tmp = g_string_new(" IN(");
-				g_string_append_printf(tmp, "%u", g_array_index(mt[m], guint, 0));
-				guint k;
-				for (k = 1; k < mt[m]->len; ++k) {
-					g_string_append_printf(tmp, ",%u", g_array_index(mt[m], guint, k));
-				}
-				g_string_append_c(tmp, ')');
-
-				GString* sql = g_string_new(&op);
-				if (ts[1]->token_id == TK_COMMENT) {
-					g_string_append_printf(sql, "/*%s*/", ts[1]->text->str);
-				} else {
-					g_string_append(sql, ts[1]->text->str);
-				}
-				for (i = 2; i < len; ++i) {
-					if (i < start_skip_index || i > end_skip_index) {
-						if (ts[i]->token_id != TK_OBRACE) g_string_append_c(sql, ' ');
-
-						if (i == table) {
-							g_string_append_printf(sql, "%s_%u", ts[i]->text->str, m);
-						} else if (i == property_index) {
-							g_string_append_printf(sql, "%s%s", ts[i]->text->str, tmp->str);
-						} else if (ts[i]->token_id == TK_STRING) {
-							g_string_append_printf(sql, "'%s'", ts[i]->text->str);
-						} else if (ts[i]->token_id == TK_COMMENT) {
-							g_string_append_printf(sql, "/*%s*/", ts[i]->text->str);
-						} else {
-							g_string_append(sql, ts[i]->text->str);
-						}
-					}
-				}
-				g_string_free(tmp, TRUE);
-
-				g_ptr_array_add(sqls, sql);
-			}
-
-			g_array_free(mt[m], TRUE);
-		}
-	}
-
-	return sqls;
+        for (i = 0; i < subtable_num; i++) {
+            g_array_free(multi_value[i], TRUE);
+        }
+    }  
 }
 
-GPtrArray* sql_parse(network_mysqld_con* con, GPtrArray* tokens) {
-	//1. ½âÎö¿âÃûºÍ±íÃû
-	gint db, table;
-	guint sql_type = get_table_index(tokens, &db, &table);
-	if (table == -1) return NULL;
+void rewrite_sql_insert_sql(parse_info_t *parse_info, InsertValues *insert_values, guint subtable_num, GPtrArray *sqls, char **errmsg) {
+    char value[64] = {0};
+    char *orig_sql = parse_info->orig_sql;
+    char *orig_sql_end = orig_sql + parse_info->orig_sql_len;
+    Token table_token = parse_info->table_token;
+    char *str_after_table = (char*)table_token.z + table_token.n;
+    gchar op = COM_QUERY;
 
-	//2. ½âÎöÁÐ
+    if (insert_values->set_list) {
+        dup_token2buff(value, sizeof(value), insert_values->set_list->a[insert_values->key_index].pExpr->token);
+        guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
+        GString *sql = g_string_new(&op);
+        g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
+                parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+
+        g_ptr_array_add(sqls, sql);
+    } else if (insert_values->values_list) {
+        if (insert_values->values_list->nValues > 1) {
+            *errmsg = g_strdup("Proxy Warning - Not support insert multi values in sub-table yet!");
+        } else {
+            ExprList *exprlist = insert_values->values_list->a[0];
+            dup_token2buff(value, sizeof(value), exprlist->a[insert_values->key_index].pExpr->token);
+            guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
+            GString *sql = g_string_new(&op);
+            g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
+                    parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+
+            g_ptr_array_add(sqls, sql);
+        }          
+    }
+}
+
+void rewrite_sql_from_eq(parse_info_t *parse_info, Expr *column_expr, guint subtable_num, GPtrArray *sqls) {
+    char value[64] = {0};
+    char *orig_sql = parse_info->orig_sql;
+    char *orig_sql_end = orig_sql + parse_info->orig_sql_len;
+    Token table_token = parse_info->table_token;
+    char *str_after_table = (char*)table_token.z + table_token.n;
+    gchar op = COM_QUERY;
+
+    dup_token2buff(value, sizeof(value), column_expr->pRight->token);
+    guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
+    GString *sql = g_string_new(&op);
+    g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
+            parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+
+    g_ptr_array_add(sqls, sql);
+
+}
+
+// rewrite_sql is deprecated, and the code is without testing
+GPtrArray* rewrite_sql(parse_info_t *parse_info, gchar *split_column, guint subtable_num, char **errmsg) {
+    GPtrArray *sqls = NULL;
+    Expr *column_expr = NULL;
+    InsertValues *insert_values = NULL;
+
+    Parse *parse_obj = parse_info->parse_obj;
+    find_column_expr(parse_obj, split_column, &column_expr, &insert_values);
+
+    if (column_expr) {
+        sqls = g_ptr_array_new();
+        if (column_expr->op == TK_EQ) {
+            rewrite_sql_from_eq(parse_info, column_expr, subtable_num, sqls);
+        } else if (column_expr->op == TK_IN) {   
+            rewrite_sql_from_in(parse_info, column_expr, subtable_num, sqls);
+        }     
+    } else if (insert_values) {
+        sqls = g_ptr_array_new();
+        rewrite_sql_insert_sql(parse_info, insert_values, subtable_num, sqls, errmsg);
+    } 
+exit:
+    if (insert_values != NULL) { g_free(insert_values); }
+    if (*errmsg != NULL || (sqls != NULL && sqls->len == 0)) { 
+        g_ptr_array_free(sqls, TRUE); 
+        sqls = NULL;
+    }
+    return sqls;
+}
+
+GPtrArray* sql_parse(network_mysqld_con *con, parse_info_t *parse_info, char **errmsg) {
+	if (parse_info->table_name == NULL) return NULL;
+
 	gchar* table_name = NULL;
-	if (db == -1) {
-		table_name = g_strdup_printf("%s.%s", con->client->default_db->str, ((sql_token*)tokens->pdata[table])->text->str);
+	if (parse_info->db_name == NULL) {
+		table_name = g_strdup_printf("%s.%s", con->client->default_db->str, parse_info->table_name);
 	} else {
-		table_name = g_strdup_printf("%s.%s", ((sql_token*)tokens->pdata[db])->text->str, ((sql_token*)tokens->pdata[table])->text->str);
+		table_name = g_strdup_printf("%s.%s", parse_info->db_name, parse_info->table_name);
 	}
 
-	db_table_t* dt = g_hash_table_lookup(config->dt_table, table_name);
+	db_table_t* dt = g_hash_table_lookup(config->dt_table, table_name); 
 	if (dt == NULL) {
 		g_free(table_name);
 		return NULL;
 	}
-
-	GArray* columns = get_column_index(tokens, table_name, dt->column_name, sql_type, table+1);
+    
 	g_free(table_name);
-	if (columns->len == 0) {
-		g_array_free(columns, TRUE);
-		return NULL;
-	}
-
-	//3. Æ´½ÓSQL
-	GPtrArray* sqls = combine_sql(tokens, table, columns, dt->table_num);
-	g_array_free(columns, TRUE);
+    
+	GPtrArray* sqls = rewrite_sql(parse_info, dt->column_name, dt->table_num, errmsg);
 	return sqls;
 }
 
@@ -630,7 +523,7 @@ int wrr_ro(network_mysqld_con *con) {
 			if (cur_weight == 0) cur_weight = max_weight;
 		} else {
 			++next_ndx;
-		}   
+		}
 
 		if (ndx != -1) break;
 	}
@@ -666,7 +559,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_handshake(network_mysqld_con *
 	g_assert(lua_isfunction(L, -1));
 	lua_getfenv(L, -1);
 	g_assert(lua_istable(L, -1));
-	
+
 	lua_getfield_literal(L, -1, C("read_handshake"));
 	if (lua_isfunction(L, -1)) {
 		/* export
@@ -686,7 +579,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_handshake(network_mysqld_con *
 			}
 			lua_pop(L, 1);
 		}
-	
+
 		switch (ret) {
 		case PROXY_NO_DECISION:
 			break;
@@ -706,7 +599,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_handshake(network_mysqld_con *
 				 *
 				 * send a ERR packet
 				 */
-		
+
 				network_mysqld_con_send_error(con->client, C("(lua) handling proxy.response failed, check error-log"));
 			}
 
@@ -733,7 +626,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_handshake(network_mysqld_con *
  * parse the hand-shake packet from the server
  *
  *
- * @note the SSL and COMPRESS flags are disabled as we can't 
+ * @note the SSL and COMPRESS flags are disabled as we can't
  *       intercept or parse them.
  */
 NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_handshake) {
@@ -811,7 +704,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_handshake) {
 	default:
 		g_error("%s.%d: ...", __FILE__, __LINE__);
 		break;
-	} 
+	}
 
 	challenge_packet = g_string_sized_new(packet.data->len); /* the packet we generate will be likely as large as the old one. should save some reallocs */
 	network_mysqld_proto_append_auth_challenge(challenge_packet, challenge);
@@ -837,7 +730,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_auth(network_mysqld_con *con) 
 
 	/* call the lua script to pick a backend
 	   ignore the return code from network_mysqld_con_lua_register_callback, because we cannot do anything about it,
-	   it would always show up as ERROR 2013, which is not helpful.	
+	   it would always show up as ERROR 2013, which is not helpful.
 	*/
 	(void)network_mysqld_con_lua_register_callback(con, config->lua_script);
 
@@ -848,7 +741,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_auth(network_mysqld_con *con) 
 	g_assert(lua_isfunction(L, -1));
 	lua_getfenv(L, -1);
 	g_assert(lua_istable(L, -1));
-	
+
 	lua_getfield_literal(L, -1, C("read_auth"));
 	if (lua_isfunction(L, -1)) {
 
@@ -882,7 +775,7 @@ static network_mysqld_lua_stmt_ret proxy_lua_read_auth(network_mysqld_con *con) 
 				 *
 				 * send a ERR packet
 				 */
-		
+
 				network_mysqld_con_send_error(con->client, C("(lua) handling proxy.response failed, check error-log"));
 			}
 
@@ -1005,8 +898,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 	/* send the auth result to the client */
 	if (con->server->is_authed) {
 		/**
-		 * we injected a COM_CHANGE_USER above and have to correct to 
-		 * packet-id now 
+		 * we injected a COM_CHANGE_USER above and have to correct to
+		 * packet-id now
          * if config->pool_change_user is false, we don't inject a COM_CHANGE_USER and jump to send_auth_result directly,
          * will not reach here.
 		 */
@@ -1014,13 +907,13 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 	}
 
 	/**
-	 * copy the 
-	 * - default-db, 
+	 * copy the
+	 * - default-db,
      * - charset,
-	 * - username, 
+	 * - username,
 	 * - scrambed_password
 	 *
-	 * to the server-side 
+	 * to the server-side
 	 */
     g_string_assign_len(recv_sock->charset_client, S(send_sock->charset_client));
     g_string_assign_len(recv_sock->charset_connection, S(send_sock->charset_connection));
@@ -1036,18 +929,18 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 
 	/**
 	 * recv_sock still points to the old backend that
-	 * we received the packet from. 
+	 * we received the packet from.
 	 *
 	 * backend_ndx = 0 might have reset con->server
 	 */
 /*
 	switch (proxy_lua_read_auth_result(con)) {
 	case PROXY_SEND_RESULT:
-		 // we already have content in the send-sock 
+		 // we already have content in the send-sock
 		 // chunk->packet is not forwarded, free it
 
 		g_string_free(packet, TRUE);
-		
+
 		break;
 	case PROXY_NO_DECISION:
 		network_mysqld_queue_append_raw(
@@ -1075,7 +968,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 	 * we handled the packet on the server side, free it
 	 */
 	g_queue_delete_link(recv_sock->recv_queue->chunks, chunk);
-	
+
 	/* the auth phase is over
 	 *
 	 * reset the packet-id sequence
@@ -1088,14 +981,18 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_auth_result) {
 	return NETWORK_SOCKET_SUCCESS;
 }
 
-int rw_split(GPtrArray* tokens, network_mysqld_con* con) {
-	if (tokens->len <= 1) { return idle_rw(con); }
+int rw_split(Parse *parse_obj, network_mysqld_con* con) {
+    if (parse_obj == NULL) { return idle_rw(con); }
 
-	sql_token* first_token = tokens->pdata[1];
-	sql_token_id token_id = first_token->token_id;
-	if (token_id == TK_COMMENT && strcasecmp(first_token->text->str, "MASTER") == 0) return idle_rw(con);
+    TokenArray *tokens_array = &parse_obj->tokens;
+    if (tokens_array->curSize > 0) {
+        TokenItem *token_item = &tokens_array->array[0];
+        if (token_item->tokenType == TK_COMMENT && strncasecmp("/*MASTER*/", (const char*)token_item->token.z, token_item->token.n) == 0) {
+            return idle_rw(con);
+        }
+    }
 
-	if (tokens->len < 2 || g_hash_table_size(con->locks) > 0) return idle_rw(con);
+	if (g_hash_table_size(con->locks) > 0) return idle_rw(con);
 
 	return wrr_ro(con);
 }
@@ -1133,10 +1030,27 @@ void modify_user(network_mysqld_con* con) {
 	}
 }
 
+void inject_trans_begin_sql(network_mysqld_con* con, gboolean is_crud_sql) {
+    trans_context_t* trans_ctx = con->trans_context;
+    if (is_crud_sql == FALSE || trans_ctx->trans_stage != TRANS_STAGE_BEFORE_SEND_BEGIN) { return; }
+    g_assert(trans_ctx->is_default_dbgroup_in_trans == FALSE && trans_ctx->in_trans_dbgroup_ctx == NULL && 
+            trans_ctx->origin_begin_sql != NULL);
+    
+    injection* inj = injection_new(INJECTION_TRANS_BEGIN_SQL, trans_ctx->origin_begin_sql);
+    inj->resultset_is_needed = TRUE;
+    trans_ctx->origin_begin_sql = NULL;
+    
+    trans_ctx->trans_stage = TRANS_STAGE_SENDING_BEGIN;
+    network_mysqld_con_lua_t* st = (network_mysqld_con_lua_t*)con->plugin_con_state;
+    network_injection_queue_prepend(st->injected.queries, inj);
+}
+
 void modify_db(network_mysqld_con* con) {
 	char* default_db = con->client->default_db->str;
-
-	if (default_db != NULL && strcmp(default_db, "") != 0) {
+    
+	if (default_db != NULL && con->server && con->server->default_db && 
+            strcmp(default_db, con->server->default_db->str) != 0) 
+    {
 		char cmd = COM_INIT_DB;
 		GString* query = g_string_new_len(&cmd, 1);
 		g_string_append(query, default_db);
@@ -1147,53 +1061,45 @@ void modify_db(network_mysqld_con* con) {
 	}
 }
 
-void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
-	g_string_truncate(con->charset_client, 0);
-	g_string_truncate(con->charset_results, 0);
-	g_string_truncate(con->charset_connection, 0);
+void modify_charset(parse_info_t *parse_info, network_mysqld_con *con) {
+    if (parse_info->parse_obj == NULL) { return; }
 
-	if (con->server == NULL) return;
+    g_string_truncate(con->charset_client, 0);
+    g_string_truncate(con->charset_results, 0);
+    g_string_truncate(con->charset_connection, 0);
 
-	gboolean is_set_client     = FALSE;
-	gboolean is_set_results    = FALSE;
-	gboolean is_set_connection = FALSE;
+    if (con->server == NULL) return;
 
-	//1.¼ì²éµÚÒ»¸ö´ÊÊÇ²»ÊÇSET
-	if (tokens->len > 3) {
-		sql_token* token = tokens->pdata[1];
-		if (token->token_id == TK_SQL_SET) {
-			//2.¼ì²éµÚ¶þ¸ö´ÊÊÇ²»ÊÇNAMES»òCHARACTER_SET_CLIENT»òCHARACTER_SET_RESULTS»òCHARACTER_SET_CONNECTION
-			token = tokens->pdata[2];
-			char* str = token->text->str;
-			if (strcasecmp(str, "NAMES") == 0) {
-				is_set_client = is_set_results = is_set_connection = TRUE;
+    gboolean is_set_client = FALSE;
+    gboolean is_set_results = FALSE;
+    gboolean is_set_connection = FALSE;
 
-				str = ((sql_token*)(tokens->pdata[3]))->text->str;
-				g_string_assign(con->charset_client, str);
-				g_string_assign(con->charset_results, str);
-				g_string_assign(con->charset_connection, str);
-			} else if (tokens->len > 4 && ((sql_token*)(tokens->pdata[3]))->token_id == TK_EQ) {
-				if (strcasecmp(str, "CHARACTER_SET_RESULTS") == 0) {
-					is_set_results = TRUE;
+    Parse *parse_obj = parse_info->parse_obj;
+    ParsedResultItem *parsed_result = &parse_obj->parsed.array[0];
+    if (parsed_result->sqltype == SQLTYPE_SET_NAMES || parsed_result->sqltype == SQLTYPE_SET_CHARACTER_SET) {
+        SetStatement *set_obj = parsed_result->result.setObj;
+        is_set_client = is_set_results = is_set_connection = TRUE;
+        g_string_append_len(con->charset_client, (const char*)set_obj->value.z, set_obj->value.n);
+        g_string_append_len(con->charset_results, (const char*)set_obj->value.z, set_obj->value.n);
+        g_string_append_len(con->charset_connection, (const char*)set_obj->value.z, set_obj->value.n);
+    } else if (parsed_result->sqltype == SQLTYPE_SET) {
+        SetStatement *set_obj = parsed_result->result.setObj;
+        int i;
+        for (i = 0; i < set_obj->pSetList->nExpr; i++) {
+            Expr *value_expr = set_obj->pSetList->a[i].pExpr;
+            if (strcasecmp("CHARACTER_SET_RESULTS", set_obj->pSetList->a[i].zName) == 0) {
+                is_set_results = TRUE;
+                g_string_append_len(con->charset_results, (const char*)value_expr->token.z, value_expr->token.n);
+            } else if (strcasecmp("CHARACTER_SET_CLIENT", set_obj->pSetList->a[i].zName) == 0) {
+                is_set_client = TRUE;
+                g_string_append_len(con->charset_client, (const char*)value_expr->token.z, value_expr->token.n);
+            } else if (strcasecmp("CHARACTER_SET_CONNECTION", set_obj->pSetList->a[i].zName) == 0) {
+                is_set_connection = TRUE;
+                g_string_append_len(con->charset_connection, (const char*)value_expr->token.z, value_expr->token.n);
+            }
+        }
+    }
 
-					str = ((sql_token*)(tokens->pdata[4]))->text->str;
-					g_string_assign(con->charset_results, str);
-				} else if (strcasecmp(str, "CHARACTER_SET_CLIENT") == 0) {
-					is_set_client = TRUE;
-
-					str = ((sql_token*)(tokens->pdata[4]))->text->str;
-					g_string_assign(con->charset_client, str);
-				} else if (strcasecmp(str, "CHARACTER_SET_CONNECTION") == 0) {
-					is_set_connection = TRUE;
-
-					str = ((sql_token*)(tokens->pdata[4]))->text->str;
-					g_string_assign(con->charset_connection, str);
-				}
-			}
-		}
-	}
-
-	//3.¼ì²éclientºÍserverÁ½¶ËµÄ×Ö·û¼¯ÊÇ·ñÏàÍ¬
 	network_socket* client = con->client;
 	network_socket* server = con->server;
 	char cmd = COM_QUERY;
@@ -1231,81 +1137,535 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 	}
 }
 
-void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
+void check_flags(parse_info_t *parse_info, network_mysqld_con* con) {
+    Parse *parse_obj = parse_info->parse_obj;
 	con->is_in_select_calc_found_rows = FALSE;
+    if (parse_obj == NULL) { return; }
 
-	sql_token** ts = (sql_token**)(tokens->pdata);
-	guint len = tokens->len;
+    ParsedResultItem *parsed_item = &parse_obj->parsed.array[0];
+    if (parsed_item->sqltype == SQLTYPE_SELECT) {
+        Select *select_obj = parsed_item->result.selectObj;
+        if (select_obj->pEList) {
+            int i;
+            for (i = 0; i < select_obj->pEList->nExpr; i++) {
+                Expr *expr = select_obj->pEList->a[i].pExpr;
+                if (expr->op == TK_FUNCTION && strncasecmp("GET_LOCK", expr->token.z, expr->token.n) == 0) {
+                    ExprList *param_list = expr->pList;
+                    char key[128] = {0};
+                    dup_token2buff(key, sizeof(key), param_list->a[0].pExpr->token);
+                    if (!g_hash_table_lookup(con->locks, key)) g_hash_table_add(con->locks, g_strdup(key));
+                }
+            }
+        }
+    } else if (parsed_item->sqltype == SQLTYPE_SET) {
+        SetStatement *set_obj = parsed_item->result.setObj;
+        if (set_obj->pSetList) {
+            int i;
+            for (i = 0; i < set_obj->pSetList->nExpr; i++) {
+                Expr *expr = set_obj->pSetList->a[i].pExpr;
+                if (strcasecmp("AUTOCOMMIT", set_obj->pSetList->a[i].zName) == 0) {
+                    if (strncmp("0", (const char*)expr->token.z, expr->token.n) == 0) {
+                        con->is_not_autocommit = TRUE;
+                    } else if (strncmp("1", (const char*)expr->token.z, expr->token.n) == 0) {
+                        con->is_not_autocommit = FALSE;
+                    }
+                }
+            }
+        }
+    }
 
-	if (len > 2) {
-		if (ts[1]->token_id == TK_SQL_SELECT && strcasecmp(ts[2]->text->str, "GET_LOCK") == 0) {
-			gchar* key = ts[4]->text->str;
-			if (!g_hash_table_lookup(con->locks, key)) g_hash_table_add(con->locks, g_strdup(key));
-		}
+	/* guint i; */
+	/* for (i = 1; i < len; ++i) { */
+	/* 	sql_token* token = ts[i]; */
+	/* 	if (ts[i]->token_id == TK_SQL_SQL_CALC_FOUND_ROWS) { */
+	/* 		con->is_in_select_calc_found_rows = TRUE; */
+	/* 		break; */
+	/* 	} */
+	/* } */
+}
 
-		if (len > 4) {	//SET AUTOCOMMIT = {0 | 1}
-			if (ts[1]->token_id == TK_SQL_SET && ts[3]->token_id == TK_EQ) {
-				if (strcasecmp(ts[2]->text->str, "AUTOCOMMIT") == 0) {
-					char* str = ts[4]->text->str;
-					if (strcmp(str, "0") == 0) con->is_not_autocommit = TRUE;
-					else if (strcmp(str, "1") == 0) con->is_not_autocommit = FALSE;
+
+gboolean sql_is_write(Parse *parse_obj) {
+    if (parse_obj == NULL) { return TRUE; }
+    ParsedResultItem *parsed_result = &parse_obj->parsed.array[0];
+    
+    int sqltype = parsed_result->sqltype;
+    switch (sqltype) {
+        case SQLTYPE_SELECT:
+        case SQLTYPE_SET_NAMES:
+        case SQLTYPE_SET_CHARACTER_SET:
+        case SQLTYPE_SET:
+        case SQLTYPE_SHOW:
+            return FALSE;
+        default:
+            return TRUE;
+    }
+
+    return TRUE;
+}
+
+static network_socket_retval_t forwarding_sql_to_dbgroup(db_group_t *dbgroup_obj, GString* packets, network_mysqld_con *con, parse_info_t *parse_info) {
+    injection_id_t injection_id = parse_info->is_write_sql ? INJECTION_SHARDING_WRITE_SQL : INJECTION_SHARDING_READ_SQL;
+    injection* inj = injection_new(injection_id, packets);
+    inj->resultset_is_needed = TRUE;
+
+    sharding_dbgroup_context_t* dbgroup_context = sharding_lookup_dbgroup_context(con->sharding_dbgroup_contexts, dbgroup_obj->group_id);
+    sharding_reset_st(dbgroup_context->st);
+    network_injection_queue_append(dbgroup_context->st->injected.queries, inj);
+    //sharding_set_connection_flags(sql_tokens_param->sql_tokens, con);
+
+    network_backend_t* backend = NULL;
+    if (dbgroup_context->backend_sock == NULL) {
+
+        if (parse_info->is_write_sql) {
+            backend = sharding_get_rw_backend(dbgroup_obj->bs);
+        } else {
+            backend = sharding_read_write_split(parse_info->parse_obj, dbgroup_obj->bs);
+        }
+
+        if (backend == NULL) {
+            g_critical("%s: database group:%d has no server backend, closing connection", G_STRLOC, dbgroup_obj->group_id);
+            return NETWORK_SOCKET_ERROR;
+        }
+
+        dbgroup_context->backend_sock = network_connection_pool_get_socket(con, backend, config->pwd_table[config->pwd_table_index]);
+        if (dbgroup_context->backend_sock == NULL) {
+            g_critical("%s: database group:%d connect failed, address:'%s'", G_STRLOC, dbgroup_obj->group_id, backend->addr->name->str);
+            return NETWORK_SOCKET_ERROR;
+        }
+        dbgroup_context->st->backend = backend; // store current quering backend
+    }
+    dbgroup_context->cur_injection_finished = FALSE;
+    sharding_querying_dbgroup_context_add(con->sharding_context->querying_dbgroups, dbgroup_context);
+
+    sharding_modify_db(con, dbgroup_context);
+    sharding_modify_charset(con, dbgroup_context);
+    sharding_modify_user(con, dbgroup_context, config->pwd_table[config->pwd_table_index]);
+    sharding_inject_trans_begin_sql(con, dbgroup_context);
+
+    sharding_proxy_send_injections(dbgroup_context);
+    sharding_dbgroup_reset_command_response_state(&dbgroup_context->parse);
+
+    return NETWORK_SOCKET_SUCCESS;
+}
+
+G_INLINE_FUNC void free_recvd_packets(network_socket* sockobj) {
+    GString* packet = NULL;
+    while((packet = g_queue_pop_head(sockobj->recv_queue->chunks))) { g_string_free(packet, TRUE); }
+}
+
+G_INLINE_FUNC void hit_all_dbgroup(guint dbgroup_count, GArray* hit_dbgroups) {
+    g_array_set_size(hit_dbgroups, 0);
+    guint i;
+    for (i = 0; i < dbgroup_count; ++i) {
+        g_array_append_val(hit_dbgroups, i);
+    }
+}
+
+void sharding_proxy_send_error_result(const gchar* errmsg, network_mysqld_con* con, network_socket* recv_sock, GString* packets, guint errorcode, const gchar *sqlstate) {
+    g_warning("%s: %s: %s", errmsg, recv_sock->src->name->str, packets->str+1);
+    g_string_free(packets, TRUE);
+    network_mysqld_con_send_error_full(con->client, errmsg, strlen(errmsg), errorcode, "sqlstate");
+    // PROXY_SEND_RESULT
+    sharding_proxy_error_send_result(con);
+}
+
+static network_socket_retval_t sharding_query_handle(parse_info_t *parse_info, GString* packets, network_mysqld_con *con,
+        sharding_table_t *sharding_table_rule)
+{
+    network_socket_retval_t return_val = NETWORK_SOCKET_SUCCESS;
+    network_socket* recv_sock = con->client;
+    GArray* hit_dbgroups = NULL;
+    trans_context_t* trans_ctx = con->trans_context;
+    Parse *parse_obj = parse_info->parse_obj;
+    if (trans_ctx->trans_stage != TRANS_STAGE_INIT && trans_ctx->is_default_dbgroup_in_trans) {
+        sharding_proxy_send_error_result("Proxy Warning - sharding dbgroup is in trans, transaction will not work across multi dbgroup", con,
+                recv_sock, packets, ER_CANT_DO_THIS_DURING_AN_TRANSACTION, "25000");
+        goto exit;
+    } else if (sharding_is_support_sql(parse_obj) == FALSE) { 
+        sharding_proxy_send_error_result("Proxy Warning - Sharing Not Support SQL", con, recv_sock, packets, ER_UNKNOWN_ERROR, "HY000");
+        goto exit;
+    } 
+
+    hit_dbgroups = g_array_sized_new(FALSE, TRUE, sizeof(guint), config->db_groups->len);
+    sharding_result_t sharding_ret = sharding_get_dbgroups(hit_dbgroups, sharding_table_rule, parse_info);
+    
+    /*"select * from test;" OR "select * from test where noshardkey = 'test';" */
+    if (sharding_ret == SHARDING_RET_ALL_SHARD || sharding_ret == SHARDING_RET_ERR_NO_SHARDKEY) {
+        hit_all_dbgroup(config->db_groups->len, hit_dbgroups);
+        sharding_ret = SHARDING_RET_ALL_SHARD;
+    }
+
+    if (sharding_ret == SHARDING_RET_OK || sharding_ret == SHARDING_RET_ALL_SHARD) {
+        if (hit_dbgroups->len > 1) { 
+            if (sharding_is_contain_multishard_notsupport_feature(parse_obj)) {// multi shard need to check if the sql is support
+                sharding_proxy_send_error_result("Proxy Warning - Sharing Hit Multi Dbgroup Not Support SQL", con, recv_sock, packets, ER_UNKNOWN_ERROR, "HY000");
+                goto exit;
+            } else if ( trans_ctx->trans_stage == TRANS_STAGE_BEFORE_SEND_BEGIN || 
+                    (trans_ctx->trans_stage == TRANS_STAGE_IN_TRANS && trans_ctx->in_trans_dbgroup_ctx != NULL)) 
+            {
+                sharding_proxy_send_error_result("Proxy Warning - sharding dbgroup is in trans, transaction will not work across multi dbgroup", con,
+                        recv_sock, packets, ER_CANT_DO_THIS_DURING_AN_TRANSACTION, "25000");
+                goto exit;
+            }
+        } 
+        sharding_context_reset(con->sharding_context);
+        guint i;
+        for (i = 0; i < hit_dbgroups->len; ++i) {
+            guint dbgroup_index = g_array_index(hit_dbgroups, guint, i);
+            db_group_t *dbgroup_obj = g_ptr_array_index(config->db_groups, dbgroup_index);
+            if (trans_ctx->trans_stage == TRANS_STAGE_IN_TRANS && trans_ctx->in_trans_dbgroup_ctx != NULL && trans_ctx->in_trans_dbgroup_ctx->group_id != dbgroup_obj->group_id) {
+                sharding_proxy_send_error_result("Proxy Warning - sharding dbgroup is in trans, transaction will not work across multi dbgroup", con,
+                        recv_sock, packets, ER_CANT_DO_THIS_DURING_AN_TRANSACTION, "25000");
+                goto exit;
+            }
+
+            GString* inj_packet = NULL;
+            if (i >= 1) { // the in param packets is use by the first injection
+                inj_packet = g_string_new(packets->str);
+            } else {
+                inj_packet = packets;
+            }
+            if ((return_val = forwarding_sql_to_dbgroup(dbgroup_obj, inj_packet, con, parse_info)) != NETWORK_SOCKET_SUCCESS) { goto exit; }
+        }
+        sharding_merge_result_t* merge_result = &con->sharding_context->merge_result;
+        merge_result->shard_num = hit_dbgroups->len;
+        merge_result->limit = parse_get_sql_limit(parse_obj);
+
+        free_recvd_packets(con->client);
+        con->state = CON_STATE_SHARDING_SEND_QUERY;
+    } else { // error occured
+        const gchar* errmsg = sharding_get_error_msg(sharding_ret);
+        sharding_proxy_send_error_result(errmsg, con, recv_sock, packets, ER_UNKNOWN_ERROR, "HY000");
+        goto exit;
+    }
+
+exit:
+    if (hit_dbgroups) { g_array_free(hit_dbgroups, TRUE); }
+    return return_val;
+}
+
+/**
+ * select, insert, update, delete
+ */
+static gboolean is_crud_sql(Parse *parse_obj) {
+    if (parse_obj == NULL) { return FALSE; }
+    SqlType sqltype = parse_obj->parsed.array[0].sqltype;
+    Select *select_obj = NULL;
+    int i;
+    switch(sqltype) {
+        case SQLTYPE_SELECT:
+            /* select_obj = parse_obj->parsed.array[0].result.selectObj; */
+            /* for (i = 0; i < select_obj->pEList->nExpr; i++) { */
+            /*     Expr *expr = select_obj->pEList->a[i].pExpr; */
+            /*     if (expr->op == TK_FUNCTION && strncasecmp(expr->token.z, "DATABASE", expr->token.n) == 0) { */
+            /*         return FALSE; */
+            /*     } */
+            /* } */
+        case SQLTYPE_INSERT:
+        case SQLTYPE_REPLACE:
+        case SQLTYPE_DELETE:
+        case SQLTYPE_UPDATE:
+            return TRUE;
+        defalut:
+            return FALSE;
+    }
+    return FALSE;
+}
+
+static network_mysqld_lua_stmt_ret nosharding_query_handle(parse_info_t *parse_info, GString* packets, network_mysqld_con_lua_t *st, network_mysqld_con *con) {
+	network_mysqld_lua_stmt_ret ret;
+	network_socket *send_sock = NULL;
+	char type = packets->str[0];
+    Parse *parse_obj = parse_info->parse_obj;
+	int i;
+    gboolean is_crud = is_crud_sql(parse_info->parse_obj);
+    if (con->trans_context->trans_stage != TRANS_STAGE_INIT && con->trans_context->in_trans_dbgroup_ctx != NULL && is_crud) {
+        g_warning("%s: sharding dbgroup is in trans, transaction will not work across multi dbgroup, %s: %s", G_STRLOC, con->client->src->name->str, packets->str+1);  
+        g_string_free(packets, TRUE);
+        network_mysqld_con_send_error_full(con->client, C("Proxy Warning - sharding dbgroup is in trans, transaction will not work across multi dbgroup"), 
+                ER_CANT_DO_THIS_DURING_AN_TRANSACTION, "25000");
+        return PROXY_SEND_RESULT;
+    }
+
+	GPtrArray* sqls = NULL;
+    // sub-table is replace with sharding, it is deprecated.
+	/* if (type == COM_QUERY && config->tables && parse_obj != NULL) { */
+        /* char *errmsg = NULL; */
+	/* 	sqls = sql_parse(con, parse_info, &errmsg);  */
+
+        /* if (errmsg != NULL) { */
+            /* g_warning("%s: %s :%s", G_STRLOC, con->client->src->name->str, errmsg); */  
+            /* g_string_free(packets, TRUE); */
+            /* network_mysqld_con_send_error_full(con->client, errmsg, strlen(errmsg), ER_UNKNOWN_ERROR, "HY000"); */
+            /* g_free(errmsg); */
+            /* return PROXY_SEND_RESULT; */
+        /* } */
+	/* } */
+
+	gboolean is_write = sql_is_write(parse_obj);
+
+	ret = PROXY_SEND_INJECTION;
+	injection* inj = NULL;
+	if (sqls == NULL) {
+		inj = injection_new(1, packets);
+		inj->resultset_is_needed = is_write;
+		g_queue_push_tail(st->injected.queries, inj);
+	} else {
+		g_string_free(packets, TRUE);
+
+		if (sqls->len == 1) {
+			inj = injection_new(1, sqls->pdata[0]);
+			inj->resultset_is_needed = is_write;
+			g_queue_push_tail(st->injected.queries, inj);
+		} else {
+			merge_res_t* merge_res = con->merge_res;
+
+			merge_res->sub_sql_num = sqls->len;
+			merge_res->sub_sql_exed = 0;
+			merge_res->limit = G_MAXINT;
+			merge_res->affected_rows = 0;
+			merge_res->warnings = 0;
+            merge_res->limit = parse_get_sql_limit(parse_obj);
+
+			// é‡Šæ”¾ä»¥å‰çš„ç»“æžœ
+			GPtrArray* rows = merge_res->rows;
+			for (i = 0; i < rows->len; ++i) {
+				GPtrArray* row = g_ptr_array_index(rows, i);
+				guint j;
+				for (j = 0; j < row->len; ++j) {
+					g_free(g_ptr_array_index(row, j));
 				}
+				g_ptr_array_free(row, TRUE);
+			}
+			g_ptr_array_set_size(rows, 0);
+
+			int id = is_write ? 8 : 7;
+			for (i = 0; i < sqls->len; ++i) {
+				inj = injection_new(id, sqls->pdata[i]);
+				inj->resultset_is_needed = TRUE;
+				g_queue_push_tail(st->injected.queries, inj);
 			}
 		}
+
+		g_ptr_array_free(sqls, TRUE);
 	}
 
-	guint i;
-	for (i = 1; i < len; ++i) {
-		sql_token* token = ts[i];
-		if (ts[i]->token_id == TK_SQL_SQL_CALC_FOUND_ROWS) {
-			con->is_in_select_calc_found_rows = TRUE;
-			break;
+	check_flags(parse_info, con);
+
+	if (con->server == NULL) {
+		int backend_ndx = -1;
+
+		if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
+			if (type == COM_QUERY) {
+				if (is_write) {
+					backend_ndx = idle_rw(con);
+				} else {
+					backend_ndx = rw_split(parse_obj, con);
+				}
+				send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
+			} else if (type == COM_INIT_DB || type == COM_SET_OPTION || type == COM_FIELD_LIST) {
+				backend_ndx = wrr_ro(con);
+				send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
+			}
 		}
+
+		if (send_sock == NULL) {
+			backend_ndx = idle_rw(con);
+			send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
+		}
+		con->server = send_sock;
 	}
+
+	modify_db(con);
+	modify_charset(parse_info, con);
+	modify_user(con);
+
+    inject_trans_begin_sql(con, is_crud);
+	return ret;
 }
 
-gboolean is_in_blacklist(GPtrArray* tokens) {
-	guint len = tokens->len;
-	if (len > 1) {
-		guint i;
+static network_socket_retval_t begin_trans_ctrl_query_handle(GString* packets, network_mysqld_con *con, gboolean* is_return) {
+    network_socket_retval_t ret = NETWORK_SOCKET_SUCCESS;
+    trans_context_t* trans_ctx = con->trans_context;
+    if (trans_ctx->trans_stage == TRANS_STAGE_INIT) {
+        trans_ctx->origin_begin_sql = packets;
+        trans_ctx->trans_stage = TRANS_STAGE_BEFORE_SEND_BEGIN;
+    } else { // already in trans
+        g_string_free(packets, TRUE);
+    }
+    network_mysqld_con_send_ok(con->client);
+    free_recvd_packets(con->client);
 
-		sql_token* token = tokens->pdata[1];
-		if (token->token_id == TK_SQL_DELETE || token->token_id == TK_SQL_UPDATE) {
-			for (i = 2; i < len; ++i) {
-				token = tokens->pdata[i];
-				if (token->token_id == TK_SQL_WHERE) break;
-			}
-			if (i == len) return TRUE;
-		}
-
-		for (i = 2; i < len; ++i) {
-			token = tokens->pdata[i];
-			if (token->token_id == TK_OBRACE) {
-				token = tokens->pdata[i-1];
-				if (strcasecmp(token->text->str, "SLEEP") == 0) return TRUE;
-			}
-		}
-	}
-
-	return FALSE;
+    con->state = CON_STATE_SEND_QUERY_RESULT;
+    *is_return = TRUE;
+    return ret;
 }
 
-gboolean sql_is_write(GPtrArray *tokens) {
-	sql_token **ts = (sql_token**)(tokens->pdata);
-	guint len = tokens->len;
+static network_socket_retval_t forwarding_trans_sql_to_dbgroup(Parse *parse_obj, GString* packets, network_mysqld_con* con) {
+    trans_context_t* trans_ctx = con->trans_context;
+    sharding_dbgroup_context_t* dbgroup_ctx = trans_ctx->in_trans_dbgroup_ctx;
+    if (dbgroup_ctx == NULL || dbgroup_ctx->backend_sock == NULL) { 
+        g_critical("%s: in transaction stage, but when proxy send %s, the dbgroup_ctx or dbgroup_ctx->backend_sock is NULL", G_STRLOC, packets->str + 1);
+        g_string_free(packets, TRUE);
+        return NETWORK_SOCKET_ERROR;
+    }
 
-	if (len > 1) {
-		guint i = 1;
-		sql_token_id token_id = ts[i]->token_id;
+    injection* inj = injection_new(INJECTION_TRANS_FINISH_SQL, packets);
+    inj->resultset_is_needed = TRUE;
 
-		while (token_id == TK_COMMENT && ++i < len) {
-			token_id = ts[i]->token_id;
-		}
+    sharding_reset_st(dbgroup_ctx->st);
+    network_injection_queue_append(dbgroup_ctx->st->injected.queries, inj);
+    //sharding_set_connection_flags(sql_tokens_param->sql_tokens, con);
 
-		return (token_id != TK_SQL_SELECT && token_id != TK_SQL_SET && token_id != TK_SQL_USE && token_id != TK_SQL_SHOW && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
-	}
+    dbgroup_ctx->cur_injection_finished = FALSE;
+    sharding_querying_dbgroup_context_add(con->sharding_context->querying_dbgroups, dbgroup_ctx);
+    sharding_proxy_send_injections(dbgroup_ctx);
+    sharding_dbgroup_reset_command_response_state(&dbgroup_ctx->parse);
+    con->sharding_context->merge_result.shard_num = 1;
 
-	return TRUE;
+    free_recvd_packets(con->client);
+    con->state = CON_STATE_SHARDING_SEND_QUERY;
+    return NETWORK_SOCKET_SUCCESS;
+}
+
+static network_socket_retval_t finish_trans_ctrl_query_handle(Parse *parse_obj, GString* packets, 
+        network_mysqld_con *con, gboolean* is_return) 
+{
+    trans_context_t* trans_ctx = con->trans_context;
+    if (trans_ctx->trans_stage == TRANS_STAGE_IN_TRANS && trans_ctx->is_default_dbgroup_in_trans) {
+        sharding_reset_trans_context_t(trans_ctx);
+        *is_return = FALSE; // use nonsharding_query_handle to send it
+    } else if (trans_ctx->trans_stage == TRANS_STAGE_IN_TRANS && trans_ctx->in_trans_dbgroup_ctx) {
+        *is_return = TRUE;
+        return forwarding_trans_sql_to_dbgroup(parse_obj, packets, con);
+    } else { // no backend in trans
+        network_mysqld_con_send_ok(con->client);
+        free_recvd_packets(con->client);
+        g_string_free(packets, TRUE);
+        con->state = CON_STATE_SEND_QUERY_RESULT;
+        sharding_reset_trans_context_t(trans_ctx);
+        *is_return = TRUE;
+    }
+    return NETWORK_SOCKET_SUCCESS;
+}
+
+static network_socket_retval_t trans_ctrl_query_handle(Parse *parse_obj, GString* packets, network_mysqld_con *con, gboolean* is_return) 
+{
+    ParsedResultItem *parsed_result = &parse_obj->parsed.array[0];
+    g_assert(is_return != NULL);
+    *is_return = FALSE; // set to TRUE means need to return immediatelly when exit trans_ctrl_query_handle
+    switch(parsed_result->sqltype) {
+        case SQLTYPE_TRANSACTION_BEGIN:
+        case SQLTYPE_TRANSACTION_START:
+            return begin_trans_ctrl_query_handle(packets, con, is_return);
+        case SQLTYPE_TRANSACTION_COMMIT:
+        case SQLTYPE_TRANSACTION_ROLLBACK:
+            return finish_trans_ctrl_query_handle(parse_obj, packets, con, is_return);
+        default: // never come here
+            g_critical("parsed_result->sqltype:%d unexpected!", parsed_result->sqltype);
+            *is_return = TRUE;
+            return NETWORK_SOCKET_SUCCESS;
+    }
+}
+
+
+static network_mysqld_lua_stmt_ret error_response(const gchar *errmsg, GString *packets, network_mysqld_con *con) {
+    g_warning(errmsg);
+    g_string_free(packets, TRUE);
+    network_mysqld_con_send_error_full(con->client, errmsg, strlen(errmsg), ER_UNKNOWN_ERROR, "HY000");
+    return PROXY_SEND_RESULT;
+} 
+
+/* static gboolean is_forbidden_sql(parse_info_t *parse_info) { */
+/*     Parse *parse_obj = parse_info->parse_obj; */
+/*     if (parse_info->is_parse_error == FALSE) { */
+/*         if (parse_obj->parsed.curSize > 0) { */
+/*             SqlType sqltype = parse_obj->parsed.array[0].sqltype; */
+/*             if (sqltype == SQLTYPE_UPDATE) { */
+/*                 if ( !parse_obj->parsed.array[0].result.updateObj->pWhere) { */
+/*                     return TRUE; */
+/*                 } */
+/*             } else if (sqltype == TK_SQL_DELETE) { */
+/*                 if (!parse_obj->parsed.array[0].result.deleteObj->pWhere) { */
+/*                     return TRUE; */
+/*                 } */
+/*             } else if (sqltype == TK_SQL_SELECT) { */
+/*                 Select *selectObj = parse_obj->parsed.array[0].result.selectObj; */
+/*                 int i; */
+/*                 for (i = 0; i < selectObj->pEList->nExpr; i++) { */
+/*                     Expr *expr = selectObj->pEList->a[i].pExpr; */
+/*                     if (expr->op == TK_FUNCTION && strncasecmp(expr->token.z, "SLEEP", expr->token.n) == 0) { */
+/*                         return TRUE; */
+/*                     } */
+/*                 } */
+/*             } */
+/*         } */     
+/*     } else { */
+/*         int i = 0; */
+/*         TokenArray *tokens_array = &parse_obj->tokens; */
+/*         while (i < tokens_array->curSize ) { */
+/*             int token_type = tokens_array->array[i].tokenType; */
+/*             if (token_type == TK_COMMENT || tokentype == TK_LP /1* TK_LP is "(" *1/) { */ 
+/*                 i++; */ 
+/*             } else { */ 
+/*                 break; */ 
+/*             } */
+/*         } */
+/*         int token_type = tokens_array->array[i].tokenType; */
+/*         if (token_type == TK_DELETE || token_type == TK_UPDATE) { */
+/*             for (i < tokens_array->curSize; i++) { */
+/*                 token_type = tokens_array->array[i].tokenType; */
+/*                 if (token_type == TK_WHERE) { break; } */
+/*             } */
+/*             if (i == tokens_array->curSize) { return TRUE; } */
+/*         } else if (token_type == TK_SELECT) { */
+/*             for (i < tokens_array->curSize; i++) { */
+/*                 token_type = tokens_array->array[i].tokenType; */
+/*                 if (token_type == TK_LP && i-1 > 0 && tokens_array->array[i-1].tokenType == TK_ID) { */
+/*                     Token *token = &tokens_array->array[i-1].token; */
+/*                     if (strncasecmp(token->z, "SLEEP", token->n) == 0) { return TRUE; } */
+/*                 } */
+/*             } */
+/*         } */
+/*     } */
+
+/*     return FALSE; */
+/* } */
+
+static gboolean is_forbidden_sql(Parse *parse_obj) {
+    if (parse_obj->parsed.curSize > 0) {
+        SqlType sqltype = parse_obj->parsed.array[0].sqltype;
+        if (sqltype == SQLTYPE_UPDATE) {
+            if ( !parse_obj->parsed.array[0].result.updateObj->pWhere) {
+                return TRUE;
+            }
+        } else if (sqltype == SQLTYPE_DELETE) {
+            if (!parse_obj->parsed.array[0].result.deleteObj->pWhere) {
+                return TRUE;
+            }
+        } else if (sqltype == SQLTYPE_SELECT) {
+            Select *selectObj = parse_obj->parsed.array[0].result.selectObj;
+            int i;
+            for (i = 0; i < selectObj->pEList->nExpr; i++) {
+                Expr *expr = selectObj->pEList->a[i].pExpr;
+                if (expr->op == TK_FUNCTION && strncasecmp(expr->token.z, "SLEEP", expr->token.n) == 0) {
+                    return TRUE;
+                }
+            }
+        } else if (sqltype == SQLTYPE_CREATE_TABLE || sqltype == SQLTYPE_DROP_TABLE) {
+            return TRUE;
+        }  
+    }     
+    return FALSE;
+}
+
+static gboolean is_sharding_query(parse_info_t *parse_info, network_mysqld_con *con, sharding_table_t **sharding_rule) {
+    g_assert(sharding_rule != NULL);
+    Parse *parse_obj = parse_info->parse_obj;
+    
+    *sharding_rule = sharding_lookup_table_shard_rule(config->table_shard_rules, con->client->default_db->str, parse_info);
+    return (*sharding_rule != NULL);
 }
 
 /**
@@ -1343,112 +1703,67 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 		network_mysqld_con_send_ok_full(con->client, 0, 0, 0x0002, 0);
 		ret = PROXY_SEND_RESULT;
 	} else {
-		GPtrArray *tokens = sql_tokens_new();
-		sql_tokenizer(tokens, packets->str, packets->len);
+        parse_info_t parse_info;
+        if (type == COM_QUERY ) {
+            if (packets->len <= 1) {
+                ret = error_response("Proxy Warning - Empty COM_QUERY Packet!", packets, con);
+                goto network_handle;           
+            }
+            char *parse_errmsg = NULL;
+            Parse *parse_obj = chassis_thread_lemon_parse_obj(con->srv);
+            sqlite3ParseReset(parse_obj);
+            sqlite3RunParser1(parse_obj, packets->str+1, packets->len-1, &parse_errmsg);
 
-		if (type == COM_QUERY && is_in_blacklist(tokens)) {
-			g_warning("Forbidden SQL: %s: %s", recv_sock->src->name->str, packets->str+1);
-			g_string_free(packets, TRUE);
-			network_mysqld_con_send_error_full(con->client, C("Proxy Warning - Syntax Forbidden"), ER_UNKNOWN_ERROR, "07000");
-			ret = PROXY_SEND_RESULT;
-		} else {
-			GPtrArray* sqls = NULL;
-			if (type == COM_QUERY && config->tables) {
-				sqls = sql_parse(con, tokens);
-			}
+            if (parse_errmsg != NULL) {
+                g_warning("%s: sql error: %s, origin sql: %.*s", G_STRLOC, parse_errmsg, packets->len-1, packets->str+1);
+                gchar *errmsg_string = g_strdup_printf("Proxy Warning - %s", parse_errmsg);
+                ret = error_response(errmsg_string, packets, con);
+                g_free(errmsg_string);
+                sqliteFree(parse_errmsg);
+                sqlite3ParseClean(parse_obj);
+                goto network_handle;
+            } else if (parse_obj->parsed.curSize == 0) {
+                g_warning("%s: parsed.curSize == 0, origin sql: %.*s", G_STRLOC, packets->len-1, packets->str+1);
+                error_response("Proxy Warning - sql parse unknown error, Please communicate with us.", packets, con);
+                sqlite3ParseClean(parse_obj);
+                goto network_handle;
+            }
 
-			gboolean is_write = sql_is_write(tokens);
-
-			ret = PROXY_SEND_INJECTION;
-			injection* inj = NULL;
-			if (sqls == NULL) {
-				inj = injection_new(1, packets);
-				inj->resultset_is_needed = is_write;
-				g_queue_push_tail(st->injected.queries, inj);
-			} else {
-				g_string_free(packets, TRUE);
-
-				if (sqls->len == 1) {
-					inj = injection_new(1, sqls->pdata[0]);
-					inj->resultset_is_needed = is_write;
-					g_queue_push_tail(st->injected.queries, inj);
-				} else {
-					merge_res_t* merge_res = con->merge_res;
-
-					merge_res->sub_sql_num = sqls->len;
-					merge_res->sub_sql_exed = 0;
-					merge_res->limit = G_MAXINT;
-					merge_res->affected_rows = 0;
-					merge_res->warnings = 0;
-
-					sql_token** ts = (sql_token**)(tokens->pdata);
-					for (i = tokens->len-2; i >= 0; --i) {
-						if (ts[i]->token_id == TK_SQL_LIMIT && ts[i+1]->token_id == TK_INTEGER) {
-							merge_res->limit = atoi(ts[i+1]->text->str);
-							break;
-						}
-					}
-
-					GPtrArray* rows = merge_res->rows;
-					for (i = 0; i < rows->len; ++i) {
-						GPtrArray* row = g_ptr_array_index(rows, i);
-						guint j;
-						for (j = 0; j < row->len; ++j) {
-							g_free(g_ptr_array_index(row, j));
-						}
-						g_ptr_array_free(row, TRUE);
-					}
-					g_ptr_array_set_size(rows, 0);
-
-					int id = is_write ? 8 : 7;
-					for (i = 0; i < sqls->len; ++i) {
-						inj = injection_new(id, sqls->pdata[i]);
-						inj->resultset_is_needed = TRUE;
-						g_queue_push_tail(st->injected.queries, inj);
-					}
-				}
-
-				g_ptr_array_free(sqls, TRUE);
-			}
-
-			check_flags(tokens, con);
-
-			if (con->server == NULL) {
-				int backend_ndx = -1;
-
-				if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
-					if (type == COM_QUERY) {
-						if (is_write) {
-							backend_ndx = idle_rw(con);
-						} else {
-							backend_ndx = rw_split(tokens, con);
-						}
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
-					} else if (type == COM_INIT_DB || type == COM_SET_OPTION || type == COM_FIELD_LIST) {
-						backend_ndx = wrr_ro(con);
-						send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
-					}
-				}
-
-				if (send_sock == NULL) {
-					backend_ndx = idle_rw(con);
-					send_sock = network_connection_pool_lua_swap(con, backend_ndx, config->pwd_table[config->pwd_table_index]);
-				}
-				con->server = send_sock;
-			}
-
-			modify_db(con);
-			modify_charset(tokens, con);
-			modify_user(con);
-		}
-
-		sql_tokens_free(tokens);
+            if (is_forbidden_sql(parse_obj)) {
+                ret = error_response("Proxy Warning - Syntax Forbidden!", packets, con);
+                sqlite3ParseClean(parse_obj);
+                goto network_handle;           
+            }
+            
+            parse_info_init(&parse_info, parse_obj, (const char*)packets->str+1, packets->len-1);
+            if (g_hash_table_size(config->table_shard_rules) != 0) {
+                if (IS_TRANSACTION_CTRL_SQL(parse_obj->parsed.array[0].sqltype)) {
+                    gboolean is_return = FALSE;
+                    network_socket_retval_t retval = trans_ctrl_query_handle(parse_obj, packets, con, &is_return);
+                    if (is_return) { 
+                        sqlite3ParseClean(parse_obj);
+                        return retval;
+                    }
+                } else {
+                    sharding_table_t *sharding_rule = NULL;
+                    if (is_sharding_query(&parse_info, con, &sharding_rule)) {
+                        return sharding_query_handle(&parse_info, packets, con, sharding_rule);
+                    }
+                }
+            } 
+            ret = nosharding_query_handle(&parse_info, packets, st, con);
+            sqlite3ParseClean(parse_obj);
+        } else { // is not COM_QUERY
+            parse_info_init(&parse_info, NULL, NULL, 0);
+            ret = nosharding_query_handle(&parse_info, packets, st, con);
+        }      
 	}
 	NETWORK_MYSQLD_CON_TRACK_TIME(con, "proxy::ready_query::leave_lua");
 
+network_handle:
 	/**
 	 * if we disconnected in read_query_result() we have no connection open
-	 * when we try to execute the next query 
+	 * when we try to execute the next query
 	 *
 	 * for PROXY_SEND_RESULT we don't need a server
 	 */
@@ -1457,7 +1772,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 		g_critical("%s.%d: I have no server backend, closing connection", __FILE__, __LINE__);
 		return NETWORK_SOCKET_ERROR;
 	}
-	
+
 	switch (ret) {
 	case PROXY_NO_DECISION:
 	case PROXY_SEND_QUERY:
@@ -1520,7 +1835,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 	} else {
 		GList *cur;
 
-		/* if we don't send the query to the backend, it won't be tracked. So track it here instead 
+		/* if we don't send the query to the backend, it won't be tracked. So track it here instead
 		 * to get the packet tracking right (LOAD DATA LOCAL INFILE, ...) */
 
 		for (cur = send_sock->send_queue->chunks->head; cur; cur = cur->next) {
@@ -1542,9 +1857,9 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 }
 
 /**
- * decide about the next state after the result-set has been written 
+ * decide about the next state after the result-set has been written
  * to the client
- * 
+ *
  * if we still have data in the queue, back to proxy_send_query()
  * otherwise back to proxy_read_query() to pick up a new client query
  *
@@ -1589,8 +1904,8 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_send_query_result) {
 		return NETWORK_SOCKET_SUCCESS;
 	}
 
-	/* looks like we still have queries in the queue, 
-	 * push the next one 
+	/* looks like we still have queries in the queue,
+	 * push the next one
 	 */
 	inj = g_queue_peek_head(st->injected.queries);
 	con->resultset_is_needed = inj->resultset_is_needed;
@@ -1661,6 +1976,7 @@ void merge_rows(network_mysqld_con* con, injection* inj) {
 
 			switch (lenenc_type) {
 				case NETWORK_MYSQLD_LENENC_TYPE_NULL:
+                    g_ptr_array_add(row, NULL);
 					network_mysqld_proto_skip(&packet, 1);
 					break;
 
@@ -1683,9 +1999,34 @@ void merge_rows(network_mysqld_con* con, injection* inj) {
 	proxy_resultset_free(res);
 }
 
+void sharding_log_sql(network_socket* client_sock, network_socket* server_sock, injection* inj) {
+    if (sql_log_type == OFF) return;
+
+    float latency_ms = (inj->ts_read_query_result_last - inj->ts_read_query)/1000.0;
+    if ((gint)latency_ms < config->sql_log_slow_ms) return;
+
+    GString* message = g_string_new(NULL);
+
+    time_t t = time(NULL);
+    struct tm* tm = localtime(&t);
+    g_string_printf(message, "[%02d/%02d/%d %02d:%02d:%02d] C:%s S:", tm->tm_mon+1, tm->tm_mday, tm->tm_year+1900, tm->tm_hour, tm->tm_min, tm->tm_sec, client_sock->src->name->str);
+
+    if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
+        g_string_append_printf(message, "%s OK %.3f \"%s\"\n", server_sock->dst->name->str, latency_ms, inj->query->str+1);
+    } else {
+        g_string_append_printf(message, "%s ERR %.3f \"%s\"\n", server_sock->dst->name->str, latency_ms, inj->query->str+1);
+    }
+
+    fwrite(message->str, message->len, 1, config->sql_log);
+    g_string_free(message, TRUE);
+
+    if (sql_log_type == REALTIME) fflush(config->sql_log);
+
+}
+
 void log_sql(network_mysqld_con* con, injection* inj) {
 	if (sql_log_type == OFF) return;
-	
+
 	float latency_ms = (inj->ts_read_query_result_last - inj->ts_read_query)/1000.0;
 	if ((gint)latency_ms < config->sql_log_slow_ms) return;
 
@@ -1756,7 +2097,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 	con->resultset_is_finished = is_finished;
 
 	/* copy the packet over to the send-queue if we don't need it */
-	if (!con->resultset_is_needed) {
+	if (!con->resultset_is_needed) { // ä¸éœ€è¦ç¼“å­˜ç»“æžœé›†, ç›´æŽ¥è½¬å‘ç»™client
 		network_mysqld_queue_append_raw(send_sock, send_sock->send_queue, g_queue_pop_tail(recv_sock->recv_queue->chunks));
 	}
 
@@ -1765,7 +2106,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 
 		/**
 		 * the resultset handler might decide to trash the send-queue
-		 * 
+		 *
 		 * */
 		if (inj) {
 			if (con->parse.command == COM_QUERY || con->parse.command == COM_STMT_EXECUTE) {
@@ -1799,7 +2140,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 			if (inj->id == 1) {
 				if (*(str-1) == COM_QUERY) log_sql(con, inj);
 				ret = PROXY_SEND_RESULT;
-			} else if (inj->id == 7) {
+			} else if (inj->id == 7) { // not a write sql
 				log_sql(con, inj);
 
 				merge_res_t* merge_res = con->merge_res;
@@ -1826,7 +2167,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 						proxy_resultset_free(res);
 					}
 				}
-			} else if (inj->id == 8) {
+			} else if (inj->id == 8) { // write sql
 				log_sql(con, inj);
 
 				if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
@@ -1855,7 +2196,15 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 				} else {
 					ret = PROXY_SEND_RESULT;
 				}
-			} else {
+            } else if (inj->id == INJECTION_TRANS_BEGIN_SQL) {
+                if (inj->qstat.query_status != MYSQLD_PACKET_OK) { // begin error 
+                    ret = PROXY_SEND_RESULT;
+                    sharding_reset_trans_context_t(con->trans_context);
+                    network_injection_queue_reset(st->injected.queries);
+                } else {
+                    ret = PROXY_IGNORE_RESULT;
+                }
+            } else {
 				ret = PROXY_IGNORE_RESULT;
 
 				if (inj->id == 6) {
@@ -1863,7 +2212,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 						/* in case we got the connection from the pool it has the response from the previous auth */
 						network_mysqld_auth_response_free(con->server->response);
 						con->server->response = NULL;
-					}    
+					}
 					con->server->response = network_mysqld_auth_response_copy(con->client->response);
 				}
 			}
@@ -1872,6 +2221,10 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 			case PROXY_SEND_RESULT:
 				if (!con->is_in_transaction || (inj->qstat.server_status & SERVER_STATUS_IN_TRANS)) {
 					con->is_in_transaction = (inj->qstat.server_status & SERVER_STATUS_IN_TRANS);
+                    if (con->is_in_transaction) {
+                        con->trans_context->is_default_dbgroup_in_trans = TRUE;
+                        con->trans_context->trans_stage = TRANS_STAGE_IN_TRANS;
+                    }
 				} else {
 					if (strcasestr(str, "COMMIT") == str || strcasestr(str, "ROLLBACK") == str) con->is_in_transaction = FALSE;
 				}
@@ -1901,17 +2254,19 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 				++st->injected.sent_resultset;
 				if (st->injected.sent_resultset == 1) {
 					while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) network_mysqld_queue_append_raw(send_sock, send_sock->send_queue, p);
-				} else {
+				} else { // ??
 					if (con->resultset_is_needed) {
 						while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) g_string_free(p, TRUE);
 					}
 				}
 
-				if (!con->is_in_transaction && !con->is_not_autocommit && !con->is_in_select_calc_found_rows && !have_last_insert_id && g_hash_table_size(con->locks) == 0) network_connection_pool_lua_add_connection(con);
+				if (!con->is_in_transaction && !con->is_not_autocommit && !con->is_in_select_calc_found_rows &&
+						!have_last_insert_id && g_hash_table_size(con->locks) == 0)
+					network_connection_pool_lua_add_connection(con);
 
 				break;
 			case PROXY_IGNORE_RESULT:
-				if (con->resultset_is_needed) {
+				if (con->resultset_is_needed) { // ä¸éœ€è¦ç»“æžœé›†çš„æƒ…å†µå·²ç»æŠŠrecv_sock->recv_queue->chunksæ”¾å…¥clientçš„å‘é€é˜Ÿåˆ—äº†
 					while ((p = g_queue_pop_head(recv_sock->recv_queue->chunks))) g_string_free(p, TRUE);
 				}
 
@@ -1941,8 +2296,336 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 		}
 	}
 	NETWORK_MYSQLD_CON_TRACK_TIME(con, "proxy::ready_query_result::leave");
-	
+
 	return NETWORK_SOCKET_SUCCESS;
+}
+
+static void sharding_merge_rows(network_mysqld_con* con, injection* inj, network_socket* recv_sock) {
+    if (!inj->resultset_is_needed || !recv_sock->recv_queue->chunks || inj->qstat.binary_encoded) {
+        return;
+    }
+
+    proxy_resultset_t* resultset = proxy_resultset_new();
+    proxy_resultset_init1(resultset, inj);
+    resultset->result_queue = recv_sock->recv_queue->chunks;
+
+    parse_resultset_fields(resultset);
+    GList* res_row = resultset->rows_chunk_head;
+    while(res_row) {
+        network_packet packet;
+        packet.data = res_row->data;
+        packet.offset = 0;
+
+        network_mysqld_proto_skip_network_header(&packet);
+        network_mysqld_lenenc_type lenenc_type;
+        network_mysqld_proto_peek_lenenc_type(&packet, &lenenc_type);
+		switch (lenenc_type) {
+			case NETWORK_MYSQLD_LENENC_TYPE_ERR:
+			case NETWORK_MYSQLD_LENENC_TYPE_EOF:
+                goto exit;
+
+			case NETWORK_MYSQLD_LENENC_TYPE_INT:
+			case NETWORK_MYSQLD_LENENC_TYPE_NULL:
+				break;
+		}
+
+		guint len = resultset->fields->len;
+		GPtrArray* row = g_ptr_array_new_full(len, g_free);
+		guint i;
+		for (i = 0; i < len; i++) {
+			guint64 field_len;
+
+			network_mysqld_proto_peek_lenenc_type(&packet, &lenenc_type);
+
+			switch (lenenc_type) {
+				case NETWORK_MYSQLD_LENENC_TYPE_NULL:
+                    g_ptr_array_add(row, NULL);
+					network_mysqld_proto_skip(&packet, 1);
+					break;
+
+				case NETWORK_MYSQLD_LENENC_TYPE_INT:
+					network_mysqld_proto_get_lenenc_int(&packet, &field_len);
+					g_ptr_array_add(row, g_strndup(packet.data->str + packet.offset, field_len));
+					network_mysqld_proto_skip(&packet, field_len);
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		g_ptr_array_add(con->sharding_context->merge_result.recvd_rows, row);
+		res_row = res_row->next;
+    }
+
+exit:
+    proxy_resultset_free(resultset);
+}
+
+G_INLINE_FUNC void init_injection_from_com_query_result(injection* inj, network_mysqld_com_query_result_t* com_query) {
+    if (inj == NULL || com_query == NULL) { return; }
+
+    inj->bytes = com_query->bytes;
+    inj->rows = com_query->rows;
+    inj->qstat.was_resultset = com_query->was_resultset;
+
+    if (!com_query->was_resultset) { /* INSERTs have a affected_rows */
+        inj->qstat.affected_rows = com_query->affected_rows;
+        inj->qstat.insert_id = com_query->insert_id;
+    }
+    inj->qstat.server_status = com_query->server_status;
+    inj->qstat.warning_count = com_query->warning_count;
+    inj->qstat.query_status = com_query->query_status;
+}
+
+/**
+ * decide next stage to be CON_STATE_SHARDING_SEND_QUERY_RESULT or send next injection to the same dbgroup
+ */
+static network_socket_retval_t sharding_finish_injection_decide_next_stage(gboolean is_resultset_finish, injection* inj, network_mysqld_con* con, 
+        sharding_dbgroup_context_t* dbgroup_context) 
+{
+    network_socket_retval_t ret = NETWORK_SOCKET_SUCCESS;
+    network_mysqld_con_lua_t* st = dbgroup_context->st;
+    network_socket* send_sock = con->client;
+
+    if (is_resultset_finish) {
+        /**
+         * if the send-queue is empty, we have nothing to send
+         * and can read the next query */
+        if (send_sock->send_queue->chunks) {
+            con->state = CON_STATE_SHARDING_SEND_QUERY_RESULT;
+        } else { // ?? -- TODO -- never reach this, because send_sock->send_queue->chunks is always not eault to NULL
+            g_assert(con->resultset_is_needed == 1); /* if we have already forwarded the resultset, never reach here */
+
+            con->state = CON_STATE_READ_QUERY;
+        }
+    } else {
+        /**
+         * one injection is finish, this dbgroup is available to send next injection
+         * !!NOTICE: the con->state can't change, because other backend is in CON_STATE_SHARDING_READ_QUERY_RESULT,
+         * if we change the con->state, will make mistakens.
+         */
+        if (st->injected.queries->length > 0) {
+            ret = NETWORK_SOCKET_SHARDING_AVAILABLE_SEND_NEXT_INJECTION;
+            sharding_proxy_send_injections(dbgroup_context);
+            sharding_dbgroup_reset_command_response_state(&dbgroup_context->parse);
+        } else {
+            ret = NETWORK_SOCKET_SHARDING_NOMORE_INJECTION;
+            gboolean has_last_insert_id = inj->qstat.insert_id > 0;
+            if (!has_last_insert_id && con->trans_context->trans_stage != TRANS_STAGE_IN_TRANS) {
+                network_connection_pool_sharding_add_connection(con, dbgroup_context);
+            }
+        }
+    }
+
+    return ret;
+}
+
+static network_socket_retval_t sharding_injection_read_sql_finish_handle(network_mysqld_con* con, injection* inj, sharding_dbgroup_context_t* dbgroup_context) {
+    network_socket_retval_t ret = NETWORK_SOCKET_SUCCESS;
+    network_socket* send_sock = con->client;
+    network_socket* recv_sock = dbgroup_context->backend_sock;
+    sharding_merge_result_t* merge_result = &con->sharding_context->merge_result;
+    network_mysqld_con_lua_t* st = dbgroup_context->st;
+    gboolean is_resultset_finish = FALSE;
+
+    sharding_log_sql(con->client, recv_sock, inj);
+
+    if (inj->qstat.query_status == MYSQLD_PACKET_OK && merge_result->recvd_rows->len < merge_result->limit) { sharding_merge_rows(con, inj, recv_sock); }
+
+    if ((++merge_result->result_recvd_num) < merge_result->shard_num) {
+        // PROXY_IGNORE_RESULT;
+        sharding_proxy_ignore_result(dbgroup_context);
+    } else {
+        is_resultset_finish = TRUE;
+        network_injection_queue_reset(st->injected.queries);
+
+        if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
+
+            proxy_resultset_t* resultset = proxy_resultset_new();
+
+            proxy_resultset_init1(resultset, inj);
+            if (inj->resultset_is_needed && !inj->qstat.binary_encoded) { resultset->result_queue = recv_sock->recv_queue->chunks; }
+
+            parse_resultset_fields(resultset);
+            free_recvd_packets(recv_sock);
+            network_mysqld_con_send_resultset(send_sock, resultset->fields, merge_result->recvd_rows);
+            proxy_resultset_free(resultset);
+        }
+
+        // PROXY_SEND_RESULT
+        sharding_proxy_send_result(con, dbgroup_context, inj);
+    }
+    
+    ret = sharding_finish_injection_decide_next_stage(is_resultset_finish, inj, con, dbgroup_context);
+    return ret;
+} 
+
+static network_socket_retval_t sharding_injection_write_sql_finish_handle(network_mysqld_con* con, injection* inj, sharding_dbgroup_context_t* dbgroup_context) {
+    network_socket_retval_t ret = NETWORK_SOCKET_SUCCESS;
+    network_socket* send_sock = con->client;
+    network_socket* recv_sock = dbgroup_context->backend_sock;
+    sharding_merge_result_t* merge_result = &con->sharding_context->merge_result;
+    network_mysqld_con_lua_t* st = dbgroup_context->st;
+    gboolean is_resultset_finish = FALSE;
+
+    sharding_log_sql(con->client, recv_sock, inj);
+
+    if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
+        network_packet last_packet;
+        last_packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
+        last_packet.offset = 0;
+
+        network_mysqld_ok_packet_t* ok_packet = network_mysqld_ok_packet_new();
+        network_mysqld_proto_skip_network_header(&last_packet);
+        if (network_mysqld_proto_get_ok_packet(&last_packet, ok_packet)) {
+            network_mysqld_ok_packet_free(ok_packet);
+            ret = NETWORK_SOCKET_ERROR;
+            goto exit;
+        }
+
+        merge_result->affected_rows += ok_packet->affected_rows;
+        merge_result->warnings += ok_packet->warnings;
+
+        if ((++merge_result->result_recvd_num < merge_result->shard_num)) { 
+            /**
+             * now we only support one shard write, so it never reach here.
+             */ 
+            // PROXY_IGNORE_RESULT;   
+            sharding_proxy_ignore_result(dbgroup_context);
+        } else {
+            is_resultset_finish = TRUE;
+            network_mysqld_con_send_ok_full(send_sock, merge_result->affected_rows, 0, ok_packet->server_status, merge_result->warnings);
+            network_injection_queue_reset(st->injected.queries);
+
+            free_recvd_packets(recv_sock);
+            // PROXY_SEND_RESULT;
+            sharding_proxy_send_result(con, dbgroup_context, inj);
+        }
+
+        network_mysqld_ok_packet_free(ok_packet);
+    } else {
+        // PROXY_SEND_RESULT
+        is_resultset_finish = TRUE;
+        sharding_proxy_send_result(con, dbgroup_context, inj);
+    }
+
+    ret = sharding_finish_injection_decide_next_stage(is_resultset_finish, inj, con, dbgroup_context);
+exit:
+    return ret;
+}
+
+static network_socket_retval_t sharding_injection_other_sql_finish_handle(network_mysqld_con* con, injection* inj, sharding_dbgroup_context_t* dbgroup_context) {
+    // PROXY_IGNORE_RESULT
+    gboolean is_resultset_finish = FALSE;
+    if (inj->id == INJECTION_MODIFY_USER_SQL) {
+        if (dbgroup_context->backend_sock->response) {
+            network_mysqld_auth_response_free(dbgroup_context->backend_sock->response);
+            dbgroup_context->backend_sock->response = NULL;
+        }
+
+        dbgroup_context->backend_sock->response = network_mysqld_auth_response_copy(con->client->response);
+        sharding_proxy_ignore_result(dbgroup_context);
+    } else if (inj->id == INJECTION_TRANS_BEGIN_SQL) {
+        if (inj->qstat.query_status == MYSQLD_PACKET_OK) {
+            trans_context_t* trans_ctx = con->trans_context;
+            trans_ctx->in_trans_dbgroup_ctx = dbgroup_context;
+            if (inj->qstat.server_status & SERVER_STATUS_IN_TRANS) {
+                trans_ctx->trans_stage = TRANS_STAGE_IN_TRANS;
+            }
+          sharding_proxy_ignore_result(dbgroup_context);  
+        } else {
+            is_resultset_finish = TRUE;
+            sharding_reset_trans_context_t(con->trans_context);
+            network_injection_queue_reset(dbgroup_context->st->injected.queries);
+            sharding_proxy_send_result(con, dbgroup_context, inj);
+        }
+    } else if (inj->id == INJECTION_TRANS_FINISH_SQL) {
+        is_resultset_finish = TRUE;
+        network_injection_queue_reset(dbgroup_context->st->injected.queries);
+        sharding_proxy_send_result(con, dbgroup_context, inj);
+        sharding_reset_trans_context_t(con->trans_context);
+    } else {
+        sharding_proxy_ignore_result(dbgroup_context);
+    }
+
+    return sharding_finish_injection_decide_next_stage(is_resultset_finish, inj, con, dbgroup_context);
+}
+
+
+static network_socket_retval_t sharding_finish_injection_handle(injection* inj, sharding_dbgroup_context_t* dbgroup_context, network_mysqld_con* con) {
+    network_mysqld_lua_stmt_ret ret = NETWORK_SOCKET_SUCCESS;
+    if (inj == NULL) { goto exit; }
+
+    network_socket* recv_sock = dbgroup_context->backend_sock;
+    network_mysqld_con_lua_t* st = dbgroup_context->st;
+
+    if (dbgroup_context->parse.command == COM_QUERY /*|| dbgroup_context->parse.command == COM_STMT_EXECUTE*/) {
+        network_mysqld_com_query_result_t* com_query = (network_mysqld_com_query_result_t*)dbgroup_context->parse.data;
+        init_injection_from_com_query_result(inj, com_query);
+    }
+    inj->ts_read_query_result_last = chassis_get_rel_microseconds();
+    network_mysqld_queue_reset(recv_sock);
+
+    g_assert(st->injected.queries->length > 0);
+    g_queue_pop_head(st->injected.queries);
+    if (inj->id == INJECTION_SHARDING_READ_SQL) {
+        ret = sharding_injection_read_sql_finish_handle(con, inj, dbgroup_context);
+    } else if (inj->id == INJECTION_SHARDING_WRITE_SQL) {
+        ret = sharding_injection_write_sql_finish_handle(con, inj, dbgroup_context);
+    } else { // change charset or user or database
+        ret = sharding_injection_other_sql_finish_handle(con, inj, dbgroup_context);
+    }
+
+exit:
+    if (inj) { injection_free(inj); }
+    return ret;
+}
+
+//static network_socket_retval_t proxy_sharding_read_query_result(chassis G_GNUC_UNUSED *chas, network_mysqld_con *con) {
+NETWORK_MYSQLD_PLUGIN_PROTO(proxy_sharding_read_query_result) {
+    sharding_dbgroup_context_t* dbgroup_context = con->event_dbgroup_context;
+    network_socket* recv_sock = dbgroup_context->backend_sock;
+    network_socket* send_sock = con->client;
+    network_mysqld_con_lua_t* st = dbgroup_context->st;
+
+    network_packet last_packet;
+    last_packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
+    last_packet.offset = 0;
+
+    injection* inj = NULL;
+    if (0 != st->injected.queries->length) {
+        inj = g_queue_peek_head(st->injected.queries);
+    } else { // never reached here
+        g_error("we should never reach here!");
+    }
+
+    if (inj && inj->ts_read_query_result_first == 0) {
+		 // log the time of the first received packet
+         inj->ts_read_query_result_first = chassis_get_rel_microseconds();
+    }
+
+    gint is_finished = sharding_parse_get_query_result(&dbgroup_context->parse, con, &last_packet);
+    if (is_finished == -1) return NETWORK_SOCKET_ERROR;
+    //dbgroup_context->resultset_is_finished = is_finished;
+
+    if(!dbgroup_context->resultset_is_needed) { // just forward the packets to client
+        network_mysqld_queue_append_raw(send_sock, send_sock->send_queue, g_queue_pop_tail(recv_sock->recv_queue->chunks));
+    }
+
+    if (is_finished) {
+        dbgroup_context->cur_injection_finished = TRUE;
+        return sharding_finish_injection_handle(inj, dbgroup_context, con);
+    }
+
+    return NETWORK_SOCKET_SUCCESS;
+}
+
+//static network_socket_retval_t proxy_sharding_send_query_result(chassis G_GNUC_UNUSED *chas, network_mysqld_con *con) {
+NETWORK_MYSQLD_PLUGIN_PROTO(proxy_sharding_send_query_result) {
+    g_hash_table_remove_all(con->sharding_context->querying_dbgroups);
+    con->state = CON_STATE_READ_QUERY;
+    return NETWORK_SOCKET_SUCCESS;
 }
 
 /**
@@ -2010,16 +2693,16 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_init) {
 	st = network_mysqld_con_lua_new();
 
 	con->plugin_con_state = st;
-	
+
 	con->state = CON_STATE_CONNECT_SERVER;
 
 	return NETWORK_SOCKET_SUCCESS;
 }
 
 /**
- * cleanup the proxy specific data on the current connection 
+ * cleanup the proxy specific data on the current connection
  *
- * move the server connection into the connection pool in case it is a 
+ * move the server connection into the connection pool in case it is a
  * good client-side close
  *
  * @return NETWORK_SOCKET_SUCCESS
@@ -2031,7 +2714,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_disconnect_client) {
 //	gboolean use_pooled_connection = FALSE;
 
 	if (st == NULL) return NETWORK_SOCKET_SUCCESS;
-	
+
 	/**
 	 * let the lua-level decide if we want to keep the connection in the pool
 	 */
@@ -2096,7 +2779,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_local_infile_data) {
 	network_mysqld_com_query_result_t *com_query = con->parse.data;
 
 	NETWORK_MYSQLD_CON_TRACK_TIME(con, "proxy::ready_query_result::enter");
-	
+
 	recv_sock = con->client;
 	send_sock = con->server;
 
@@ -2119,7 +2802,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_local_infile_data) {
 		/* we don't have a backend
 		 *
 		 * - free the received packets early
-		 * - send a OK later 
+		 * - send a OK later
 		 */
 		while ((s = g_queue_pop_head(recv_sock->recv_queue->chunks))) g_string_free(s, TRUE);
 	}
@@ -2155,7 +2838,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_local_infile_result) {
 	/* check if the last packet is valid */
 	packet.data = g_queue_peek_tail(recv_sock->recv_queue->chunks);
 	packet.offset = 0;
-	
+
 	query_result = network_mysqld_proto_get_query_result(&packet, con);
 	if (query_result == -1) return NETWORK_SOCKET_ERROR; /* something happend, let's get out of here */
 
@@ -2204,6 +2887,11 @@ int network_mysqld_proxy_connection_init(network_mysqld_con *con) {
 	con->plugins.con_send_local_infile_result = proxy_send_local_infile_result;
 	con->plugins.con_cleanup                   = proxy_disconnect_client;
 
+    /**
+     * sharding func
+     */
+    con->plugins.con_sharding_read_query_result = proxy_sharding_read_query_result;
+    con->plugins.con_sharding_send_query_result = proxy_sharding_send_query_result;
 	return 0;
 }
 
@@ -2225,7 +2913,7 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->fix_bug_25371   = 0; /** double ERR packet on AUTH failures */
 	config->profiling       = 1;
 	config->start_proxy     = 1;
-	config->pool_change_user = 1; /* issue a COM_CHANGE_USER to cleanup the connection 
+	config->pool_change_user = 1; /* issue a COM_CHANGE_USER to cleanup the connection
 					 when we get back the connection from the pool */
 	config->ip_table[0] = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
 	config->ip_table[1] = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
@@ -2234,6 +2922,9 @@ chassis_plugin_config * network_mysqld_proxy_plugin_new(void) {
 	config->dt_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	config->pwd_table[0] = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, string_free);
 	config->pwd_table[1] = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, string_free);
+    config->table_shard_rules = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, sharding_table_free);
+    config->db_groups = g_ptr_array_new();
+
 	config->pwd_table_index = 0;
 	config->sql_log = NULL;
 	config->sql_log_type = NULL;
@@ -2267,7 +2958,6 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *oldconfig) {
 	}
 
 	if (config->lua_script) g_free(config->lua_script);
-
 	if (config->client_ips) {
 		for (i = 0; config->client_ips[i]; i++) {
 			g_free(config->client_ips[i]);
@@ -2305,45 +2995,49 @@ void network_mysqld_proxy_plugin_free(chassis_plugin_config *oldconfig) {
 	g_hash_table_remove_all(config->pwd_table[1]);
 	g_hash_table_destroy(config->pwd_table[1]);
 
+    g_hash_table_remove_all(config->table_shard_rules);
+    g_hash_table_destroy(config->table_shard_rules);
+
 	if (config->sql_log) fclose(config->sql_log);
 	if (config->sql_log_type) g_free(config->sql_log_type);
 
 	if (config->charset) g_free(config->charset);
+    if (config->db_groups) g_ptr_array_free(config->db_groups, TRUE);
 
 	g_free(config);
 }
 
 /**
- * plugin options 
+ * plugin options
  */
 static GOptionEntry * network_mysqld_proxy_plugin_get_options(chassis_plugin_config *oldconfig) {
 	guint i;
 
 	/* make sure it isn't collected */
-	static GOptionEntry config_entries[] = 
+	static GOptionEntry config_entries[] =
 	{
 		{ "proxy-address",            'P', 0, G_OPTION_ARG_STRING, NULL, "listening address:port of the proxy-server (default: :4040)", "<host:port>" },
-		{ "proxy-read-only-backend-addresses", 
+		{ "proxy-read-only-backend-addresses",
 					      'r', 0, G_OPTION_ARG_STRING_ARRAY, NULL, "address:port of the remote slave-server (default: not set)", "<host:port>" },
 		{ "proxy-backend-addresses",  'b', 0, G_OPTION_ARG_STRING_ARRAY, NULL, "address:port of the remote backend-servers (default: 127.0.0.1:3306)", "<host:port>" },
-		
+
 		{ "proxy-skip-profiling",     0, G_OPTION_FLAG_REVERSE, G_OPTION_ARG_NONE, NULL, "disables profiling of queries (default: enabled)", NULL },
 
 		{ "proxy-fix-bug-25371",      0, 0, G_OPTION_ARG_NONE, NULL, "fix bug #25371 (mysqld > 5.1.12) for older libmysql versions", NULL },
 		{ "proxy-lua-script",         's', 0, G_OPTION_ARG_FILENAME, NULL, "filename of the lua script (default: not set)", "<file>" },
-		
+
 		{ "no-proxy",                 0, G_OPTION_FLAG_REVERSE, G_OPTION_ARG_NONE, NULL, "don't start the proxy-module (default: enabled)", NULL },
-		
+
 		{ "proxy-pool-no-change-user", 0, G_OPTION_FLAG_REVERSE, G_OPTION_ARG_NONE, NULL, "don't use CHANGE_USER to reset the connection coming from the pool (default: enabled)", NULL },
 
 		{ "client-ips", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "all permitted client ips", NULL },
-	
+
 		{ "lvs-ips", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "all lvs ips", NULL },
 
 		{ "tables", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "sub-table settings", NULL },
-	
+
 		{ "pwds", 0, 0, G_OPTION_ARG_STRING_ARRAY, NULL, "password settings", NULL },
-		
+
 		{ "charset", 0, 0, G_OPTION_ARG_STRING, NULL, "original charset(default: LATIN1)", NULL },
 
 		{ "sql-log", 0, 0, G_OPTION_ARG_STRING, NULL, "sql log type(default: OFF)", NULL },
@@ -2385,47 +3079,84 @@ void handler(int sig) {
 	}
 }
 
-gpointer check_state(network_backends_t *bs) {
-	GPtrArray *backends = bs->backends;
-	GPtrArray *raw_pwds = bs->raw_pwds;
-	MYSQL mysql;
-	mysql_init(&mysql);
-	guint i, tm = 1;
-	sleep(1);
+gpointer check_state(chassis *chas) {
+    MYSQL mysql;
+    gint i, j, tm = 1;
+    char *user = NULL, *pwd_decr = NULL, *pwd_encr = NULL, *pwds_str = NULL;
+    GPtrArray* bs_array = g_ptr_array_new();
+    mysql_init(&mysql);
+    chassis_plugin *p = chas->modules->pdata[1]; //proxy plugin
+    chassis_plugin_config *config = p->config;
+    g_ptr_array_add(bs_array, chas->backends);
+    for (i = 0; i < config->db_groups->len; i++ ) {
+        db_group_t *dg = g_ptr_array_index(config->db_groups, i);
+        g_ptr_array_add(bs_array, dg->bs);
+    }
+    if(config->pwds && config->pwds[0]) {
+        pwds_str = strdup(config->pwds[0]);
+        user = strsep(&pwds_str, ":");
+        pwd_encr = strsep(&pwds_str, ":");
+        pwd_decr = decrypt(pwd_encr);
+    }
+    sleep(1);
+    while (TRUE) {
+        for(j = 0; j < bs_array->len; j++) {
+            network_backends_t *nbs = g_ptr_array_index(bs_array, j);
+            GPtrArray *backends = nbs->backends;
+            guint len = backends->len;
+            for (i = 0; i < len; ++i) {
+                network_backend_t* backend = g_ptr_array_index(backends, i);
+                if (backend == NULL || backend->state == BACKEND_STATE_OFFLINE) continue;
+                gchar* ip = inet_ntoa(backend->addr->addr.ipv4.sin_addr);
+                guint port = ntohs(backend->addr->addr.ipv4.sin_port);
+                mysql_options(&mysql, MYSQL_OPT_CONNECT_TIMEOUT, &tm);
+                mysql_real_connect(&mysql, ip, user, pwd_decr, NULL, port, NULL, 0);
 
-	while (TRUE) {
-		guint len = backends->len;
+                if(backend->state == BACKEND_STATE_UP) {
+                    if(mysql_errno(&mysql) != 0) {
+                        backend->state = BACKEND_STATE_DOWN;
+                    }
+                } else if(backend->state == BACKEND_STATE_DOWN) {
+                    if(mysql_errno(&mysql) == 0) {
+                        backend->state = BACKEND_STATE_UP;
+                    }
+                } else if(backend->state == BACKEND_STATE_UNKNOWN) {
+                    if(mysql_errno(&mysql) == 0)
+                        backend->state = BACKEND_STATE_UP;
+                    else
+                        backend->state = BACKEND_STATE_DOWN;
+                }
+                mysql_close(&mysql);
+            }
+        }
+        sleep(4);
+    }
+}
 
-		for (i = 0; i < len; ++i) {
-			network_backend_t *backend = g_ptr_array_index(backends, i);
-			if (backend == NULL || backend->state == BACKEND_STATE_UP || backend->state == BACKEND_STATE_OFFLINE) continue;
+/*get the shard rule from GKeyFile, and insert the shard rule into a hashtable*/
+int proxy_plugin_get_shard_rules(GKeyFile *keyfile, chassis *chas, chassis_plugin_config *config) {
+        GError *gerr = NULL;
+        gchar **groups, **gname;
+        gsize length;
+        int i, j;
 
-			gchar *ip = inet_ntoa(backend->addr->addr.ipv4.sin_addr);
-			guint port = ntohs(backend->addr->addr.ipv4.sin_port);
-			mysql_options(&mysql, MYSQL_OPT_CONNECT_TIMEOUT, &tm);
-
-			gchar *user = NULL, *pwd = NULL;
-			if (raw_pwds->len > 0) {
-				gchar *user_pwd = g_ptr_array_index(raw_pwds, 0);
-				gchar *pos = strchr(user_pwd, ':');
-				g_assert(pos);
-				user = g_strndup(user_pwd, pos-user_pwd);
-				pwd = decrypt(pos+1);
-			}
-			if (mysql_real_connect(&mysql, ip, user, pwd, NULL, port, NULL, 0) && mysql_query(&mysql, "SELECT 1") == 0) {
-				backend->state = BACKEND_STATE_UP;
-			} else if (backend->state == BACKEND_STATE_UNKNOWN) {
-				backend->state = BACKEND_STATE_DOWN;
-			}
-			mysql_close(&mysql);
-			g_free(user);
-			g_free(pwd);
-		}
-
-		sleep(4);
-	}
-
-	return NULL;
+        network_backends_t *bs = chas->backends;
+        groups = g_key_file_get_groups(keyfile, &length);
+        for(i = 0; i < length; i++) {
+                gname = g_strsplit(groups[i], "-", 2);
+                if(gname == NULL || gname[0] == NULL || strcasecmp(gname[0], "mysql") == 0) continue;
+                if(strcasecmp(gname[0], "shardrule") == 0) {
+                        sharding_table_t *stable = keyfile_to_sharding_table(keyfile, groups[i]);
+                        g_hash_table_insert(config->table_shard_rules, g_strdup(stable->table_name->str), stable);
+                }
+                if(strcasecmp(gname[0], "group") == 0) {
+                        db_group_t *dg = keyfile_to_db_group(keyfile, groups[i], chas->event_thread_count);
+                        g_ptr_array_add(config->db_groups, dg);
+                }
+                g_strfreev(gname);
+        }
+        g_strfreev(groups);
+        return 0;
 }
 
 /**
@@ -2450,14 +3181,14 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 		config->backend_addresses[0] = g_strdup("127.0.0.1:3306");
 	}
 
-	/** 
-	 * create a connection handle for the listen socket 
+	/**
+	 * create a connection handle for the listen socket
 	 */
 	con = network_mysqld_con_new();
 	network_mysqld_add_connection(chas, con);
 
 	config->listen_con = con;
-	
+
 	listen_sock = network_socket_new();
 	con->server = listen_sock;
 
@@ -2556,9 +3287,9 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	for (i = 0; config->pwds && config->pwds[i]; i++) {
 		char *user = NULL, *pwd = NULL;
 		gboolean is_complete = FALSE;
-
-		if ((user = strsep(&config->pwds[i], ":")) != NULL) {
-			if ((pwd = strsep(&config->pwds[i], ":")) != NULL) {
+        char *pwds_str = strdup(config->pwds[i]);
+		if ((user = strsep(&pwds_str, ":")) != NULL) {
+			if ((pwd = strsep(&pwds_str, ":")) != NULL) {
 				is_complete = TRUE;
 			}
 		}
@@ -2594,7 +3325,7 @@ int network_mysqld_proxy_plugin_apply_config(chassis *chas, chassis_plugin_confi
 	event_base_set(chas->event_base, &(listen_sock->event));
 	event_add(&(listen_sock->event), NULL);
 
-	g_thread_create((GThreadFunc)check_state, chas->backends, FALSE, NULL);
+	g_thread_create((GThreadFunc)check_state, chas, FALSE, NULL);
 
 	return 0;
 }
@@ -2608,6 +3339,6 @@ G_MODULE_EXPORT int plugin_init(chassis_plugin *p) {
 	p->get_options  = network_mysqld_proxy_plugin_get_options;
 	p->apply_config = network_mysqld_proxy_plugin_apply_config;
 	p->destroy      = network_mysqld_proxy_plugin_free;
-
+        p->get_shard_rules = proxy_plugin_get_shard_rules;
 	return 0;
 }

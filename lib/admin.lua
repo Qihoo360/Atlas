@@ -36,39 +36,56 @@ function read_query(packet)
 	local rows = { }
 	local fields = { }
 
-	if string.find(query:lower(), "^select%s+*%s+from%s+backends$") then
-		fields = {
-			{ name = "backend_ndx", 
-			  type = proxy.MYSQL_TYPE_LONG },
-			{ name = "address",
-			  type = proxy.MYSQL_TYPE_STRING },
-			{ name = "state",
-			  type = proxy.MYSQL_TYPE_STRING },
-			{ name = "type",
-			  type = proxy.MYSQL_TYPE_STRING },
-		}
+    if string.find(query:lower(), "^select%s+*%s+from%s+backends$") then
+        fields = {
+            { name = "group_id",
+            type = proxy.MYSQL_TYPE_LONG },
+            { name = "address",
+            type = proxy.MYSQL_TYPE_STRING },
+            { name = "state",
+            type = proxy.MYSQL_TYPE_STRING },
+            { name = "type",
+            type = proxy.MYSQL_TYPE_STRING },
+            { name = "backend_ndx",
+            type = proxy.MYSQL_TYPE_LONG },
+        }
+        local states = {
+            "unknown",
+            "up",
+            "down",
+            "offline"
+        }
+        local types = {
+            "unknown",
+            "rw",
+            "ro"
+        }
+        for i = 1, #proxy.global.backends do
+            local b = proxy.global.backends[i]
 
-		for i = 1, #proxy.global.backends do
-			local states = {
-				"unknown",
-				"up",
-				"down",
-				"offline"
-			}
-			local types = {
-				"unknown",
-				"rw",
-				"ro"
-			}
-			local b = proxy.global.backends[i]
-
-			rows[#rows + 1] = {
-				i,
-				b.dst.name,          -- configured backend address
-				states[b.state + 1], -- the C-id is pushed down starting at 0
-				types[b.type + 1],   -- the C-id is pushed down starting at 0
-			}
-		end
+            rows[#rows + 1] = {
+                -1,
+                b.dst.name,          -- configured backend address
+                states[b.state + 1], -- the C-id is pushed down starting at 0
+                types[b.type + 1],   -- the C-id is pushed down starting at 0
+                i,
+            }
+        end
+        local k = #proxy.global.backends
+        for i = 1, #proxy.global.db_groups do
+            local group = proxy.global.db_groups[i]
+            local bs = group.bs
+            for i = 1, #bs do
+                local backend = bs[i]
+                rows[#rows + 1] = {
+                    group.group_id,
+                    backend.dst.name,          -- configured backend address
+                    states[backend.state + 1], -- the C-id is pushed down starting at 0
+                    types[backend.type + 1],   -- the C-id is pushed down starting at 0
+                    i
+                }
+            end
+        end
 	elseif string.find(query:lower(), "^set%s+%a+%s+%d+$") then
 		local state,id = string.match(query:lower(), "^set%s+(%a+)%s+(%d+)$")
 		if proxy.global.backends[id] == nil then
@@ -86,14 +103,16 @@ function read_query(packet)
 		end
 
 		fields = { 
-			{ name = "backend_ndx", 
-			  type = proxy.MYSQL_TYPE_LONG },
+            { name = "group_id",
+            type = proxy.MYSQL_TYPE_LONG },
 			{ name = "address",
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "state",
 			  type = proxy.MYSQL_TYPE_STRING },
 			{ name = "type",
 			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "backend_ndx", 
+			  type = proxy.MYSQL_TYPE_LONG },
 		}
 
 		local states = {
@@ -110,10 +129,11 @@ function read_query(packet)
 		local b = proxy.global.backends[id]
 
 		rows[#rows + 1] = {
-			id,
+			-1,
 			b.dst.name,          -- configured backend address
 			states[b.state + 1], -- the C-id is pushed down starting at 0
 			types[b.type + 1],   -- the C-id is pushed down starting at 0
+            id
 		}
 	elseif string.find(query:lower(), "^add%s+master%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
         	local newserver = string.match(query:lower(), "^add%s+master%s+(.+)$")
@@ -124,9 +144,27 @@ function read_query(packet)
 			{ name = "status", 
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
+	elseif string.find(query:lower(), "^add%s+gmaster%s+%d%d%?%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
+        	local newserver = string.match(query:lower(), "^add%s+gmaster%s+(.+)$")
+        	proxy.global.backends.addgmaster = newserver
+		if proxy.global.config.rwsplit then proxy.global.config.rwsplit.max_weight = -1 end
+
+		fields = {
+			{ name = "status", 
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
 	elseif string.find(query:lower(), "^add%s+slave%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
         	local newserver = string.match(query:lower(), "^add%s+slave%s+(.+)$")
         	proxy.global.backends.addslave = newserver
+		if proxy.global.config.rwsplit then proxy.global.config.rwsplit.max_weight = -1 end
+
+		fields = {
+			{ name = "status", 
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+	elseif string.find(query:lower(), "^add%s+gslave%s+%d%d?%s+%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?:%d%d?%d?%d?%d?$") then
+        	local newserver = string.match(query:lower(), "^add%s+gslave%s+(.+)$")
+        	proxy.global.backends.addgslave = newserver
 		if proxy.global.config.rwsplit then proxy.global.config.rwsplit.max_weight = -1 end
 
 		fields = {
@@ -147,6 +185,34 @@ function read_query(packet)
 				  type = proxy.MYSQL_TYPE_STRING },
 			}
 		end
+	elseif string.find(query:lower(), "^remove%s+gbackend%s+(%d%d?%s+%d%d?)$") then
+        local group_backend = string.match(query:lower(), "^remove%s+gbackend%s+(%d%d?%s+%d%d?)$")
+        local vec = {}
+        for w in string.gmatch(group_backend, "%d+") do
+            vec[#vec + 1] = tonumber(w)
+        end
+        if vec[1] < -1 or vec[1] > #proxy.global.db_groups - 1 then
+            set_error("invalid group_id")
+            return proxy.PROXY_SEND_RESULT
+        end
+        local backend_count = #proxy.global.backends
+        for i = 1, #proxy.global.db_groups do
+            local group = proxy.global.db_groups[i]
+            local id = group.group_id
+            if id == vec[2] then
+                if vec[2] < 1 or vec[2] > #group.bs then
+                    set_error("invalid backend_id")
+                    return proxy.PROXY_SEND_RESULT
+                end
+            end
+        end
+        proxy.global.backends.removegbackend = group_backend
+        if proxy.global.config.rwsplit then proxy.global.config.rwsplit.max_weight = -1 end
+
+        fields = {
+            { name = "status", 
+            type = proxy.MYSQL_TYPE_STRING },
+        }
 	elseif string.find(query:lower(), "^select%s+*%s+from%s+clients$") then
 		fields = {
 			{ name = "client",
@@ -273,7 +339,10 @@ function read_query(packet)
 		rows[#rows + 1] = { "SET ONLINE $backend_id", "online backend server, ..." }
 		rows[#rows + 1] = { "ADD MASTER $backend", "example: \"add master 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "ADD SLAVE $backend", "example: \"add slave 127.0.0.1:3306\", ..." }
+		rows[#rows + 1] = { "ADD GMASTER $group_id $backend", "example: \"add gmaster 1 127.0.0.1:3306\", ..." }
+		rows[#rows + 1] = { "ADD GSLAVE $group_id $backend", "example: \"add gslave 1 127.0.0.1:3306\", ..." }
 		rows[#rows + 1] = { "REMOVE BACKEND $backend_id", "example: \"remove backend 1\", ..." }
+		rows[#rows + 1] = { "REMOVE GBACKEND $group_id $backend_id", "example: \"remove gbackend 1 1\", ..." }
 
 		rows[#rows + 1] = { "SELECT * FROM clients", "lists the clients" }
 		rows[#rows + 1] = { "ADD CLIENT $client", "example: \"add client 192.168.1.2\", ..." }

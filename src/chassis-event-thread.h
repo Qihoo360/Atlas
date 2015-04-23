@@ -65,4 +65,5 @@ CHASSIS_API void chassis_event_threads_start(GPtrArray *threads);
 
 CHASSIS_API network_connection_pool* chassis_event_thread_pool(network_backend_t* backend);
 
+CHASSIS_API void* chassis_thread_lemon_parse_obj(chassis* chas);
 #endif

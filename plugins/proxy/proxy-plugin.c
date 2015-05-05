@@ -1724,7 +1724,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
                 goto network_handle;
             } else if (parse_obj->parsed.curSize == 0) {
                 g_warning("%s: parsed.curSize == 0, origin sql: %.*s", G_STRLOC, packets->len-1, packets->str+1);
-                error_response("Proxy Warning - sql parse unknown error, Please communicate with us.", packets, con);
+                ret = error_response("Proxy Warning - sql parse unknown error, Please communicate with us.", packets, con);
                 sqlite3ParseClean(parse_obj);
                 goto network_handle;
             }

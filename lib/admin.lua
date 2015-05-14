@@ -258,7 +258,7 @@ function read_query(packet)
 			{ name = "version",
 			  type = proxy.MYSQL_TYPE_STRING },
 		}
-		rows[#rows + 1] = { "2.2.1" }
+		rows[#rows + 1] = { "2.2.2" }
 	elseif string.find(query:lower(), "^select%s+*%s+from%s+help$") then
 		fields = { 
 			{ name = "command", 

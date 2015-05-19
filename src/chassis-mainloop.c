@@ -275,8 +275,12 @@ int chassis_mainloop(void *_chas, GKeyFile *keyfile) {
 					G_STRLOC, p->name);
 			return -1;
 		}
-                if (i == 1) p->get_shard_rules(keyfile, chas, p->config);
-	}
+        if (i == 1) {
+            if (p->get_shard_rules) {
+                p->get_shard_rules(keyfile, chas, p->config); 
+            }
+        }
+    }
 
 	/*
 	 * drop root privileges if requested

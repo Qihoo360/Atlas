@@ -277,7 +277,7 @@ network_backend_t* sharding_read_write_split(Parse *parse_obj, network_backends_
 /**
  * sharding config
  */ 
-sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name);
+sharding_table_t* keyfile_to_sharding_table(GKeyFile *keyfile, gchar *group_name, GPtrArray *dbgroups);
 db_group_t* keyfile_to_db_group(GKeyFile* keyfile, gchar* group_name, guint event_thread_count);
 void sharding_table_free(sharding_table_t *table);
 

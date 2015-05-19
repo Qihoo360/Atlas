@@ -1254,11 +1254,20 @@ G_INLINE_FUNC void free_recvd_packets(network_socket* sockobj) {
     while((packet = g_queue_pop_head(sockobj->recv_queue->chunks))) { g_string_free(packet, TRUE); }
 }
 
-G_INLINE_FUNC void hit_all_dbgroup(guint dbgroup_count, GArray* hit_dbgroups) {
+G_INLINE_FUNC void hit_all_dbgroup(sharding_table_t *sharding_rule, GArray* hit_dbgroups) {
     g_array_set_size(hit_dbgroups, 0);
+    GArray *shard_groups = sharding_rule->shard_group;
     guint i;
-    for (i = 0; i < dbgroup_count; ++i) {
-        g_array_append_val(hit_dbgroups, i);
+    for (i = 0; i < shard_groups->len; ++i) {
+        guint db_group_index = 0;
+        if (sharding_rule->shard_type == SHARDING_TYPE_RANGE) {
+            group_range_map_t *range_map = &g_array_index(shard_groups, group_range_map_t, i);
+            db_group_index = range_map->db_group_index;
+        } else if (sharding_rule->shard_type == SHARDING_TYPE_HASH) {
+            group_hash_map_t *hash_map = &g_array_index(shard_groups, group_hash_map_t, i);
+            db_group_index = hash_map->db_group_index;
+        }
+        g_array_append_val(hit_dbgroups, db_group_index);
     }
 }
 
@@ -1292,7 +1301,7 @@ static network_socket_retval_t sharding_query_handle(parse_info_t *parse_info, G
     
     /*"select * from test;" OR "select * from test where noshardkey = 'test';" */
     if (sharding_ret == SHARDING_RET_ALL_SHARD || sharding_ret == SHARDING_RET_ERR_NO_SHARDKEY) {
-        hit_all_dbgroup(config->db_groups->len, hit_dbgroups);
+        hit_all_dbgroup(sharding_table_rule, hit_dbgroups);
         sharding_ret = SHARDING_RET_ALL_SHARD;
     }
 
@@ -1314,6 +1323,8 @@ static network_socket_retval_t sharding_query_handle(parse_info_t *parse_info, G
         for (i = 0; i < hit_dbgroups->len; ++i) {
             guint dbgroup_index = g_array_index(hit_dbgroups, guint, i);
             db_group_t *dbgroup_obj = g_ptr_array_index(config->db_groups, dbgroup_index);
+            if (dbgroup_obj == NULL) { continue; }
+
             if (trans_ctx->trans_stage == TRANS_STAGE_IN_TRANS && trans_ctx->in_trans_dbgroup_ctx != NULL && trans_ctx->in_trans_dbgroup_ctx->group_id != dbgroup_obj->group_id) {
                 sharding_proxy_send_error_result("Proxy Warning - sharding dbgroup is in trans, transaction will not work across multi dbgroup", con,
                         recv_sock, packets, ER_CANT_DO_THIS_DURING_AN_TRANSACTION, "25000");
@@ -3135,28 +3146,37 @@ gpointer check_state(chassis *chas) {
 
 /*get the shard rule from GKeyFile, and insert the shard rule into a hashtable*/
 int proxy_plugin_get_shard_rules(GKeyFile *keyfile, chassis *chas, chassis_plugin_config *config) {
-        GError *gerr = NULL;
-        gchar **groups, **gname;
-        gsize length;
-        int i, j;
+    GError *gerr = NULL;
+    gchar **groups, **gname;
+    gsize length;
+    int i, j;
 
-        network_backends_t *bs = chas->backends;
-        groups = g_key_file_get_groups(keyfile, &length);
-        for(i = 0; i < length; i++) {
-                gname = g_strsplit(groups[i], "-", 2);
-                if(gname == NULL || gname[0] == NULL || strcasecmp(gname[0], "mysql") == 0) continue;
-                if(strcasecmp(gname[0], "shardrule") == 0) {
-                        sharding_table_t *stable = keyfile_to_sharding_table(keyfile, groups[i]);
-                        g_hash_table_insert(config->table_shard_rules, g_strdup(stable->table_name->str), stable);
-                }
-                if(strcasecmp(gname[0], "group") == 0) {
-                        db_group_t *dg = keyfile_to_db_group(keyfile, groups[i], chas->event_thread_count);
-                        g_ptr_array_add(config->db_groups, dg);
-                }
-                g_strfreev(gname);
+    network_backends_t *bs = chas->backends;
+    groups = g_key_file_get_groups(keyfile, &length);
+    // must get config->db_groups firstly
+    for(i = 0; i < length; i++) {
+        gname = g_strsplit(groups[i], "-", 2);
+        if(gname == NULL || gname[0] == NULL || strcasecmp(gname[0], "mysql") == 0) continue;
+        if(strcasecmp(gname[0], "group") == 0) {
+            db_group_t *dg = keyfile_to_db_group(keyfile, groups[i], chas->event_thread_count);
+            g_ptr_array_add(config->db_groups, dg);
         }
-        g_strfreev(groups);
-        return 0;
+        g_strfreev(gname);
+    }
+
+    for(i = 0; i < length; i++) {
+        gname = g_strsplit(groups[i], "-", 2);
+        if(gname == NULL || gname[0] == NULL || strcasecmp(gname[0], "mysql") == 0) continue;
+        if(strcasecmp(gname[0], "shardrule") == 0) {
+            sharding_table_t *stable = keyfile_to_sharding_table(keyfile, groups[i], config->db_groups);
+            if (stable != NULL) {
+                g_hash_table_insert(config->table_shard_rules, g_strdup(stable->table_name->str), stable);
+            }
+        }      
+        g_strfreev(gname);
+    }
+    g_strfreev(groups);
+    return 0;
 }
 
 /**

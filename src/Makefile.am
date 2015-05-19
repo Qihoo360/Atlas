@@ -245,3 +245,8 @@ endif
 # test_latency_LDADD= $(MYSQL_LIBS) $(GLIB_LIBS)
 
 EXTRA_DIST=test-latency.c proxy-dtrace-provider.d CMakeLists.txt my_timer_cycles.il
+
+install-exec-hook:
+	mkdir -p $(prefix)/conf
+	mkdir -p $(prefix)/log
+	cd $(top_srcdir)/script; make; cp -f encrypt mysql-proxyd $(prefix)/bin

@@ -961,12 +961,11 @@ static sharding_result_t sharding_get_dbgroup_by_hash(GArray* hited_db_groups, s
     gint group_count = shard_groups->len;
     if (shard_key->type == SHARDING_SHARDKEY_VALUE_EQ) {
         gint group_index = shard_key->value % group_count;
-        for (i = 0; i < group_count; i++) {
-            group_hash_map_t hm = g_array_index(shard_groups, group_hash_map_t, i);
-            if (hm.db_group_index == group_index) break;
-        }
-        if (i < group_count) {
-            g_array_unique_append_val(hited_db_groups, &group_index, guint_compare_func);
+        if (group_index < shard_groups->len) {
+            group_hash_map_t *hash_map = &g_array_index(shard_groups, group_hash_map_t, group_index);
+            if (hash_map) {
+                g_array_unique_append_val(hited_db_groups, &hash_map->db_group_index, guint_compare_func);
+            }
         }
     }else { // -- TODO -- replace with return SHARDING_RET_ALL_SHARD, because if the shard_key->len > 1, the branch will run more than once
         /* for (i = 0; i < group_count; i++) { */
@@ -1121,8 +1120,25 @@ exit:
     return ret;
 }
 
+gint convert_groupid2index(GPtrArray *dbgroups, gint groupid) {
+    g_assert(dbgroups != NULL);
+    guint i;
+    for (i = 0; i < dbgroups->len; i++) {
+        db_group_t *db_group = (db_group_t*)g_ptr_array_index(dbgroups, i);
+        if (db_group->group_id == groupid) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 /*read the GKeyFile, and set sharding_table*/
-sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name) {
+sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name, GPtrArray *dbgroups) {
+    if (dbgroups == NULL || dbgroups->len == 0) {
+        return NULL;
+    }
+
     int i = 0;
     gchar **groups = NULL;
     gchar **range_map = NULL;
@@ -1141,17 +1157,13 @@ sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name
     config_entries[i++].arg_data = &(shard_key);
     config_entries[i++].arg_data = &(groups);
     if(-1 == chassis_keyfile_to_options(keyfile, group_name, config_entries)) {
-        g_message("%s:chassis_keyfile_to_options error", G_STRLOC);
-        return NULL;
+        g_error("%s:chassis_keyfile_to_options error", G_STRLOC);
     }
+
     if(strchr(table_name, '.') == NULL) {
-        g_message("%s:%s must include the database name.", G_STRLOC, table_name);
-        g_free(table_name);
-        g_free(type);
-        g_strfreev(groups);
-        g_free(shard_key);
-        return NULL;
+        g_error("%s:%s must include the database name.", G_STRLOC, table_name);
     }
+
     rule = g_new0(sharding_table_t, 1);
     rule->table_name = g_string_new(table_name);
     rule->shard_key = g_string_new(shard_key);
@@ -1160,19 +1172,30 @@ sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name
         rule->shard_type = SHARDING_TYPE_HASH;
         rule->shard_group = g_array_new(FALSE, TRUE, sizeof(group_hash_map_t));
         for(i = 0; groups && groups[i]; i++) {
-            hm.db_group_index = atoi(groups[i]);
+            hm.db_group_index = convert_groupid2index(dbgroups, atoi(groups[i]));
+            if (hm.db_group_index == -1) {
+                g_error("%s: the groupid:%s are invalid, rule->table_name:%s", G_STRLOC, groups[i], rule->table_name->str);
+            }
             g_array_append_val(rule->shard_group, hm);
         }
-        if(verify_group_index(keyfile, rule) != 0)
-            g_error("%s:the group indexs in shardrule are not mapping.", G_STRLOC);
+        /* if(verify_group_index(keyfile, rule) != 0) { */
+        /*     g_error("%s:the group indexs in shardrule are not mapping.", G_STRLOC); */
+        /* } */
+
     }else {
         group_range_map_t rm;
         rule->shard_type = SHARDING_TYPE_RANGE;
         rule->shard_group = g_array_new(FALSE, TRUE, sizeof(group_range_map_t));
         for(i = 0; groups && groups[i]; i++) {
             gchar **gvec = g_strsplit(groups[i], ":", 2);
+            if (gvec[0] == NULL || gvec == NULL) {
+                g_error("%s: invalid groupid:%s, rule->table_name:%s", G_STRLOC, groups[i], rule->table_name->str);
+            }
             if(gvec[0]) {
-                rm.db_group_index = atoi(gvec[0]);
+                rm.db_group_index = convert_groupid2index(dbgroups, atoi(gvec[0]));
+                if (rm.db_group_index == -1) {
+                    g_error("%s: the groupid:%s are invalid, rule->table_name:%s", G_STRLOC, gvec[0], rule->table_name->str);
+                }
                 if(gvec[1]) {
                     gchar **range = g_strsplit(gvec[1], "-", 2);
                     if(range[0] && range[1]) {
@@ -1183,7 +1206,7 @@ sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name
                         } else {
                             rm.range_end = g_ascii_strtoll(range[1], NULL, 10);
                         }
-                        
+
                         if (rm.range_begin > rm.range_end) {
                             g_error("group:%d range(%d-%d) begin must less than end!", rm.db_group_index, rm.range_begin, rm.range_end);
                         }
@@ -1196,8 +1219,8 @@ sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name
             g_strfreev(gvec);
             g_array_append_val(rule->shard_group, rm);
         }
-        if(verify_group_index(keyfile, rule) != 0)
-            g_error("%s:the group indexs in shardrule are not mapping.", G_STRLOC);
+        /* if(verify_group_index(keyfile, rule) != 0) */
+        /*     g_error("%s:the group indexs in shardrule are not mapping.", G_STRLOC); */
     }
 
     g_free(table_name);
@@ -1205,7 +1228,6 @@ sharding_table_t* keyfile_to_sharding_table(GKeyFile* keyfile, gchar* group_name
     g_free(shard_key);
     g_strfreev(groups);
     return rule;
-
 }
 
 db_group_t* keyfile_to_db_group(GKeyFile* keyfile, gchar* group_name, guint event_thread_count) {
@@ -1223,14 +1245,11 @@ db_group_t* keyfile_to_db_group(GKeyFile* keyfile, gchar* group_name, guint even
     config_entries[i++].arg_data = &(read_only_backend_addresses);
     config_entries[i++].arg_data = &(backend_addresses);
     if(-1 == chassis_keyfile_to_options(keyfile, group_name, config_entries)) {
-        g_message("%s:chassis_keyfile_to_options error", G_STRLOC);
-        return NULL;
+        g_error("%s:chassis_keyfile_to_options error", G_STRLOC);
     }
     gvec = g_strsplit(group_name, "-", 2);
     if(gvec == NULL || gvec[1] == NULL) {
-        g_message("%s:the format of group name(%s) error.", G_STRLOC, group_name);
-        g_strfreev(gvec);
-        return NULL;
+        g_error("%s:the format of group name(%s) error.", G_STRLOC, group_name);
     }
     db_group_t *dg = g_new0(db_group_t, 1);
     dg->group_id = atoi(gvec[1]);

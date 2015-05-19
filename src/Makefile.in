@@ -1438,7 +1438,8 @@ install-dvi-am:
 
 install-exec-am: install-binPROGRAMS install-libLTLIBRARIES \
 	install-libexecPROGRAMS
-
+	@$(NORMAL_INSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) install-exec-hook
 install-html: install-html-am
 
 install-html-am:
@@ -1480,7 +1481,7 @@ ps-am:
 uninstall-am: uninstall-binPROGRAMS uninstall-includeHEADERS \
 	uninstall-libLTLIBRARIES uninstall-libexecPROGRAMS
 
-.MAKE: all check install install-am install-strip
+.MAKE: all check install install-am install-exec-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-binPROGRAMS \
 	clean-generic clean-libLTLIBRARIES clean-libexecPROGRAMS \
@@ -1489,7 +1490,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-includeHEADERS \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-binPROGRAMS install-data \
 	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am \
+	install-exec-am install-exec-hook install-html install-html-am \
 	install-includeHEADERS install-info install-info-am \
 	install-libLTLIBRARIES install-libexecPROGRAMS install-man \
 	install-pdf install-pdf-am install-ps install-ps-am \
@@ -1513,6 +1514,11 @@ uninstall-am: uninstall-binPROGRAMS uninstall-includeHEADERS \
 @ENABLE_DTRACE_TRUE@@OS_SOLARIS_TRUE@proxy-dtrace-provider.o: proxy-dtrace-provider.h $(libmysql_proxy_la_OBJECTS)
 @ENABLE_DTRACE_TRUE@@OS_SOLARIS_TRUE@	$(DTRACE) -G -s $(top_srcdir)/src/proxy-dtrace-provider.d -o $(top_builddir)/src/proxy-dtrace-provider.o \
 @ENABLE_DTRACE_TRUE@@OS_SOLARIS_TRUE@	    $(libmysql_proxy_la_OBJECTS:%.lo=.libs/%.o)
+
+install-exec-hook:
+	mkdir -p $(prefix)/conf
+	mkdir -p $(prefix)/log
+	cd $(top_srcdir)/script; make; cp -f encrypt mysql-proxyd $(prefix)/bin
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

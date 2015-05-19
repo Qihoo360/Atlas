@@ -83,6 +83,7 @@ libsql_tokenizer_la_SOURCES = \
 	../lib/sql-tokenizer-keywords.c \
 	../lib/sql-tokenizer.l \
 	../lib/sql-tokenizer-tokens.c 
+	../lib/sql-tokenizer.c
 
 ../lib/sql-tokenizer.c:../lib/sql-tokenizer-keywords.c
 

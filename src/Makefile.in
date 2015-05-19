@@ -1502,6 +1502,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-includeHEADERS \
 	uninstall-am uninstall-binPROGRAMS uninstall-includeHEADERS \
 	uninstall-libLTLIBRARIES uninstall-libexecPROGRAMS
 
+	../lib/sql-tokenizer.c
 
 ../lib/sql-tokenizer.c:../lib/sql-tokenizer-keywords.c
 

@@ -326,9 +326,9 @@ int chassis_mainloop(void *_chas, GKeyFile *keyfile) {
 	event_base_set(chas->event_base, &ev_sigterm);
 	signal_add(&ev_sigterm, NULL);
 
-	signal_set(&ev_sigint, SIGINT, sigterm_handler, NULL);
-	event_base_set(chas->event_base, &ev_sigint);
-	signal_add(&ev_sigint, NULL);
+	/* signal_set(&ev_sigint, SIGINT, sigterm_handler, NULL); */
+	/* event_base_set(chas->event_base, &ev_sigint); */
+	/* signal_add(&ev_sigint, NULL); */
 
 #ifdef SIGHUP
 	signal_set(&ev_sighup, SIGHUP, sighup_handler, chas);

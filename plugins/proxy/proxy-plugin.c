@@ -1309,6 +1309,33 @@ gboolean sql_is_write(GPtrArray *tokens) {
 }
 
 /**
+ * for GUI tools compatibility, who send 'use xxxx' than com_init_db to change database
+ * return COM_INIT_DB packets or origin packets
+ */
+GString* convert_use_database2com_init_db(char type, GString *origin_packets, GPtrArray *tokens) {
+    if (type == COM_QUERY) { 
+        sql_token **ts = (sql_token**)(tokens->pdata);
+        guint tokens_len = tokens->len;
+        if (tokens_len > 1) {
+            guint i = 1;
+            sql_token_id token_id = ts[i]->token_id;
+
+            while (token_id == TK_COMMENT && ++i < tokens_len) {
+                token_id = ts[i]->token_id;
+            }
+
+            if (token_id == TK_SQL_USE && (i+1) < tokens_len && ts[i+1]->token_id == TK_LITERAL) {
+                g_string_truncate(origin_packets, 0);
+                g_string_append_c(origin_packets, COM_INIT_DB);
+                g_string_append_printf(origin_packets, "%s", ts[i+1]->text->str);
+            }
+        }
+    }
+    
+    return origin_packets;
+}
+
+/**
  * gets called after a query has been read
  *
  * - calls the lua script via network_mysqld_con_handle_proxy_stmt()
@@ -1357,6 +1384,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 				sqls = sql_parse(con, tokens);
 			}
 
+            packets = convert_use_database2com_init_db(type, packets, tokens);
 			gboolean is_write = sql_is_write(tokens);
 
 			ret = PROXY_SEND_INJECTION;
@@ -1802,6 +1830,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 			} else if (inj->id == 7) {
 				log_sql(con, inj);
 
+        
 				merge_res_t* merge_res = con->merge_res;
 				if (inj->qstat.query_status == MYSQLD_PACKET_OK && merge_res->rows->len < merge_res->limit) merge_rows(con, inj);
 

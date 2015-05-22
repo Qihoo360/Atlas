@@ -1,0 +1,4 @@
+SELECT 1;
+ERROR 07000: (bug_35669-mock) >SELECT 1<
+ERROR HY000: #07000MySQL Proxy Lua script failed to load. Check the error log.
+ERROR HY000: #07000MySQL Proxy Lua script failed to load. Check the error log.

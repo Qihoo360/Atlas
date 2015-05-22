@@ -1,0 +1,53 @@
+--[[ $%BEGINLICENSE%$
+ Copyright (c) 2007, 2008, Oracle and/or its affiliates. All rights reserved.
+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License as
+ published by the Free Software Foundation; version 2 of the
+ License.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ 02110-1301  USA
+
+ $%ENDLICENSE%$ --]]
+--[[
+    The following SQL statements need to be executed
+    directly to the backend server, otherwise they will affect the
+    outcome of the test
+--]]
+sql_execute(
+    {
+    'grant select,insert,update,delete on test.* to user1@localhost identified by "user"',
+    'grant select,insert,update,delete on test.* to user2@localhost identified by "user"',
+    'drop table if exists test.t1',
+    'create table test.t1 (id int)'
+    })
+
+--
+-- starts a fake replication system
+--
+simulate_replication()
+
+
+local rw_splitting_options =    {
+    ["proxy-backend-addresses"] = PROXY_HOST .. ':' .. PROXY_MASTER_PORT ,
+    ["proxy-read-only-backend-addresses"] = PROXY_HOST .. ':' .. PROXY_SLAVE_PORT ,
+    ["proxy-address"]           = PROXY_HOST .. ':' .. PROXY_PORT ,
+    ["admin-address"]           = PROXY_HOST .. ':' .. ADMIN_PORT ,
+    ["pid-file"]                = PROXY_PIDFILE,
+    ["proxy-lua-script"]        = 'bug_30867.lua',
+    ["plugin-dir"]              = PROXY_LIBPATH,
+    }
+
+--
+-- starts a Proxy with r/w splitting
+--
+start_proxy('bug_30867', rw_splitting_options)
+

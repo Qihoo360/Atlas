@@ -1,0 +1,56 @@
+#  $%BEGINLICENSE%$
+#  Copyright (c) 2007, 2008, Oracle and/or its affiliates. All rights reserved.
+# 
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; version 2 of the
+#  License.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+#  02110-1301  USA
+# 
+#  $%ENDLICENSE%$
+--disable_query_log
+--replace_result $srcdir <srcdir>
+--eval pload $srcdir/base/t/lm2.lua
+--enable_query_log
+connect (conn1,127.0.0.1,$MYSQL_USER,$MYSQL_PASSWORD,test,$PROXY_PORT,);
+select pload status;
+--disable_query_log
+--replace_result $srcdir <srcdir>
+--eval pload $srcdir/base/t/lm1.lua
+--enable_query_log
+connection conn1;
+select 'first' as info;
+select pload status;
+connect (conn2,127.0.0.1,$MYSQL_USER,$MYSQL_PASSWORD,test,$PROXY_PORT,);
+connection conn2;
+select 'second' as info;
+select pload status;
+disconnect conn2;
+connect (conn2,127.0.0.1,$MYSQL_USER,$MYSQL_PASSWORD,test,$PROXY_PORT,);
+connection conn2;
+select sleep(0.2);
+select 'third' as info;
+select pload status;
+connection default;
+disconnect conn1;
+disconnect conn2;
+--disable_query_log
+--replace_result $srcdir <srcdir>
+--eval pload $srcdir/base/t/lm3.lua
+--enable_query_log
+select 1000;
+--disable_query_log
+--replace_result $srcdir <srcdir>
+--eval punload $srcdir/base/t/lm3.lua
+--enable_query_log
+select 1000;
+

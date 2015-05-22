@@ -1,0 +1,33 @@
+#  $%BEGINLICENSE%$
+#  Copyright (c) 2008, 2009, Oracle and/or its affiliates. All rights reserved.
+# 
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; version 2 of the
+#  License.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+#  02110-1301  USA
+# 
+#  $%ENDLICENSE%$
+#!/bin/sh
+
+## Jan's automated gdb-backtrace-generator
+# PROXY_TRACE="gdb --batch --command=/Users/jan/projects/in-bzr/mysql-lb/backtrace.gdb --args " \
+MYSQL_TEST_BIN="/usr/local/mysql/bin/mysqltest" \
+LUA_USER_PATH="@CMAKE_SOURCE_DIR@/lib/?.lua" \
+LUA_CPATH="@CMAKE_SOURCE_DIR@/build-lib/lib?@CMAKE_SHARED_LIBRARY_SUFFIX@" \
+MYSQL_PROXY_VERSION="@CPACK_PACKAGE_VERSION_MAJOR@.@CPACK_PACKAGE_VERSION_MINOR@.@CPACK_PACKAGE_VERSION_PATCH@" \
+top_builddir=@CMAKE_BINARY_DIR@ \
+builddir=@CMAKE_CURRENT_BINARY_DIR@ \
+srcdir=@CMAKE_CURRENT_SOURCE_DIR@/ \
+PROXY_LIBPATH=@CMAKE_SOURCE_DIR@/build/ \
+PROXY_BINPATH=@CMAKE_SOURCE_DIR@/build-src/mysql-proxy \
+exec $@

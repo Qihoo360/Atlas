@@ -1,0 +1,8 @@
+select error 3306 xyz12 "My first fake error message";
+ERROR xyz12: my first fake error message
+select error 2222 123ab "My second fake error message";
+ERROR 123ab: my second fake error message
+select error 0000 xxxxx "";
+ERROR xxxxx: 
+select error 1111 54321 "fake message with numeric SQL state";
+ERROR 54321: fake message with numeric sql state

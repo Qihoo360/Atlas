@@ -1,0 +1,85 @@
+drop table if exists t1;
+CREATE TABLE t1 (
+person_id int(10) unsigned NOT NULL default '0',
+country char(30) NOT NULL default '',
+loc char(30) NOT NULL default '',
+department char(30) NOT NULL default '',
+category varchar(4) NOT NULL default '',
+name char(20) NOT NULL default '',
+salary int(11) NOT NULL default 0,
+gender char(1) NOT NULL default 'f',
+primary key (person_id)
+);
+INSERT INTO t1 
+(person_id, country, loc, department, category, name, salary, gender) 
+VALUES 
+(1,'UK','London','pers','cont','John',5000,'m'),
+(2,'Italy','Rome','pers','empl','Mario',6000,'m'),
+(3,'Germany','Bonn','sales','empl','Frank',5000,'m'),
+(4,'Germany','Berlin','dev','empl','Otto',6000,'m'),
+(5,'Germany','Munich','sales','cons','Susan',5500,'f'),
+(6,'UK','London','sales','cont','Martin',5500,'m'),
+(7,'Germany','Berlin','pers','empl','Mary',5500,'f'),
+(8,'Germany','Munich','pers','empl','Bill',5000,'m'),
+(9,'Italy','Rome','dev','cons','June',6000,'f');
+xtab t1 country gender count salary;
+country	gender_f	gender_m	total
+Germany	2	3	5
+Italy	1	1	2
+UK	0	2	2
+xtab t1 country gender count salary summary;
+country	gender_f	gender_m	total
+Germany	2	3	5
+Italy	1	1	2
+UK	0	2	2
+Grand Total	3	6	9
+xtab t1 country gender sum salary;
+country	gender_f	gender_m	total
+Germany	11000	16000	27000
+Italy	6000	6000	12000
+UK	NULL	10500	10500
+xtab t1 country gender sum salary summary;
+country	gender_f	gender_m	total
+Germany	11000	16000	27000
+Italy	6000	6000	12000
+UK	NULL	10500	10500
+Grand Total	17000	32500	49500
+xtab t1 gender country count salary;
+gender	country_Germany	country_Italy	country_UK	total
+f	2	1	0	3
+m	3	1	2	6
+xtab t1 gender country count salary summary;
+gender	country_Germany	country_Italy	country_UK	total
+f	2	1	0	3
+m	3	1	2	6
+Grand Total	5	2	2	9
+xtab t1 gender country sum salary;
+gender	country_Germany	country_Italy	country_UK	total
+f	11000	6000	NULL	17000
+m	16000	6000	10500	32500
+xtab t1 gender country sum salary summary;
+gender	country_Germany	country_Italy	country_UK	total
+f	11000	6000	NULL	17000
+m	16000	6000	10500	32500
+Grand Total	27000	12000	10500	49500
+xtab query;
+XTAB query 
+Setting XTAB QUERY, the next XTAB command will return 
+the query text instead of its result.
+
+Setting XTAB NOQUERY (default), the XTAB command
+executes the query and returns its result.
+
+Current setting: returns a query
+xtab t1 gender country sum salary summary;
+XTAB query
+          SELECT 
+            gender ,
+            sum(if( `country`= 'Germany',`salary`,null)) as `country_Germany`
+, sum(if( `country`= 'Italy',`salary`,null)) as `country_Italy`
+, sum(if( `country`= 'UK',`salary`,null)) as `country_UK` 
+            , sum(`salary`) AS total  
+          FROM t1 
+          GROUP BY gender
+         WITH ROLLUP 
+drop table t1;

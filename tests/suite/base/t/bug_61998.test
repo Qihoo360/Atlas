@@ -1,0 +1,76 @@
+USE test;
+
+## 
+# test if a empty stored procedures works
+
+DROP PROCEDURE IF EXISTS myproc_no_res;
+
+DELIMITER //;
+
+CREATE PROCEDURE myproc_no_res()
+BEGIN
+END//
+DELIMITER ;//
+
+CALL myproc_no_res();
+
+SELECT "myproc_no_res done" AS status;
+
+##
+# test if a SP with a resultset works
+DROP PROCEDURE IF EXISTS myproc_res;
+
+DELIMITER //;
+
+CREATE PROCEDURE myproc_res()
+BEGIN
+  SELECT 1;
+END//
+DELIMITER ;//
+
+## sends a resultset with EOF(_MORE_RESULTSETS_EXISTS) and a OK
+CALL myproc_res();
+
+SELECT "myproc_res done" AS status;
+
+## 
+# test if stored procedures with a cursor works
+
+DROP PROCEDURE IF EXISTS myproc_sp;
+
+DELIMITER //;
+
+CREATE PROCEDURE myproc_sp(OUT v INT)
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 1;
+  OPEN cur;
+  FETCH cur INTO v;
+  CLOSE cur;
+END//
+DELIMITER ;//
+
+## returns a OK(_STATUS_CURSORS_EXISTS)
+CALL myproc_sp(@v);
+
+SELECT @v;
+
+SELECT "myproc_sp done" AS status;
+
+## 
+# test if stored procedures with a cursor and a resultset work
+DROP PROCEDURE IF EXISTS myproc_res_sp;
+
+DELIMITER //;
+
+CREATE PROCEDURE myproc_res_sp()
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 1;
+  OPEN cur;
+  SELECT 1;
+END//
+DELIMITER ;//
+
+CALL myproc_res_sp();
+
+SELECT "myproc_res_sp done" AS status;
+

@@ -1,0 +1,36 @@
+#  $%BEGINLICENSE%$
+#  Copyright (c) 2008, 2009, Oracle and/or its affiliates. All rights reserved.
+# 
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; version 2 of the
+#  License.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+#  02110-1301  USA
+# 
+#  $%ENDLICENSE%$
+--disable_query_log
+eval assert(proxy.connection.client.dst.name == "$PROXY_HOST:$PROXY_PORT", proxy.connection.client.dst.name);
+eval assert(proxy.connection.client.dst.type == 2, proxy.connection.client.dst.type);
+eval assert(proxy.connection.client.dst.address == "$PROXY_HOST", proxy.connection.client.dst.address);
+eval assert(proxy.connection.client.dst.port == $PROXY_PORT, proxy.connection.client.dst.port);
+eval assert(proxy.connection.client.src.name ~= nil);
+eval assert(proxy.connection.client.src.type == 2, proxy.connection.client.src.type);
+eval assert(proxy.connection.client.src.address == "$PROXY_HOST", proxy.connection.client.src.address);
+eval assert(proxy.connection.client.src.port ~= nil);
+eval assert(proxy.connection.server.dst.name == "$PROXY_HOST:$PROXY_CHAIN_PORT", proxy.connection.server.dst.name);
+eval assert(proxy.connection.server.dst.type == 2);
+eval assert(proxy.connection.server.dst.address == "$PROXY_HOST", proxy.connection.server.dst.address);
+eval assert(proxy.connection.server.dst.port == $PROXY_CHAIN_PORT, proxy.connection.server.dst.port);
+eval assert(proxy.connection.server.src.name ~= nil);
+eval assert(proxy.connection.server.src.type == 2, proxy.connection.server.src.type);
+eval assert(proxy.connection.server.src.address == "$PROXY_HOST", proxy.connection.server.src.address);
+eval assert(proxy.connection.server.src.port ~= nil);

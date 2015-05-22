@@ -1,0 +1,25 @@
+SET ID 1;
+id
+1
+GET ID;
+id
+1
+SET ID 2;
+id
+2
+GET ID;
+id
+2
+GET ID;
+id
+1
+KILL BACKEND;
+ERROR HY000: Lost connection to MySQL server during query
+GET ID;
+ERROR HY000: MySQL server has gone away
+GET ID;
+id
+2
+GET ID;
+id
+2

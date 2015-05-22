@@ -1,0 +1,8 @@
+select count(*) from information_schema.tables where table_schema='mysql' and table_name like 'user';
+item	value
+original	select count(*) from information_schema.tables where table_schema='mysql' and table_name like 'user'
+rebuilt	select count( * ) from information_schema . tables where table_schema = "mysql" and table_name like "user" 
+/*a comment*/select /*another comment*/ count(*) from information_schema.tables where table_schema='mysql' and table_name like 'user';
+item	value
+original	/*a comment*/select /*another comment*/ count(*) from information_schema.tables where table_schema='mysql' and table_name like 'user'
+rebuilt	select count( * ) from information_schema . tables where table_schema = "mysql" and table_name like "user" 

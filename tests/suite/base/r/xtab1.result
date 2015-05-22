@@ -1,0 +1,42 @@
+xtab help;
+XTAB help
+xtab - version 0.1.3 - (C) MySQL AB 2007
+Syntax: 
+ - 
+XTAB table_name row_header col_header operation operation_fld [summary]
+"table_name" can be a table or a view
+"row_field" is the field to be used as row header
+"col_field" is the field whose distinct values will become column headers
+"operation" is the required operation (COUNT|SUM|AVG|MAX|MIN)
+"operation_field" is the field to which the operation is applied
+ - 
+If the "summary" option is used, then a "WITH ROLLUP" clause 
+is added to the query.
+ - 
+Other commands:
+XTAB QUERY - the XTAB query is returned instead of its result
+XTAB NOQUERY - the XTAB result is returned (default)
+XTAB version - shows current version
+XTAB help - shows this help
+Created by Giuseppe Maxia
+xtab version;
+XTAB version
+0.1.3
+xtab query;
+XTAB query 
+Setting XTAB QUERY, the next XTAB command will return 
+the query text instead of its result.
+
+Setting XTAB NOQUERY (default), the XTAB command
+executes the query and returns its result.
+
+Current setting: returns a query
+xtab noquery;
+XTAB query 
+Setting XTAB QUERY, the next XTAB command will return 
+the query text instead of its result.
+
+Setting XTAB NOQUERY (default), the XTAB command
+executes the query and returns its result.
+
+Current setting: returns a result set

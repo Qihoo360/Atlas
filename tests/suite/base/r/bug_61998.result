@@ -1,0 +1,48 @@
+USE test;
+DROP PROCEDURE IF EXISTS myproc_no_res;
+CREATE PROCEDURE myproc_no_res()
+BEGIN
+END//
+CALL myproc_no_res();
+SELECT "myproc_no_res done" AS status;
+status
+myproc_no_res done
+DROP PROCEDURE IF EXISTS myproc_res;
+CREATE PROCEDURE myproc_res()
+BEGIN
+SELECT 1;
+END//
+CALL myproc_res();
+1
+1
+SELECT "myproc_res done" AS status;
+status
+myproc_res done
+DROP PROCEDURE IF EXISTS myproc_sp;
+CREATE PROCEDURE myproc_sp(OUT v INT)
+BEGIN
+DECLARE cur CURSOR FOR SELECT 1;
+OPEN cur;
+FETCH cur INTO v;
+CLOSE cur;
+END//
+CALL myproc_sp(@v);
+SELECT @v;
+@v
+1
+SELECT "myproc_sp done" AS status;
+status
+myproc_sp done
+DROP PROCEDURE IF EXISTS myproc_res_sp;
+CREATE PROCEDURE myproc_res_sp()
+BEGIN
+DECLARE cur CURSOR FOR SELECT 1;
+OPEN cur;
+SELECT 1;
+END//
+CALL myproc_res_sp();
+1
+1
+SELECT "myproc_res_sp done" AS status;
+status
+myproc_res_sp done

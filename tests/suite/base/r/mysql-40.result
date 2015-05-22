@@ -1,0 +1,4 @@
+SELECT thread_id();
+thread_id
+0
+Got one of the listed errors

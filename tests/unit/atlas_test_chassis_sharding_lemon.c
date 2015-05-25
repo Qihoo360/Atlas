@@ -455,6 +455,43 @@ void test_sharding_get_dbgroups_by_range_select() {
     g_assert_cmpint(1, ==, g_array_index(hit_db_groups, guint, 1));
     g_assert_cmpint(2, ==, g_array_index(hit_db_groups, guint, 2));
 
+    sqlite3ParseReset(parse_obj);
+    g_array_set_size(hit_db_groups, 0);
+    sql = "SELECT * FROM test_shard WHERE test_shard.id > 150 OR test_shard.id = 50"; 
+    sqlite3RunParser1(parse_obj, sql, strlen(sql), &errMsg);
+    g_assert(errMsg == NULL);
+
+    parse_info_init(&parse_info, parse_obj, sql, strlen(sql));
+    ret = sharding_get_dbgroups(hit_db_groups, &sharding_table_rule, &parse_info);
+    g_assert_cmpint(ret, ==, SHARDING_RET_OK);
+    g_assert_cmpint(3, ==, hit_db_groups->len);
+    g_assert_cmpint(0, ==, g_array_index(hit_db_groups, guint, 0));
+    g_assert_cmpint(1, ==, g_array_index(hit_db_groups, guint, 1));
+    g_assert_cmpint(2, ==, g_array_index(hit_db_groups, guint, 2));
+
+    sqlite3ParseReset(parse_obj);
+    g_array_set_size(hit_db_groups, 0);
+    sql = "SELECT * FROM test_shard WHERE test_shard.id BETWEEN 1 AND 99 OR id >= 100;";
+    sqlite3RunParser1(parse_obj, sql, strlen(sql), &errMsg);
+    g_assert(errMsg == NULL);
+
+    parse_info_init(&parse_info, parse_obj, sql, strlen(sql));
+    ret = sharding_get_dbgroups(hit_db_groups, &sharding_table_rule, &parse_info);
+    g_assert_cmpint(ret, ==, SHARDING_RET_OK);
+    g_assert_cmpint(3, ==, hit_db_groups->len);
+    g_assert_cmpint(0, ==, g_array_index(hit_db_groups, guint, 0));
+    g_assert_cmpint(1, ==, g_array_index(hit_db_groups, guint, 1));
+    g_assert_cmpint(2, ==, g_array_index(hit_db_groups, guint, 2));
+
+    sqlite3ParseReset(parse_obj);
+    g_array_set_size(hit_db_groups, 0);
+    sql = "SELECT * FROM test_shard, nosharding WHERE test_shard.id = nosharding.id";
+    sqlite3RunParser1(parse_obj, sql, strlen(sql), &errMsg);
+    g_assert(errMsg == NULL);
+
+    parse_info_init(&parse_info, parse_obj, sql, strlen(sql));
+    ret = sharding_get_dbgroups(hit_db_groups, &sharding_table_rule, &parse_info);
+    g_assert_cmpint(ret, ==, SHARDING_RET_ERR_NO_SHARDKEY);
 exit:
     sqlite3ParseDelete(parse_obj);
 

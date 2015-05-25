@@ -239,203 +239,203 @@ typedef struct InsertValues{
     ExprList *set_list;
 }InsertValues;
 
-void find_column_expr(Parse *parse_obj, gchar *split_column, Expr **column_expr, InsertValues **insert_values) {
-    int sqltype = parse_obj->parsed.array[0].sqltype;
-    if (sqltype == SQLTYPE_SELECT || sqltype == SQLTYPE_DELETE || sqltype == SQLTYPE_UPDATE) { // find where
-        Expr *where_expr = parse_get_where_expr(parse_obj);
-        if (where_expr == NULL || column_expr == NULL) return;
+/* void find_column_expr(Parse *parse_obj, gchar *split_column, Expr **column_expr, InsertValues **insert_values) { */
+/*     int sqltype = parse_obj->parsed.array[0].sqltype; */
+/*     if (sqltype == SQLTYPE_SELECT || sqltype == SQLTYPE_DELETE || sqltype == SQLTYPE_UPDATE) { // find where */
+/*         Expr *where_expr = parse_get_where_expr(parse_obj); */
+/*         if (where_expr == NULL || column_expr == NULL) return; */
         
-        find_column_expr_inwhere(where_expr, split_column, column_expr);
-    } else if (sqltype == SQLTYPE_INSERT || sqltype == SQLTYPE_REPLACE) {
-        if (insert_values == NULL) { return; }
+/*         find_column_expr_inwhere(where_expr, split_column, column_expr); */
+/*     } else if (sqltype == SQLTYPE_INSERT || sqltype == SQLTYPE_REPLACE) { */
+/*         if (insert_values == NULL) { return; } */
         
-        *insert_values = NULL;
-        Insert *insert_obj = parse_obj->parsed.array[0].result.insertObj;
-        int i = 0;
-        if (insert_obj->pValuesList) {
-            for (i = 0; i < insert_obj->pColumn->nId; i++) {
-                if (strcmp(split_column, insert_obj->pColumn->a[i].zName) == 0) {
-                    break;
-                }
-            }
+/*         *insert_values = NULL; */
+/*         Insert *insert_obj = parse_obj->parsed.array[0].result.insertObj; */
+/*         int i = 0; */
+/*         if (insert_obj->pValuesList) { */
+/*             for (i = 0; i < insert_obj->pColumn->nId; i++) { */
+/*                 if (strcmp(split_column, insert_obj->pColumn->a[i].zName) == 0) { */
+/*                     break; */
+/*                 } */
+/*             } */
 
-            if (i == insert_obj->pColumn->nId) { return; } // no split_column
-        } else if (insert_obj->pSetList) {
-            for (i = 0; i < insert_obj->pSetList->nExpr; i++) {
-                if (strcmp(split_column, insert_obj->pSetList->a[i].zName) == 0) {
-                    break;
-                }
-            }
+/*             if (i == insert_obj->pColumn->nId) { return; } // no split_column */
+/*         } else if (insert_obj->pSetList) { */
+/*             for (i = 0; i < insert_obj->pSetList->nExpr; i++) { */
+/*                 if (strcmp(split_column, insert_obj->pSetList->a[i].zName) == 0) { */
+/*                     break; */
+/*                 } */
+/*             } */
 
-            if (i == insert_obj->pSetList->nExpr) { return; }
-        } else { 
-            return; 
-        }
+/*             if (i == insert_obj->pSetList->nExpr) { return; } */
+/*         } else { */ 
+/*             return; */ 
+/*         } */
     
-        *insert_values = g_new0(InsertValues, 1);
-        (*insert_values)->key_index = i;
-        (*insert_values)->values_list = insert_obj->pValuesList; // values_list and set_list never be not null the same time.
-        (*insert_values)->set_list = insert_obj->pSetList;
-    }   
-}
+/*         *insert_values = g_new0(InsertValues, 1); */
+/*         (*insert_values)->key_index = i; */
+/*         (*insert_values)->values_list = insert_obj->pValuesList; // values_list and set_list never be not null the same time. */
+/*         (*insert_values)->set_list = insert_obj->pSetList; */
+/*     } */   
+/* } */
 
-void rewrite_sql_from_in(parse_info_t *parse_info, Expr *column_expr, guint subtable_num, GPtrArray *sqls) {
-    char value[64] = {0};
-    char *orig_sql = parse_info->orig_sql;
-    char *orig_sql_end = orig_sql + parse_info->orig_sql_len;
-    Token table_token = parse_info->table_token;
-    char *str_after_table = (char*)table_token.z + table_token.n;
-    gchar op = COM_QUERY;
+/* void rewrite_sql_from_in(parse_info_t *parse_info, Expr *column_expr, guint subtable_num, GPtrArray *sqls) { */
+/*     char value[64] = {0}; */
+/*     char *orig_sql = parse_info->orig_sql; */
+/*     char *orig_sql_end = orig_sql + parse_info->orig_sql_len; */
+/*     Token table_token = parse_info->table_token; */
+/*     char *str_after_table = (char*)table_token.z + table_token.n; */
+/*     gchar op = COM_QUERY; */
 
-    if ( column_expr->pList->nExpr == 1) {
-        Expr *value_expr = column_expr->pList->a[0].pExpr;
-        dup_token2buff(value, sizeof(value), value_expr->token);
-        guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
-        GString *sql = g_string_new(&op);
-        g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
-                parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+/*     if ( column_expr->pList->nExpr == 1) { */
+/*         Expr *value_expr = column_expr->pList->a[0].pExpr; */
+/*         dup_token2buff(value, sizeof(value), value_expr->token); */
+/*         guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num; */
+/*         GString *sql = g_string_new(&op); */
+/*         g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, */ 
+/*                 parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table); */
 
-        g_ptr_array_add(sqls, sql);
-    } else if (column_expr->pList->nExpr > 1) {
-        GArray *multi_value[subtable_num];
-        int i;
-        for (i = 0; i < subtable_num; i++) { 
-            multi_value[i] = g_array_new(FALSE, FALSE, sizeof(guint));
-        }
+/*         g_ptr_array_add(sqls, sql); */
+/*     } else if (column_expr->pList->nExpr > 1) { */
+/*         GArray *multi_value[subtable_num]; */
+/*         int i; */
+/*         for (i = 0; i < subtable_num; i++) { */ 
+/*             multi_value[i] = g_array_new(FALSE, FALSE, sizeof(guint)); */
+/*         } */
 
-        for (i = 0; i < column_expr->pList->nExpr; i++) {
-            dup_token2buff(value, sizeof(value), column_expr->pList->a[i].pExpr->token);                     
-            guint column_value = atoi(value);
-            g_array_append_val(multi_value[column_value%subtable_num], column_value);
-        }
+/*         for (i = 0; i < column_expr->pList->nExpr; i++) { */
+/*             dup_token2buff(value, sizeof(value), column_expr->pList->a[i].pExpr->token); */                     
+/*             guint column_value = atoi(value); */
+/*             g_array_append_val(multi_value[column_value%subtable_num], column_value); */
+/*         } */
 
-        int j, k;
-        for (j = 0; j < subtable_num; i++) {
-            GString *tmp = g_string_new("IN(");
-            g_string_append_printf(tmp, "%u", g_array_index(multi_value[j], guint, 0));
+/*         int j, k; */
+/*         for (j = 0; j < subtable_num; i++) { */
+/*             GString *tmp = g_string_new("IN("); */
+/*             g_string_append_printf(tmp, "%u", g_array_index(multi_value[j], guint, 0)); */
 
-            for (k = 0; k < multi_value[j]->len; k++) {
-                g_string_append_printf(tmp, "%u", g_array_index(multi_value[j], guint, k));
-            }
-            g_string_append_c(tmp, ')');
+/*             for (k = 0; k < multi_value[j]->len; k++) { */
+/*                 g_string_append_printf(tmp, "%u", g_array_index(multi_value[j], guint, k)); */
+/*             } */
+/*             g_string_append_c(tmp, ')'); */
 
-            GString* sql = g_string_new(&op);
-            g_string_append_printf(sql, "%.*s%s_%u", (const char*)table_token.z - orig_sql, orig_sql, parse_info->table_name, j);
-            // append str before IN
-            g_string_append_printf(sql, "%.*s", (const char*)column_expr->span.z - str_after_table, str_after_table);
-            char *str_after_in = (char*)column_expr->span.z + column_expr->span.n;
-            g_string_append_printf(sql, "%s", tmp);
-            g_string_append_printf(sql, "%.*s", orig_sql_end - str_after_in, str_after_in);
+/*             GString* sql = g_string_new(&op); */
+/*             g_string_append_printf(sql, "%.*s%s_%u", (const char*)table_token.z - orig_sql, orig_sql, parse_info->table_name, j); */
+/*             // append str before IN */
+/*             g_string_append_printf(sql, "%.*s", (const char*)column_expr->span.z - str_after_table, str_after_table); */
+/*             char *str_after_in = (char*)column_expr->span.z + column_expr->span.n; */
+/*             g_string_append_printf(sql, "%s", tmp); */
+/*             g_string_append_printf(sql, "%.*s", orig_sql_end - str_after_in, str_after_in); */
 
-            g_ptr_array_add(sqls, sql);
-        }
+/*             g_ptr_array_add(sqls, sql); */
+/*         } */
 
-        for (i = 0; i < subtable_num; i++) {
-            g_array_free(multi_value[i], TRUE);
-        }
-    }  
-}
+/*         for (i = 0; i < subtable_num; i++) { */
+/*             g_array_free(multi_value[i], TRUE); */
+/*         } */
+/*     } */  
+/* } */
 
-void rewrite_sql_insert_sql(parse_info_t *parse_info, InsertValues *insert_values, guint subtable_num, GPtrArray *sqls, char **errmsg) {
-    char value[64] = {0};
-    char *orig_sql = parse_info->orig_sql;
-    char *orig_sql_end = orig_sql + parse_info->orig_sql_len;
-    Token table_token = parse_info->table_token;
-    char *str_after_table = (char*)table_token.z + table_token.n;
-    gchar op = COM_QUERY;
+/* void rewrite_sql_insert_sql(parse_info_t *parse_info, InsertValues *insert_values, guint subtable_num, GPtrArray *sqls, char **errmsg) { */
+/*     char value[64] = {0}; */
+/*     char *orig_sql = parse_info->orig_sql; */
+/*     char *orig_sql_end = orig_sql + parse_info->orig_sql_len; */
+/*     Token table_token = parse_info->table_token; */
+/*     char *str_after_table = (char*)table_token.z + table_token.n; */
+/*     gchar op = COM_QUERY; */
 
-    if (insert_values->set_list) {
-        dup_token2buff(value, sizeof(value), insert_values->set_list->a[insert_values->key_index].pExpr->token);
-        guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
-        GString *sql = g_string_new(&op);
-        g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
-                parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+/*     if (insert_values->set_list) { */
+/*         dup_token2buff(value, sizeof(value), insert_values->set_list->a[insert_values->key_index].pExpr->token); */
+/*         guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num; */
+/*         GString *sql = g_string_new(&op); */
+/*         g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, */ 
+/*                 parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table); */
 
-        g_ptr_array_add(sqls, sql);
-    } else if (insert_values->values_list) {
-        if (insert_values->values_list->nValues > 1) {
-            *errmsg = g_strdup("Proxy Warning - Not support insert multi values in sub-table yet!");
-        } else {
-            ExprList *exprlist = insert_values->values_list->a[0];
-            dup_token2buff(value, sizeof(value), exprlist->a[insert_values->key_index].pExpr->token);
-            guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
-            GString *sql = g_string_new(&op);
-            g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
-                    parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+/*         g_ptr_array_add(sqls, sql); */
+/*     } else if (insert_values->values_list) { */
+/*         if (insert_values->values_list->nValues > 1) { */
+/*             *errmsg = g_strdup("Proxy Warning - Not support insert multi values in sub-table yet!"); */
+/*         } else { */
+/*             ExprList *exprlist = insert_values->values_list->a[0]; */
+/*             dup_token2buff(value, sizeof(value), exprlist->a[insert_values->key_index].pExpr->token); */
+/*             guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num; */
+/*             GString *sql = g_string_new(&op); */
+/*             g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, */ 
+/*                     parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table); */
 
-            g_ptr_array_add(sqls, sql);
-        }          
-    }
-}
+/*             g_ptr_array_add(sqls, sql); */
+/*         } */          
+/*     } */
+/* } */
 
-void rewrite_sql_from_eq(parse_info_t *parse_info, Expr *column_expr, guint subtable_num, GPtrArray *sqls) {
-    char value[64] = {0};
-    char *orig_sql = parse_info->orig_sql;
-    char *orig_sql_end = orig_sql + parse_info->orig_sql_len;
-    Token table_token = parse_info->table_token;
-    char *str_after_table = (char*)table_token.z + table_token.n;
-    gchar op = COM_QUERY;
+/* void rewrite_sql_from_eq(parse_info_t *parse_info, Expr *column_expr, guint subtable_num, GPtrArray *sqls) { */
+/*     char value[64] = {0}; */
+/*     char *orig_sql = parse_info->orig_sql; */
+/*     char *orig_sql_end = orig_sql + parse_info->orig_sql_len; */
+/*     Token table_token = parse_info->table_token; */
+/*     char *str_after_table = (char*)table_token.z + table_token.n; */
+/*     gchar op = COM_QUERY; */
 
-    dup_token2buff(value, sizeof(value), column_expr->pRight->token);
-    guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num;
-    GString *sql = g_string_new(&op);
-    g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, 
-            parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table);
+/*     dup_token2buff(value, sizeof(value), column_expr->pRight->token); */
+/*     guint subtable = g_ascii_strtoull(value, NULL, 10) % subtable_num; */
+/*     GString *sql = g_string_new(&op); */
+/*     g_string_append_printf(sql, "%.*s%s_%u%.*s", (const char*)table_token.z - orig_sql, orig_sql, */ 
+/*             parse_info->table_name, subtable, orig_sql_end - str_after_table, str_after_table); */
 
-    g_ptr_array_add(sqls, sql);
+/*     g_ptr_array_add(sqls, sql); */
 
-}
+/* } */
 
 // rewrite_sql is deprecated, and the code is without testing
-GPtrArray* rewrite_sql(parse_info_t *parse_info, gchar *split_column, guint subtable_num, char **errmsg) {
-    GPtrArray *sqls = NULL;
-    Expr *column_expr = NULL;
-    InsertValues *insert_values = NULL;
+/* GPtrArray* rewrite_sql(parse_info_t *parse_info, gchar *split_column, guint subtable_num, char **errmsg) { */
+/*     GPtrArray *sqls = NULL; */
+/*     Expr *column_expr = NULL; */
+/*     InsertValues *insert_values = NULL; */
 
-    Parse *parse_obj = parse_info->parse_obj;
-    find_column_expr(parse_obj, split_column, &column_expr, &insert_values);
+/*     Parse *parse_obj = parse_info->parse_obj; */
+/*     find_column_expr(parse_obj, split_column, &column_expr, &insert_values); */
 
-    if (column_expr) {
-        sqls = g_ptr_array_new();
-        if (column_expr->op == TK_EQ) {
-            rewrite_sql_from_eq(parse_info, column_expr, subtable_num, sqls);
-        } else if (column_expr->op == TK_IN) {   
-            rewrite_sql_from_in(parse_info, column_expr, subtable_num, sqls);
-        }     
-    } else if (insert_values) {
-        sqls = g_ptr_array_new();
-        rewrite_sql_insert_sql(parse_info, insert_values, subtable_num, sqls, errmsg);
-    } 
-exit:
-    if (insert_values != NULL) { g_free(insert_values); }
-    if (*errmsg != NULL || (sqls != NULL && sqls->len == 0)) { 
-        g_ptr_array_free(sqls, TRUE); 
-        sqls = NULL;
-    }
-    return sqls;
-}
+/*     if (column_expr) { */
+/*         sqls = g_ptr_array_new(); */
+/*         if (column_expr->op == TK_EQ) { */
+/*             rewrite_sql_from_eq(parse_info, column_expr, subtable_num, sqls); */
+/*         } else if (column_expr->op == TK_IN) { */   
+/*             rewrite_sql_from_in(parse_info, column_expr, subtable_num, sqls); */
+/*         } */     
+/*     } else if (insert_values) { */
+/*         sqls = g_ptr_array_new(); */
+/*         rewrite_sql_insert_sql(parse_info, insert_values, subtable_num, sqls, errmsg); */
+/*     } */ 
+/* exit: */
+/*     if (insert_values != NULL) { g_free(insert_values); } */
+/*     if (*errmsg != NULL || (sqls != NULL && sqls->len == 0)) { */ 
+/*         g_ptr_array_free(sqls, TRUE); */ 
+/*         sqls = NULL; */
+/*     } */
+/*     return sqls; */
+/* } */
 
-GPtrArray* sql_parse(network_mysqld_con *con, parse_info_t *parse_info, char **errmsg) {
-	if (parse_info->table_name == NULL) return NULL;
+/* GPtrArray* sql_parse(network_mysqld_con *con, parse_info_t *parse_info, char **errmsg) { */
+/* 	if (parse_info->table_name == NULL) return NULL; */
 
-	gchar* table_name = NULL;
-	if (parse_info->db_name == NULL) {
-		table_name = g_strdup_printf("%s.%s", con->client->default_db->str, parse_info->table_name);
-	} else {
-		table_name = g_strdup_printf("%s.%s", parse_info->db_name, parse_info->table_name);
-	}
+/* 	gchar* table_name = NULL; */
+/* 	if (parse_info->db_name == NULL) { */
+/* 		table_name = g_strdup_printf("%s.%s", con->client->default_db->str, parse_info->table_name); */
+/* 	} else { */
+/* 		table_name = g_strdup_printf("%s.%s", parse_info->db_name, parse_info->table_name); */
+/* 	} */
 
-	db_table_t* dt = g_hash_table_lookup(config->dt_table, table_name); 
-	if (dt == NULL) {
-		g_free(table_name);
-		return NULL;
-	}
+/* 	db_table_t* dt = g_hash_table_lookup(config->dt_table, table_name); */ 
+/* 	if (dt == NULL) { */
+/* 		g_free(table_name); */
+/* 		return NULL; */
+/* 	} */
     
-	g_free(table_name);
+/* 	g_free(table_name); */
     
-	GPtrArray* sqls = rewrite_sql(parse_info, dt->column_name, dt->table_num, errmsg);
-	return sqls;
-}
+/* 	GPtrArray* sqls = rewrite_sql(parse_info, dt->column_name, dt->table_num, errmsg); */
+/* 	return sqls; */
+/* } */
 
 int idle_rw(network_mysqld_con* con) {
 	int ret = -1;
@@ -1295,12 +1295,16 @@ static network_socket_retval_t sharding_query_handle(parse_info_t *parse_info, G
         sharding_proxy_send_error_result("Proxy Warning - Sharing Not Support SQL", con, recv_sock, packets, ER_UNKNOWN_ERROR, "HY000");
         goto exit;
     } 
-
+    
+    gboolean is_hit_all = parse_info->srclist->nSrc > 1 ? TRUE : FALSE; // "from" more than two tables hit all shard
     hit_dbgroups = g_array_sized_new(FALSE, TRUE, sizeof(guint), config->db_groups->len);
-    sharding_result_t sharding_ret = sharding_get_dbgroups(hit_dbgroups, sharding_table_rule, parse_info);
+    sharding_result_t  sharding_ret = SHARDING_RET_OK;
+    if (is_hit_all == FALSE) {
+        sharding_ret = sharding_get_dbgroups(hit_dbgroups, sharding_table_rule, parse_info);
+    }
     
     /*"select * from test;" OR "select * from test where noshardkey = 'test';" */
-    if (sharding_ret == SHARDING_RET_ALL_SHARD || sharding_ret == SHARDING_RET_ERR_NO_SHARDKEY) {
+    if (is_hit_all || sharding_ret == SHARDING_RET_ALL_SHARD || sharding_ret == SHARDING_RET_ERR_NO_SHARDKEY) {
         hit_all_dbgroup(sharding_table_rule, hit_dbgroups);
         sharding_ret = SHARDING_RET_ALL_SHARD;
     }

@@ -3,19 +3,17 @@ if &cp | set nocp | endif
 let s:so_save = &so | let s:siso_save = &siso | set so=0 siso=0
 let v:this_session=expand("<sfile>:p")
 silent only
-cd ~/github/winkyao/Atlas/tests/unit
+cd ~/github/Atlas-master/Atlas/tests/unit
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
 set shortmess=aoO
-badd +239 atlas_test_chassis_sharding.c
-badd +164 ~/github/winkyao/Atlas/src/chassis-sharding.h
-badd +1873 ./atlas_test_chassis_sharding_lemon.c
-badd +295 CMakeLists.txt
+badd +494 atlas_test_chassis_sharding_lemon.c
+badd +152 ~/github/Atlas-master/Atlas/src/chassis-sharding.h
 argglobal
 silent! argdel *
-argadd atlas_test_chassis_sharding.c
-edit ./atlas_test_chassis_sharding_lemon.c
+argadd atlas_test_chassis_sharding_lemon.c
+edit atlas_test_chassis_sharding_lemon.c
 set splitbelow splitright
 set nosplitbelow
 set nosplitright
@@ -30,12 +28,12 @@ setlocal fdl=10000
 setlocal fml=1
 setlocal fdn=20
 setlocal fen
-let s:l = 1876 - ((22 * winheight(0) + 19) / 39)
+let s:l = 486 - ((24 * winheight(0) + 27) / 54)
 if s:l < 1 | let s:l = 1 | endif
 exe s:l
 normal! zt
-1876
-normal! 0
+486
+normal! 033|
 tabnext 1
 if exists('s:wipebuf')
   silent exe 'bwipe ' . s:wipebuf

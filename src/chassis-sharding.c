@@ -111,121 +111,156 @@ static gint gint64_compare_func(gconstpointer value1, gconstpointer value2) {
     }
 }
 
-G_INLINE_FUNC sharding_result_t value_list_shard_key_append(GArray *shard_keys, Expr *expr, const char *shardkey_name, gboolean is_not_opr) {
-    char value_buf[64] = {0};
+sharding_result_t value_list_got_shardkey(GArray *shard_keys, Expr *expr, gboolean is_not_opr) {
+    char value_buf[128] = {0};
+    gint i;
+    if (is_not_opr) {
+        GArray *value_list = g_array_sized_new(FALSE, FALSE, sizeof(gint64), expr->pList->nExpr);
+        for (i = 0; i < expr->pList->nExpr; i++) {
+            Expr *value_expr = expr->pList->a[i].pExpr;
+            if (value_expr->op != TK_INTEGER) { continue; }
 
-    if (expr->pLeft != NULL && LEMON_TOKEN_STRING(expr->pLeft->op) && expr->pList != NULL && 
-            strncasecmp(shardkey_name, (const char*) expr->pLeft->token.z, expr->pLeft->token.n) == 0) 
-    {
-        gint i;
-        if (is_not_opr) {
-            GArray *value_list = g_array_sized_new(FALSE, FALSE, sizeof(gint64), expr->pList->nExpr);
-            for (i = 0; i < expr->pList->nExpr; i++) {
-                Expr *value_expr = expr->pList->a[i].pExpr;
-                if (value_expr->op != TK_INTEGER) { continue; }
+            dup_token2buff(value_buf, sizeof(value_buf), value_expr->token);
+            gint64 shard_key_value = g_ascii_strtoll(value_buf, NULL, 10);
+            g_array_unique_append_val(value_list, &shard_key_value, gint64_compare_func); // value in value_list is sorted by g_array_unique_append_val
+        }
+        if (value_list->len > 0) {
+            shard_key_t shardkey_obj;
+            gint64 shardkey_value1 = g_array_index(value_list, gint64, 0);
+            init_value_shard_key_t(&shardkey_obj, SHARDING_SHARDKEY_VALUE_LT, shardkey_value1);
+            g_array_append_val(shard_keys, shardkey_obj);
 
-                dup_token2buff(value_buf, sizeof(value_buf), value_expr->token);
-                gint64 shard_key_value = g_ascii_strtoll(value_buf, NULL, 10);
-                g_array_unique_append_val(value_list, &shard_key_value, gint64_compare_func); // value in value_list is sorted by g_array_unique_append_val
-            }
-            if (value_list->len > 0) {
-                shard_key_t shardkey_obj;
-                gint64 shardkey_value1 = g_array_index(value_list, gint64, 0);
-                init_value_shard_key_t(&shardkey_obj, SHARDING_SHARDKEY_VALUE_LT, shardkey_value1);
-                g_array_append_val(shard_keys, shardkey_obj);
-                
-                for (i = 1; i < value_list->len; i++) {
-                    gint64 shardkey_value2 = g_array_index(value_list, gint64, i);
-                    gint64 range_begin = shardkey_value1+1, range_end = shardkey_value2-1;
-                    if (range_begin <= range_end) {
-                        init_range_shard_key_t(&shardkey_obj, range_begin, range_end);
-                        g_array_append_val(shard_keys, shardkey_obj);
-                    }
-                    shardkey_value1 = shardkey_value2;
+            for (i = 1; i < value_list->len; i++) {
+                gint64 shardkey_value2 = g_array_index(value_list, gint64, i);
+                gint64 range_begin = shardkey_value1+1, range_end = shardkey_value2-1;
+                if (range_begin <= range_end) {
+                    init_range_shard_key_t(&shardkey_obj, range_begin, range_end);
+                    g_array_append_val(shard_keys, shardkey_obj);
                 }
-
-                shardkey_value1 = g_array_index(value_list, gint64, value_list->len-1);
-                init_value_shard_key_t(&shardkey_obj, SHARDING_SHARDKEY_VALUE_GT, shardkey_value1);
-                g_array_append_val(shard_keys, shardkey_obj);
+                shardkey_value1 = shardkey_value2;
             }
-            g_array_free(value_list, TRUE);
-        } else {
-            for (i = 0; i < expr->pList->nExpr; i++) {
-                Expr *value_expr = expr->pList->a[i].pExpr;
-                if (value_expr->op != TK_INTEGER) { continue; }
 
-                dup_token2buff(value_buf, sizeof(value_buf), value_expr->token);
-                gint64 shard_key_value = g_ascii_strtoll(value_buf, NULL, 10);
-                shard_key_t shardkey_obj;
-                init_value_shard_key_t(&shardkey_obj, SHARDING_SHARDKEY_VALUE_EQ, shard_key_value);
-                g_array_append_val(shard_keys, shardkey_obj);
-            }
+            shardkey_value1 = g_array_index(value_list, gint64, value_list->len-1);
+            init_value_shard_key_t(&shardkey_obj, SHARDING_SHARDKEY_VALUE_GT, shardkey_value1);
+            g_array_append_val(shard_keys, shardkey_obj);
         }
+        g_array_free(value_list, TRUE);
+    } else {
+        for (i = 0; i < expr->pList->nExpr; i++) {
+            Expr *value_expr = expr->pList->a[i].pExpr;
+            if (value_expr->op != TK_INTEGER) { continue; }
 
-        return SHARDING_RET_OK;
+            dup_token2buff(value_buf, sizeof(value_buf), value_expr->token);
+            gint64 shard_key_value = g_ascii_strtoll(value_buf, NULL, 10);
+            shard_key_t shardkey_obj;
+            init_value_shard_key_t(&shardkey_obj, SHARDING_SHARDKEY_VALUE_EQ, shard_key_value);
+            g_array_append_val(shard_keys, shardkey_obj);
+        }
+    }
+
+    return SHARDING_RET_OK;
+}
+
+sharding_result_t value_list_shard_key_append(GArray *shard_keys, Expr *expr, const sharding_table_t *shard_rule, gboolean is_not_opr) {
+    Expr *left_expr = expr->pLeft;
+    const char *shardkey_name = shard_rule->shard_key->str, *shard_table = shard_rule->table_name->str;
+
+    if (left_expr != NULL && LEMON_TOKEN_STRING(left_expr->op) && expr->pList != NULL && 
+            strncasecmp(shardkey_name, (const char*) left_expr->token.z, left_expr->token.n) == 0) 
+    {
+        return value_list_got_shardkey(shard_keys, expr, is_not_opr);
+    } else if (left_expr != NULL && expr->pList != NULL && left_expr->op == TK_DOT && LEMON_TOKEN_STRING(left_expr->pLeft->op) && 
+            strncasecmp(shard_table, (const char*)left_expr->pLeft->token.z, left_expr->pLeft->token.n) == 0 && 
+            strncasecmp(shardkey_name, (const char*)left_expr->pRight->token.z, left_expr->pRight->token.n) == 0 ) 
+    {
+        return value_list_got_shardkey(shard_keys, expr, is_not_opr);   
+    } else {
+        return SHARDING_RET_ERR_NO_SHARDKEY;
+    } 
+
+}
+
+G_INLINE_FUNC sharding_result_t value_shard_key_append(GArray *shard_keys, Expr *expr, const sharding_table_t *shard_rule, gboolean is_not_opr) {
+    char value_buf[128] = {0};
+    shard_key_t shardkey1, shardkey2;
+    Expr *left_expr = expr->pLeft, *right_expr = expr->pRight;
+    const char *shardkey_name = shard_rule->shard_key->str, *shard_table = shard_rule->table_name->str;
+
+    if (left_expr != NULL && right_expr != NULL && LEMON_TOKEN_STRING(left_expr->op) && right_expr->op == TK_INTEGER &&
+            strncasecmp(shardkey_name, (const char*)left_expr->token.z, left_expr->token.n) == 0) 
+    {
+        goto got_shardkey;
+    } else if(left_expr != NULL && right_expr != NULL && left_expr->op == TK_DOT && left_expr->pLeft != NULL &&
+            LEMON_TOKEN_STRING(left_expr->pLeft->op) && right_expr->op == TK_INTEGER && 
+            strncasecmp(shard_table, (const char*)left_expr->pLeft->token.z, left_expr->pLeft->token.n) == 0 && 
+            strncasecmp(shardkey_name, (const char*)left_expr->pRight->token.z, left_expr->pRight->token.n) == 0) 
+    { // where shardtable.id = 1;
+        goto got_shardkey;
     } else {
         return SHARDING_RET_ERR_NO_SHARDKEY;
     }
-}
 
-G_INLINE_FUNC sharding_result_t value_shard_key_append(GArray *shard_keys, Expr *expr, const char *shardkey_name, gboolean is_not_opr) {
-    char value_buf[64] = {0};
-    shard_key_t shardkey1, shardkey2;
-
-    if (expr->pLeft != NULL && LEMON_TOKEN_STRING(expr->pLeft->op) &&expr->pRight != NULL && expr->pRight->op == TK_INTEGER &&
-            strncasecmp(shardkey_name, (const char*)expr->pLeft->token.z, expr->pLeft->token.n) == 0) 
-    {
-        dup_token2buff(value_buf, sizeof(value_buf), expr->pRight->token);
-        gint64 shard_key_value = g_ascii_strtoll(value_buf, NULL, 10);
-        shard_key_type_t type = sql_token_id2shard_key_type(expr->op);
-        if (is_not_opr) {
-            type = reverse_shard_key(type);
-        }
-        if (type == SHARDING_SHARDKEY_VALUE_NE) {
-            init_value_shard_key_t(&shardkey1, SHARDING_SHARDKEY_VALUE_GT, shard_key_value);
-            init_value_shard_key_t(&shardkey2, SHARDING_SHARDKEY_VALUE_LT, shard_key_value);
-            g_array_append_val(shard_keys, shardkey1);
-            g_array_append_val(shard_keys, shardkey2);
-        } else {
-            init_value_shard_key_t(&shardkey1, type, shard_key_value);
-            g_array_append_val(shard_keys, shardkey1);
-        }
-        return SHARDING_RET_OK;
-    } else {
-        return SHARDING_RET_ERR_NO_SHARDKEY;
+got_shardkey:
+    dup_token2buff(value_buf, sizeof(value_buf), right_expr->token);
+    gint64 shard_key_value = g_ascii_strtoll(value_buf, NULL, 10);
+    shard_key_type_t type = sql_token_id2shard_key_type(expr->op);
+    if (is_not_opr) {
+        type = reverse_shard_key(type);
     }
+    if (type == SHARDING_SHARDKEY_VALUE_NE) {
+        init_value_shard_key_t(&shardkey1, SHARDING_SHARDKEY_VALUE_GT, shard_key_value);
+        init_value_shard_key_t(&shardkey2, SHARDING_SHARDKEY_VALUE_LT, shard_key_value);
+        g_array_append_val(shard_keys, shardkey1);
+        g_array_append_val(shard_keys, shardkey2);
+    } else {
+        init_value_shard_key_t(&shardkey1, type, shard_key_value);
+        g_array_append_val(shard_keys, shardkey1);
+    }
+    return SHARDING_RET_OK;
 }
 
-G_INLINE_FUNC sharding_result_t between_shard_key_append(GArray *shard_keys, Expr *expr, const char *shardkey_name, gboolean is_not_opr) {
-    char value_buf[64] = {0};
+sharding_result_t between_got_shardkey(GArray *shard_keys, Expr *expr, gboolean is_not_opr) {
+    char value_buf[128] = {0};
     shard_key_t shardkey1, shardkey2;
+    Expr *begin_expr = expr->pList->a[0].pExpr, *end_expr = expr->pList->a[1].pExpr;
 
-    if (expr->pLeft != NULL && LEMON_TOKEN_STRING(expr->pLeft->op) && expr->pList != NULL && expr->pList->nExpr == 2 &&
-            strncasecmp(shardkey_name, (const char*)expr->pLeft->token.z, expr->pLeft->token.n) == 0) 
-    {
-        Expr *begin_expr = expr->pList->a[0].pExpr, *end_expr = expr->pList->a[1].pExpr;
-        if (begin_expr->op != TK_INTEGER || end_expr->op != TK_INTEGER) {
+    if (begin_expr->op != TK_INTEGER || end_expr->op != TK_INTEGER) {
+        return SHARDING_RET_OK;
+    }
+
+    dup_token2buff(value_buf, sizeof(value_buf), begin_expr->token);
+    gint range_begin = g_ascii_strtoll(value_buf, NULL, 10);
+    dup_token2buff(value_buf, sizeof(value_buf), end_expr->token);
+    gint range_end = g_ascii_strtoll(value_buf, NULL, 10);
+    if (is_not_opr) {
+        init_value_shard_key_t(&shardkey1, SHARDING_SHARDKEY_VALUE_LT, range_begin);
+        init_value_shard_key_t(&shardkey2, SHARDING_SHARDKEY_VALUE_GT, range_end);
+        g_array_append_val(shard_keys, shardkey1);
+        g_array_append_val(shard_keys, shardkey2);
+    } else {
+        if (range_begin > range_end) {
             return SHARDING_RET_OK;
         }
+        init_range_shard_key_t(&shardkey1, range_begin, range_end);
+        g_array_append_val(shard_keys, shardkey1);
+    }
 
-        dup_token2buff(value_buf, sizeof(value_buf), begin_expr->token);
-        gint range_begin = g_ascii_strtoll(value_buf, NULL, 10);
-        dup_token2buff(value_buf, sizeof(value_buf), end_expr->token);
-        gint range_end = g_ascii_strtoll(value_buf, NULL, 10);
-        if (is_not_opr) {
-            init_value_shard_key_t(&shardkey1, SHARDING_SHARDKEY_VALUE_LT, range_begin);
-            init_value_shard_key_t(&shardkey2, SHARDING_SHARDKEY_VALUE_GT, range_end);
-            g_array_append_val(shard_keys, shardkey1);
-            g_array_append_val(shard_keys, shardkey2);
-        } else {
-            if (range_begin > range_end) {
-                return SHARDING_RET_OK;
-            }
-            init_range_shard_key_t(&shardkey1, range_begin, range_end);
-            g_array_append_val(shard_keys, shardkey1);
-        }
+    return SHARDING_RET_OK;
+}
 
-        return SHARDING_RET_OK;
+sharding_result_t between_shard_key_append(GArray *shard_keys, Expr *expr, const sharding_table_t *shard_rule, gboolean is_not_opr) {
+    Expr *left_expr = expr->pLeft;
+    const char *shardkey_name = shard_rule->shard_key->str, *shard_table = shard_rule->table_name->str;
+
+    if (left_expr != NULL && LEMON_TOKEN_STRING(left_expr->op) && expr->pList != NULL && expr->pList->nExpr == 2 &&
+            strncasecmp(shardkey_name, (const char*)left_expr->token.z, left_expr->token.n) == 0) 
+    {
+        return between_got_shardkey(shard_keys, expr, is_not_opr);
+    } else if (left_expr != NULL && left_expr->op == TK_DOT && LEMON_TOKEN_STRING(left_expr->pLeft->op) && expr->pList != NULL && 
+            expr->pList->nExpr == 2 && strncasecmp(shard_table, (const char*)left_expr->pLeft->token.z, left_expr->pLeft->token.n) == 0 && 
+            strncasecmp(shardkey_name, (const char*)left_expr->pRight->token.z, left_expr->pRight->token.n) == 0) 
+    {        
+        return between_got_shardkey(shard_keys, expr, is_not_opr);
     } else {
         return SHARDING_RET_ERR_NO_SHARDKEY;
     }
@@ -763,10 +798,11 @@ void merge_shard_key_by_and_opr(GArray *shard_keys, GArray *left_shardkeys, GArr
 /**
  * postorder traversal
  */
-sharding_result_t find_shard_key_inwhere(GArray *shard_keys, Expr *expr, const char *shardkey_name, gboolean is_not_opr) {
+sharding_result_t find_shard_key_inwhere(GArray *shard_keys, Expr *expr, const sharding_table_t *shard_rule, gboolean is_not_opr) {
     GArray *left_shardkeys = NULL, *right_shardkeys = NULL;
-    sharding_result_t ret_left, ret_right, ret = SHARDING_RET_OK;
-    
+    sharding_result_t ret = SHARDING_RET_OK;
+    const char *shardkey_name = shard_rule->shard_key->str;
+
     int logic_opr = expr->op;
     switch(logic_opr) {
         case TK_GE:
@@ -775,16 +811,16 @@ sharding_result_t find_shard_key_inwhere(GArray *shard_keys, Expr *expr, const c
         case TK_LT:
         case TK_EQ:
         case TK_NE:
-            ret = value_shard_key_append(shard_keys, expr, shardkey_name, is_not_opr);
+            ret = value_shard_key_append(shard_keys, expr, shard_rule, is_not_opr);
             break;
         case TK_IN:
-            ret = value_list_shard_key_append(shard_keys, expr, shardkey_name, is_not_opr);
+            ret = value_list_shard_key_append(shard_keys, expr, shard_rule, is_not_opr);
             break;
         case TK_BETWEEN:
-            ret = between_shard_key_append(shard_keys, expr, shardkey_name, is_not_opr); 
+            ret = between_shard_key_append(shard_keys, expr, shard_rule, is_not_opr); 
             break;
         case TK_NOT:
-            return find_shard_key_inwhere(shard_keys, expr->pLeft, shardkey_name, !is_not_opr);
+            return find_shard_key_inwhere(shard_keys, expr->pLeft, shard_rule, !is_not_opr);
         case TK_AND:
         case TK_OR:
             goto postorder_traversal;
@@ -800,8 +836,10 @@ postorder_traversal:
     // which use the stack firstly, if need to append to more than one shardkey, then realloc it.
     left_shardkeys = g_array_sized_new(FALSE, FALSE, sizeof(shard_key_t), 2); 
     right_shardkeys = g_array_sized_new(FALSE, FALSE, sizeof(shard_key_t), 2);
-    ret_left = find_shard_key_inwhere(left_shardkeys, expr->pLeft, shardkey_name, is_not_opr);
-    ret_right = find_shard_key_inwhere(right_shardkeys, expr->pRight, shardkey_name, is_not_opr);
+
+    sharding_result_t ret_left = SHARDING_RET_OK, ret_right = SHARDING_RET_OK;
+    ret_left = find_shard_key_inwhere(left_shardkeys, expr->pLeft, shard_rule, is_not_opr);
+    ret_right = find_shard_key_inwhere(right_shardkeys, expr->pRight, shard_rule, is_not_opr);
     if (logic_opr == TK_AND && ret_left == SHARDING_RET_OK && ret_right == SHARDING_RET_OK) {
         merge_shard_key_by_and_opr(shard_keys, left_shardkeys, right_shardkeys);
     } else { 
@@ -826,7 +864,7 @@ static sharding_result_t parse_sharding_keys_from_where_expr(GArray *shard_keys,
         return SHARDING_RET_ALL_SHARD;
     }
     
-    return find_shard_key_inwhere(shard_keys, where_expr, sharding_table_rule->shard_key->str, FALSE);
+    return find_shard_key_inwhere(shard_keys, where_expr, sharding_table_rule, FALSE);
 }
 
 static sharding_result_t parse_sharding_keys_from_insert_sql(GArray* shard_keys, const sharding_table_t *sharding_table_rule, parse_info_t *parse_info) {
@@ -1286,26 +1324,27 @@ void sharding_table_free(sharding_table_t *table) {
 }
 
 static gboolean is_contain_notsupport_tokens(Select *select_obj) {
-    if (select_obj->pLimit && select_obj->pOffset) { // LIMIT OFFSET
-        return TRUE;
-    }
+    /* if (select_obj->pLimit && select_obj->pOffset) { // LIMIT OFFSET */
+    /*     return TRUE; */
+    /* } */
 
-    if (select_obj->op == TK_UNION || select_obj->pRightmost != NULL || select_obj->pPrior != NULL) { // UNION
-        return TRUE;
-    }
+    /* if (select_obj->op == TK_UNION || select_obj->pRightmost != NULL || select_obj->pPrior != NULL) { // UNION */
+    /*     return TRUE; */
+    /* } */
 
-    if (select_obj->pGroupBy || select_obj->pHaving || select_obj->pOrderBy ) { // group by, having
-        return TRUE;
-    } 
-   
-    if (select_obj->pSrc) {
-        guint i;
-        for (i = 0; i < select_obj->pSrc->nSrc; i++) {
-            if (select_obj->pSrc->a[0].jointype != 0) { // JOIN
-                return TRUE;
-            }
-        }
-    }
+    /* if (select_obj->pGroupBy || select_obj->pHaving || select_obj->pOrderBy ) { // group by, having */
+    /*     return TRUE; */
+    /* } */ 
+ 
+   // TODO allow join to all shard  
+    /* if (select_obj->pSrc) { */
+    /*     guint i; */
+    /*     for (i = 0; i < select_obj->pSrc->nSrc; i++) { */
+    /*         if (select_obj->pSrc->a[0].jointype != 0) { // JOIN */
+    /*             return TRUE; */
+    /*         } */
+    /*     } */
+    /* } */
 
     return FALSE;
 }
@@ -1357,19 +1396,28 @@ gboolean sharding_is_support_sql(Parse *parse_obj) {
 
 sharding_table_t* sharding_lookup_table_shard_rule(GHashTable* table_shard_rules, gchar* default_db, parse_info_t *parse_info)
 {
-    if (parse_info->table_name == NULL) return NULL;
+    if (parse_info->srclist == NULL) return NULL;
     
-    gchar* full_table_name = NULL;
-    if (parse_info->db_name == NULL) {
-        full_table_name = g_strdup_printf("%s.%s", default_db, parse_info->table_name);
-    } else {
-        full_table_name = g_strdup_printf("%s.%s", parse_info->db_name, parse_info->table_name);
+    guint i;
+    SrcList *srclist = parse_info->srclist;
+    sharding_table_t *shard_rule = NULL;
+    for (i = 0; i < srclist->nSrc; i++) {
+        gchar* full_table_name = NULL;
+        const char* db_name = srclist->a[i].zDatabase;
+        const char* table_name = srclist->a[i].zName;
+        if (db_name == NULL) {
+            full_table_name = g_strdup_printf("%s.%s", default_db, table_name);
+        } else {
+            full_table_name = g_strdup_printf("%s.%s", db_name, table_name);
+        }
+        shard_rule = (sharding_table_t*)g_hash_table_lookup(table_shard_rules, full_table_name);
+
+        if (full_table_name) { g_free(full_table_name); }
+
+        if (shard_rule != NULL) { break; }
     }
-    sharding_table_t *sharding_table_rule = (sharding_table_t*)g_hash_table_lookup(table_shard_rules, full_table_name);
 
-    if (full_table_name) { g_free(full_table_name); }
-
-    return sharding_table_rule;
+    return shard_rule;
 }
 
 gboolean sharding_is_contain_multishard_notsupport_feature(Parse *parse_obj) {
@@ -2419,30 +2467,24 @@ static void parse_info_get_tablename(parse_info_t *parse_info, Parse *parse_obj)
     if (parse_obj == NULL) { return; }
 
     ParsedResultItem *parsed_item = &parse_obj->parsed.array[0];
-    SrcList *srclist = NULL;
+    parse_info->srclist = NULL;
 
     switch(parsed_item->sqltype) {
         case SQLTYPE_SELECT:
-            srclist = parsed_item->result.selectObj->pSrc; 
+            parse_info->srclist = parsed_item->result.selectObj->pSrc; 
             break;
         case SQLTYPE_INSERT:
         case SQLTYPE_REPLACE:
-            srclist = parsed_item->result.insertObj->pTabList;
+            parse_info->srclist = parsed_item->result.insertObj->pTabList;
             break;
         case SQLTYPE_UPDATE:
-            srclist = parsed_item->result.updateObj->pTabList;
+            parse_info->srclist = parsed_item->result.updateObj->pTabList;
             break;
         case SQLTYPE_DELETE:
-            srclist = parsed_item->result.deleteObj->pTabList;
+            parse_info->srclist = parsed_item->result.deleteObj->pTabList;
             break;
         defalut:
             break;
-    }
-    
-    if (srclist && srclist->nSrc > 0) { // only handle the first table name
-        parse_info->table_name = srclist->a[0].zName;
-        parse_info->db_name = srclist->a[0].zDatabase;
-        parse_info->table_token = srclist->a[0].tableToken;
     }
 }
 

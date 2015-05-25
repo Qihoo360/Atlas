@@ -238,7 +238,10 @@ static void event_log_use_glib(int libevent_log_level, const char *msg) {
 	else if (libevent_log_level == _EVENT_LOG_WARN) glib_log_level = G_LOG_LEVEL_WARNING;
 	else if (libevent_log_level == _EVENT_LOG_ERR) glib_log_level = G_LOG_LEVEL_CRITICAL;
 
-	g_log(G_LOG_DOMAIN, glib_log_level, "(libevent) %s", msg);
+    /*only error to be logged*/
+    if (libevent_log_level == _EVENT_LOG_ERR) {
+        g_log(G_LOG_DOMAIN, glib_log_level, "(libevent) %s", msg);
+    }
 }
 
 

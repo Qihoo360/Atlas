@@ -81,9 +81,10 @@ typedef struct {
 typedef struct {
     Parse *parse_obj;
     
-    Token table_token;
-    char *table_name; 
-    char *db_name;    
+    /* Token table_token; */
+    /* char *table_name; */ 
+    /* char *db_name; */    
+    SrcList *srclist;
     char *orig_sql;
     guint32 orig_sql_len;
     gboolean is_write_sql;

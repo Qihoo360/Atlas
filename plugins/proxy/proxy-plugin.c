@@ -1438,6 +1438,13 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 
 				g_ptr_array_free(sqls, TRUE);
 			}
+            /* the sql after SQL_CALC_FOUND_ROWS must be "select FOUND_ROWS();"
+             * if not, must redo the read write split operation. because the write sql 
+             * may send to slave.
+             */
+            if (con->is_in_select_calc_found_rows && is_write) {
+                network_connection_pool_lua_add_connection(con);
+            }
 
 			check_flags(tokens, con);
 

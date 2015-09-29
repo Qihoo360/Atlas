@@ -1233,7 +1233,6 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 
 void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
 	con->is_in_select_calc_found_rows = FALSE;
-    *is_set_autocommit = FALSE;
 
 	sql_token** ts = (sql_token**)(tokens->pdata);
 	guint len = tokens->len;
@@ -1455,7 +1454,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 
 				if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
 					if (type == COM_QUERY) {
-						if (is_write || is_set_autocommit) {
+						if (is_write ) {
 							backend_ndx = idle_rw(con);
 						} else {
 							backend_ndx = rw_split(tokens, con);

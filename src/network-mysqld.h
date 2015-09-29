@@ -60,12 +60,12 @@
 
 typedef struct network_mysqld_con network_mysqld_con; /* forward declaration */
 
-#undef NETWORK_MYSQLD_WANT_CON_TRACK_TIME
-#ifdef NETWORK_MYSQLD_WANT_CON_TRACK_TIME
-#define NETWORK_MYSQLD_CON_TRACK_TIME(con, name) chassis_timestamps_add(con->timestamps, name, __FILE__, __LINE__)
-#else
+/* #undef NETWORK_MYSQLD_WANT_CON_TRACK_TIME */
+/* #ifdef NETWORK_MYSQLD_WANT_CON_TRACK_TIME */
+/* #define NETWORK_MYSQLD_CON_TRACK_TIME(con, name) chassis_timestamps_add(con->timestamps, name, __FILE__, __LINE__) */
+/* #else */
 #define NETWORK_MYSQLD_CON_TRACK_TIME(con, name) 
-#endif
+/* #endif */
 
 /**
  * A macro that produces a plugin callback function pointer declaration.

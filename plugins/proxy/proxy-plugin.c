@@ -1233,6 +1233,7 @@ void modify_charset(GPtrArray* tokens, network_mysqld_con* con) {
 
 void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
 	con->is_in_select_calc_found_rows = FALSE;
+    *is_set_autocommit = FALSE;
 
 	sql_token** ts = (sql_token**)(tokens->pdata);
 	guint len = tokens->len;
@@ -1243,15 +1244,15 @@ void check_flags(GPtrArray* tokens, network_mysqld_con* con) {
 			if (!g_hash_table_lookup(con->locks, key)) g_hash_table_add(con->locks, g_strdup(key));
 		}
 
-		if (len > 4) {	//SET AUTOCOMMIT = {0 | 1}
-			if (ts[1]->token_id == TK_SQL_SET && ts[3]->token_id == TK_EQ) {
-				if (strcasecmp(ts[2]->text->str, "AUTOCOMMIT") == 0) {
-					char* str = ts[4]->text->str;
-					if (strcmp(str, "0") == 0) con->is_not_autocommit = TRUE;
-					else if (strcmp(str, "1") == 0) con->is_not_autocommit = FALSE;
-				}
-			}
-		}
+		/* if (len > 4) {	//SET AUTOCOMMIT = {0 | 1} */
+		/* 	if (ts[1]->token_id == TK_SQL_SET && ts[3]->token_id == TK_EQ) { */
+		/* 		if (strcasecmp(ts[2]->text->str, "AUTOCOMMIT") == 0) { */
+		/* 			/1* char* str = ts[4]->text->str; *1/ */
+		/* 			/1* if (strcmp(str, "0") == 0) con->is_not_autocommit = TRUE; *1/ */
+		/* 			/1* else if (strcmp(str, "1") == 0) con->is_not_autocommit = FALSE; *1/ */
+		/* 		} */
+		/* 	} */
+		/* } */
 	}
 
 	guint i;
@@ -1302,7 +1303,8 @@ gboolean sql_is_write(GPtrArray *tokens) {
 			token_id = ts[i]->token_id;
 		}
 
-		return (token_id != TK_SQL_SELECT && token_id != TK_SQL_SET && token_id != TK_SQL_USE && token_id != TK_SQL_SHOW && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
+        // "set autocommit = 0; or show variables" need send to master
+		return (token_id != TK_SQL_SELECT /*&& token_id != TK_SQL_SET */ && token_id != TK_SQL_USE /*&& token_id != TK_SQL_SHOW*/ && token_id != TK_SQL_DESC && token_id != TK_SQL_EXPLAIN);
 	}
 
 	return TRUE;
@@ -1445,7 +1447,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
             if (con->is_in_select_calc_found_rows && is_write) {
                 network_connection_pool_lua_add_connection(con);
             }
-
+            
 			check_flags(tokens, con);
 
 			if (con->server == NULL) {
@@ -1453,7 +1455,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query) {
 
 				if (!con->is_in_transaction && !con->is_not_autocommit && g_hash_table_size(con->locks) == 0) {
 					if (type == COM_QUERY) {
-						if (is_write) {
+						if (is_write || is_set_autocommit) {
 							backend_ndx = idle_rw(con);
 						} else {
 							backend_ndx = rw_split(tokens, con);
@@ -1819,6 +1821,9 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 				inj->qstat.server_status = com_query->server_status;
 				inj->qstat.warning_count = com_query->warning_count;
 				inj->qstat.query_status  = com_query->query_status;
+
+                con->is_in_transaction = com_query->server_status & SERVER_STATUS_IN_TRANS;
+                con->is_not_autocommit = !(com_query->server_status & SERVER_STATUS_AUTOCOMMIT);
 			}
 			inj->ts_read_query_result_last = chassis_get_rel_microseconds();
 			/* g_get_current_time(&(inj->ts_read_query_result_last)); */
@@ -1906,11 +1911,11 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query_result) {
 
 			switch (ret) {
 			case PROXY_SEND_RESULT:
-				if (!con->is_in_transaction || (inj->qstat.server_status & SERVER_STATUS_IN_TRANS)) {
-					con->is_in_transaction = (inj->qstat.server_status & SERVER_STATUS_IN_TRANS);
-				} else {
-					if (strcasestr(str, "COMMIT") == str || strcasestr(str, "ROLLBACK") == str) con->is_in_transaction = FALSE;
-				}
+				/* if (!con->is_in_transaction || (inj->qstat.server_status & SERVER_STATUS_IN_TRANS)) { */
+				/* 	con->is_in_transaction = (inj->qstat.server_status & SERVER_STATUS_IN_TRANS); */
+				/* } else { */
+				/* 	if (strcasestr(str, "COMMIT") == str || strcasestr(str, "ROLLBACK") == str) con->is_in_transaction = FALSE; */
+				/* } */
 
 				if (g_hash_table_size(con->locks) > 0 && strcasestr(str, "SELECT RELEASE_LOCK") == str) {
 					gchar* b = strchr(str+strlen("SELECT RELEASE_LOCK"), '(') + 1;

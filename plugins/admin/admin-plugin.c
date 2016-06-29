@@ -476,7 +476,7 @@ NETWORK_MYSQLD_PLUGIN_PROTO(server_read_query) {
  */
 NETWORK_MYSQLD_PLUGIN_PROTO(admin_disconnect_client) {
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
-	lua_scope  *sc = con->srv->priv->sc;
+	lua_scope  *sc = con->srv->sc;
 
 	if (st == NULL) return NETWORK_SOCKET_SUCCESS;
 	
@@ -608,7 +608,7 @@ static int network_mysqld_admin_plugin_apply_config(chassis *chas, chassis_plugi
 	/**
 	 * call network_mysqld_con_accept() with this connection when we are done
 	 */
-	event_set(&(listen_sock->event), listen_sock->fd, EV_READ|EV_PERSIST, network_mysqld_con_accept, con);
+	event_set(&(listen_sock->event), listen_sock->fd, EV_READ|EV_PERSIST, network_mysqld_admin_con_accept, con);
 	event_base_set(chas->event_base, &(listen_sock->event));
 	event_add(&(listen_sock->event), NULL);
 

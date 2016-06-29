@@ -44,7 +44,7 @@ typedef enum {
 NETWORK_API int network_mysqld_con_getmetatable(lua_State *L);
 NETWORK_API void network_mysqld_lua_init_global_fenv(lua_State *L);
 
-NETWORK_API void network_mysqld_lua_setup_global(lua_State *L, chassis_private *g, chassis *chas);
+NETWORK_API void network_mysqld_lua_setup_global(lua_State *L, chassis *chas);
 
 /**
  * Encapsulates injected queries information passed back from the a Lua callback function.

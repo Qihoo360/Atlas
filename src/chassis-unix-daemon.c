@@ -42,6 +42,8 @@
 
 #include "chassis-unix-daemon.h"
 
+#define YY_EXIT_FAILURE 2
+
 /**
  * start the app in the background 
  * 
@@ -169,27 +171,39 @@ int chassis_unix_proc_keepalive(int *child_exit_status, const char *pid_file) {
 
 			if (exit_pid == child_pid) {
 
-                /* delete pid file */
-                if (pid_file) {
-                    unlink(pid_file);
-                }
+				/* delete pid file */
+				if (pid_file) {
+					unlink(pid_file);
+				}
 
 				/* our child returned, let's see how it went */
 				if (WIFEXITED(exit_status)) {
-					g_message("%s: [angel] PID=%d exited normally with exit-code = %d (it used %ld kBytes max)",
-							G_STRLOC,
-							child_pid,
-							WEXITSTATUS(exit_status),
-							rusage.ru_maxrss / 1024);
 					if (child_exit_status) *child_exit_status = WEXITSTATUS(exit_status);
-					return 1;
+
+					if (*child_exit_status != YY_EXIT_FAILURE) {
+						g_message("%s: [angel] PID=%d exited normally with exit-code = %d (it used %ld kBytes max)",
+								G_STRLOC,
+								child_pid,
+								WEXITSTATUS(exit_status),
+								rusage.ru_maxrss / 1024);
+						return 1;
+					} else {
+						g_critical("%s: [angel] PID=%d died on yy_fatal_error ... waiting 2sec before restart", G_STRLOC, child_pid);
+						signal(SIGINT, SIG_DFL);
+						signal(SIGTERM, SIG_DFL);
+						signal(SIGHUP, SIG_DFL);
+						int time_towait = 2;
+						while (time_towait > 0) time_towait = sleep(time_towait);
+						nprocs--;
+						child_pid = -1;
+					}
 				} else if (WIFSIGNALED(exit_status)) {
 					int time_towait = 2;
 					/* our child died on a signal
 					 *
 					 * log it and restart */
 
-					g_critical("%s: [angel] PID=%d died on signal=%d (it used %ld kBytes max) ... waiting 3min before restart",
+					g_critical("%s: [angel] PID=%d died on signal=%d (it used %ld kBytes max) ... waiting 2sec before restart",
 							G_STRLOC,
 							child_pid,
 							WTERMSIG(exit_status),

@@ -140,54 +140,15 @@ network_socket_retval_t plugin_call_cleanup(chassis *srv, network_mysqld_con *co
 	return retval;
 }
 
-chassis_private *network_mysqld_priv_init(guint event_thread_count) {
-	chassis_private *priv;
-
-	priv = g_new0(chassis_private, 1);
-
-//	priv->cons = g_ptr_array_new();
-	priv->sc = lua_scope_new();
-	priv->backends = network_backends_new(event_thread_count);
-
-	return priv;
-}
-/*
-void network_mysqld_priv_shutdown(chassis *chas, chassis_private *priv) {
-	if (!priv) return;
-
-	// network_mysqld_con_free() changes the priv->cons directly
-	// always free the first element until all are gone 
-	while (0 != priv->cons->len) {
-		network_mysqld_con *con = priv->cons->pdata[0];
-
-		plugin_call_cleanup(chas, con);
-		network_mysqld_con_free(con);
-	}
-}
-*/
-void network_mysqld_priv_free(chassis G_GNUC_UNUSED *chas, chassis_private *priv) {
-	if (!priv) return;
-
-//	g_ptr_array_free(priv->cons, TRUE);
-
-	network_backends_free(priv->backends);
-
-	lua_scope_free(priv->sc);
-
-	g_free(priv);
-}
-
-int network_mysqld_init(chassis *srv) {
-	lua_State *L;
-	srv->priv_free = network_mysqld_priv_free;
-//	srv->priv_shutdown = network_mysqld_priv_shutdown;
-	srv->priv      = network_mysqld_priv_init(srv->event_thread_count);
-
+int network_mysqld_init(chassis *srv, gchar *default_file) {
 	/* store the pointer to the chassis in the Lua registry */
-	L = srv->priv->sc->L;
+	srv->sc = lua_scope_new();
+	lua_State *L = srv->sc->L;
 	lua_pushlightuserdata(L, (void*)srv);
 	lua_setfield(L, LUA_REGISTRYINDEX, CHASSIS_LUA_REGISTRY_KEY);
-	
+
+	srv->backends = network_backends_new(srv->event_thread_count, default_file);
+
 	return 0;
 }
 
@@ -1317,7 +1278,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			case NETWORK_SOCKET_ERROR:
 				g_critical("%s.%d: network_mysqld_read(CON_STATE_READ_AUTH_OLD_PASSWORD) returned an error", __FILE__, __LINE__);
 				con->state = CON_STATE_ERROR;
-				return;
+				break;
 			}
 			
 			if (con->state != ostate) break; /* the state has changed (e.g. CON_STATE_ERROR) */
@@ -1363,26 +1324,30 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			break;
 
 		case CON_STATE_READ_QUERY: {
-			network_socket *recv_sock;
-			network_packet last_packet;
+			network_socket *recv_sock = con->client;
 
-			recv_sock = con->client;
+			if (events == EV_TIMEOUT) {
+				g_message("%s: close the noninteractive connection(%s) now.", G_STRLOC, recv_sock->src->name->str);
+				con->state = CON_STATE_ERROR;
+				break;
+			}
 
 			g_assert(events == 0 || event_fd == recv_sock->fd);
 
+			network_packet last_packet;
 			do { 
 				switch (network_mysqld_read(srv, recv_sock)) {
 				case NETWORK_SOCKET_SUCCESS:
 					break;
 				case NETWORK_SOCKET_WAIT_FOR_EVENT:
-					WAIT_FOR_EVENT(con->client, EV_READ, 0);
+					WAIT_FOR_EVENT(con->client, EV_READ, srv->wait_timeout);
 					NETWORK_MYSQLD_CON_TRACK_TIME(con, "wait_for_event::read_query");
 					return;
 				case NETWORK_SOCKET_ERROR_RETRY:
 				case NETWORK_SOCKET_ERROR:
 					g_critical("%s.%d: network_mysqld_read(CON_STATE_READ_QUERY) returned an error", __FILE__, __LINE__);
 					con->state = CON_STATE_ERROR;
-					return;
+					break;
 				}
 				if (con->state != ostate) break; /* the state has changed (e.g. CON_STATE_ERROR) */
 
@@ -1823,7 +1788,37 @@ void network_mysqld_con_accept(int G_GNUC_UNUSED event_fd, short events, void *u
 
 	network_mysqld_add_connection(listen_con->srv, client_con);
 
-	
+	/**
+	 * inherit the config to the new connection 
+	 */
+
+	client_con->plugins = listen_con->plugins;
+//	client_con->config  = listen_con->config;
+
+	//network_mysqld_con_handle(-1, 0, client_con);
+	//此处将client_con放入异步队列，然后ping工作线程，由工作线程去执行network_mysqld_con_handle，不再由主线程直接执行network_mysqld_con_handle
+	chassis_event_add(client_con);
+}
+
+void network_mysqld_admin_con_accept(int G_GNUC_UNUSED event_fd, short events, void *user_data) {
+	network_mysqld_con *listen_con = user_data;
+	network_mysqld_con *client_con;
+	network_socket *client;
+
+	g_assert(events == EV_READ);
+	g_assert(listen_con->server);
+
+	client = network_socket_accept(listen_con->server);
+	if (!client) return;
+
+	/* looks like we open a client connection */
+	client_con = network_mysqld_con_new();
+	client_con->client = client;
+
+	NETWORK_MYSQLD_CON_TRACK_TIME(client_con, "accept");
+
+	network_mysqld_add_connection(listen_con->srv, client_con);
+
 	/**
 	 * inherit the config to the new connection 
 	 */
@@ -1831,11 +1826,7 @@ void network_mysqld_con_accept(int G_GNUC_UNUSED event_fd, short events, void *u
 	client_con->plugins = listen_con->plugins;
 	client_con->config  = listen_con->config;
 
-	//network_mysqld_con_handle(-1, 0, client_con);
-	//此处将client_con放入异步队列，然后ping工作线程，由工作线程去执行network_mysqld_con_handle，不再由主线程直接执行network_mysqld_con_handle
-	chassis_event_add(client_con);
-
-	return;
+	network_mysqld_con_handle(-1, 0, client_con);
 }
 
 /**

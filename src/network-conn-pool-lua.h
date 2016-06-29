@@ -27,48 +27,9 @@
 
 #include "network-exports.h"
 
-struct chassis_plugin_config {
-	gchar *address;                   /**< listening address of the proxy */
-
-	gchar **backend_addresses;        /**< read-write backends */
-	gchar **read_only_backend_addresses; /**< read-only  backends */
-
-	gint fix_bug_25371;               /**< suppress the second ERR packet of bug #25371 */
-
-	gint profiling;                   /**< skips the execution of the read_query() function */
-	
-	gchar *lua_script;                /**< script to load at the start the connection */
-
-	gint pool_change_user;            /**< don't reset the connection, when a connection is taken from the pool
-					       - this safes a round-trip, but we also don't cleanup the connection
-					       - another name could be "fast-pool-connect", but that's too friendly
-					       */
-
-	gint start_proxy;
-
-	gchar **client_ips;
-	GHashTable *ip_table;
-
-	gchar **lvs_ips;
-	GHashTable *lvs_table;
-
-	gchar **tables;
-	GHashTable *dt_table;
-
-	gchar **pwds;
-	GHashTable *pwd_table;
-
-	network_mysqld_con *listen_con;
-
-	FILE *sql_log;
-	gchar *sql_log_type;
-
-	gchar *charset;
-};
-
 NETWORK_API int network_connection_pool_getmetatable(lua_State *L);
 
 NETWORK_API int network_connection_pool_lua_add_connection(network_mysqld_con *con);
-NETWORK_API network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx);
+NETWORK_API network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx, GHashTable *pwd_table);
 
 #endif

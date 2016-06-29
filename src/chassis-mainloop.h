@@ -43,6 +43,8 @@
 #include "chassis-log.h"
 #include "chassis-stats.h"
 #include "chassis-shutdown-hooks.h"
+#include "lua-scope.h"
+#include "network-backend.h"
 
 /** @defgroup chassis Chassis
  * 
@@ -50,7 +52,6 @@
  *
  * */
 /*@{*/
-typedef struct chassis_private chassis_private;
 typedef struct chassis chassis;
 
 struct chassis {
@@ -64,10 +65,6 @@ struct chassis {
 	gchar *user;					/**< user to run as */
 	gchar *instance_name;					/**< instance name*/
 
-	chassis_private *priv;
-	void (*priv_shutdown)(chassis *chas, chassis_private *priv);
-	void (*priv_free)(chassis *chas, chassis_private *priv);
-
 	chassis_log *log;
 	
 	chassis_stats_t *stats;			/**< the overall chassis stats, includes lua and glib allocation stats */
@@ -78,9 +75,14 @@ struct chassis {
 	GPtrArray *threads;
 
 	chassis_shutdown_hooks_t *shutdown_hooks;
+
+	lua_scope *sc;
+
+	network_backends_t *backends;
+
+	gint wait_timeout;
 };
 
-CHASSIS_API chassis *chassis_init(void) G_GNUC_DEPRECATED;
 CHASSIS_API chassis *chassis_new(void);
 CHASSIS_API void chassis_free(chassis *chas);
 CHASSIS_API int chassis_check_version(const char *lib_version, const char *hdr_version);

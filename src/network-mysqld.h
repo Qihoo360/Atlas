@@ -60,12 +60,12 @@
 
 typedef struct network_mysqld_con network_mysqld_con; /* forward declaration */
 
-#undef NETWORK_MYSQLD_WANT_CON_TRACK_TIME
-#ifdef NETWORK_MYSQLD_WANT_CON_TRACK_TIME
-#define NETWORK_MYSQLD_CON_TRACK_TIME(con, name) chassis_timestamps_add(con->timestamps, name, __FILE__, __LINE__)
-#else
+/* #undef NETWORK_MYSQLD_WANT_CON_TRACK_TIME */
+/* #ifdef NETWORK_MYSQLD_WANT_CON_TRACK_TIME */
+/* #define NETWORK_MYSQLD_CON_TRACK_TIME(con, name) chassis_timestamps_add(con->timestamps, name, __FILE__, __LINE__) */
+/* #else */
 #define NETWORK_MYSQLD_CON_TRACK_TIME(con, name) 
-#endif
+/* #endif */
 
 /**
  * A macro that produces a plugin callback function pointer declaration.
@@ -380,6 +380,7 @@ NETWORK_API void network_mysqld_con_free(network_mysqld_con *con);
  * should be socket 
  */
 NETWORK_API void network_mysqld_con_accept(int event_fd, short events, void *user_data); /** event handler for accept() */
+NETWORK_API void network_mysqld_admin_con_accept(int event_fd, short events, void *user_data); /** event handler for accept() */
 
 NETWORK_API int network_mysqld_con_send_ok(network_socket *con);
 NETWORK_API int network_mysqld_con_send_ok_full(network_socket *con, guint64 affected_rows, guint64 insert_id, guint16 server_status, guint16 warnings);
@@ -398,15 +399,7 @@ NETWORK_API network_socket_retval_t network_mysqld_write(chassis *srv, network_s
 NETWORK_API network_socket_retval_t network_mysqld_write_len(chassis *srv, network_socket *con, int send_chunks);
 NETWORK_API network_socket_retval_t network_mysqld_con_get_packet(chassis G_GNUC_UNUSED*chas, network_socket *con);
 
-struct chassis_private {
-//	GPtrArray *cons;                          /**< array(network_mysqld_con) */
-
-	lua_scope *sc;
-
-	network_backends_t *backends;
-};
-
-NETWORK_API int network_mysqld_init(chassis *srv);
+NETWORK_API int network_mysqld_init(chassis *srv, gchar *default_file);
 NETWORK_API void network_mysqld_add_connection(chassis *srv, network_mysqld_con *con);
 NETWORK_API void network_mysqld_con_handle(int event_fd, short events, void *user_data);
 NETWORK_API int network_mysqld_queue_append(network_socket *sock, network_queue *queue, const char *data, size_t len);

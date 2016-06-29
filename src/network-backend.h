@@ -26,9 +26,13 @@
 #include "config.h"
 #endif
 
-#include "network-conn-pool.h"
-#include "chassis-mainloop.h"
+#define PWD_SUCCESS		0
+#define ERR_USER_EXIST		1
+#define ERR_USER_NOT_EXIST	1
+#define ERR_PWD_ENCRYPT		2
+#define ERR_PWD_DECRYPT		2
 
+#include "network-conn-pool.h"
 #include "network-exports.h"
 
 typedef enum { 
@@ -74,16 +78,25 @@ typedef struct {
 typedef struct {
 	GPtrArray *backends;
 	GMutex    *backends_mutex;	/*remove lock*/
-	
-//	GTimeVal backend_last_check;
 	g_wrr_poll *global_wrr;
 	guint event_thread_count;
+	gchar *default_file;
+	GHashTable **ip_table;
+	gint *ip_table_index;
+	GPtrArray *raw_ips;
+	GHashTable **pwd_table;
+	gint *pwd_table_index;
+	GPtrArray *raw_pwds;
 } network_backends_t;
 
-NETWORK_API network_backends_t *network_backends_new(guint event_thread_count);
+NETWORK_API network_backends_t *network_backends_new(guint event_thread_count, gchar *default_file);
 NETWORK_API void network_backends_free(network_backends_t *);
-NETWORK_API int network_backends_add(network_backends_t *backends, /* const */ gchar *address, backend_type_t type);
+NETWORK_API int network_backends_add(network_backends_t *backends, gchar *address, backend_type_t type);
 NETWORK_API int network_backends_remove(network_backends_t *backends, guint index);
+NETWORK_API int network_backends_addclient(network_backends_t *backends, gchar *address);
+NETWORK_API int network_backends_removeclient(network_backends_t *backends, gchar *address);
+NETWORK_API int network_backends_addpwd(network_backends_t *backends, gchar *user, gchar *pwd, gboolean is_encrypt);
+NETWORK_API int network_backends_removepwd(network_backends_t *backends, gchar *address);
 NETWORK_API int network_backends_check(network_backends_t *backends);
 NETWORK_API network_backend_t * network_backends_get(network_backends_t *backends, guint ndx);
 NETWORK_API guint network_backends_count(network_backends_t *backends);
@@ -91,5 +104,6 @@ NETWORK_API guint network_backends_count(network_backends_t *backends);
 NETWORK_API g_wrr_poll *g_wrr_poll_new();
 NETWORK_API void g_wrr_poll_free(g_wrr_poll *global_wrr);
 
-#endif /* _BACKEND_H_ */
+NETWORK_API char *decrypt(char *in);
 
+#endif /* _BACKEND_H_ */

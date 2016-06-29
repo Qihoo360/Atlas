@@ -56,14 +56,6 @@ static volatile sig_atomic_t signal_shutdown;
 #endif
 
 /**
- * @deprecated will be removed in 1.0
- * @see chassis_new()
- */
-chassis *chassis_init() {
-	return chassis_new();
-}
-
-/**
  * check if the libevent headers we built against match the 
  * library we run against
  */
@@ -107,7 +99,7 @@ chassis *chassis_new() {
 
 	chas = g_new0(chassis, 1);
 
-	chas->modules     = g_ptr_array_new();
+	chas->modules = g_ptr_array_new();
 	
 	chas->stats = chassis_stats_new();
 
@@ -139,10 +131,6 @@ void chassis_free(chassis *chas) {
 
 	if (!chas) return;
 
-	/* init the shutdown, without freeing share structures */	
-	if (chas->priv_shutdown) chas->priv_shutdown(chas, chas->priv);
-	
-
 	/* call the destructor for all plugins */
 	for (i = 0; i < chas->modules->len; i++) {
 		chassis_plugin *p = chas->modules->pdata[i];
@@ -160,10 +148,6 @@ void chassis_free(chassis *chas) {
 	}
 	
 	g_ptr_array_free(chas->modules, TRUE);
-
-	/* free the pointers _AFTER_ the modules are shutdown */
-	if (chas->priv_free) chas->priv_free(chas, chas->priv);
-
 
 	if (chas->base_dir) g_free(chas->base_dir);
 	if (chas->log_path) g_free(chas->log_path);
@@ -199,7 +183,11 @@ void chassis_free(chassis *chas) {
 	g_free(chas->event_hdr_version);
 
 	chassis_shutdown_hooks_free(chas->shutdown_hooks);
-	
+
+	lua_scope_free(chas->sc);
+
+	network_backends_free(chas->backends);
+
 	g_free(chas);
 }
 
@@ -239,8 +227,11 @@ static void event_log_use_glib(int libevent_log_level, const char *msg) {
 	else if (libevent_log_level == _EVENT_LOG_MSG) glib_log_level = G_LOG_LEVEL_MESSAGE;
 	else if (libevent_log_level == _EVENT_LOG_WARN) glib_log_level = G_LOG_LEVEL_WARNING;
 	else if (libevent_log_level == _EVENT_LOG_ERR) glib_log_level = G_LOG_LEVEL_CRITICAL;
-
-	g_log(G_LOG_DOMAIN, glib_log_level, "(libevent) %s", msg);
+    
+    /*only error to be logged*/
+    if (libevent_log_level == _EVENT_LOG_ERR) {
+        g_log(G_LOG_DOMAIN, glib_log_level, "(libevent) %s", msg);
+    }
 }
 
 
@@ -323,9 +314,9 @@ int chassis_mainloop(void *_chas) {
 	event_base_set(chas->event_base, &ev_sigterm);
 	signal_add(&ev_sigterm, NULL);
 
-	signal_set(&ev_sigint, SIGINT, sigterm_handler, NULL);
-	event_base_set(chas->event_base, &ev_sigint);
-	signal_add(&ev_sigint, NULL);
+	/* signal_set(&ev_sigint, SIGINT, sigterm_handler, NULL); */
+	/* event_base_set(chas->event_base, &ev_sigint); */
+	/* signal_add(&ev_sigint, NULL); */
 
 #ifdef SIGHUP
 	signal_set(&ev_sighup, SIGHUP, sighup_handler, chas);
@@ -342,16 +333,14 @@ int chassis_mainloop(void *_chas) {
 	 * - dup the async-queue-ping-fds
 	 * - setup the events notification
 	 * */
-	for (i = 1; i < (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
+	for (i = 1; i <= (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
 		chassis_event_thread_t *thread = chassis_event_thread_new(i);
 		chassis_event_threads_init_thread(thread, chas);
 		g_ptr_array_add(chas->threads, thread);
 	}
 
 	/* start the event threads */
-	if (chas->event_thread_count > 1) {
-		chassis_event_threads_start(chas->threads);
-	}
+	chassis_event_threads_start(chas->threads);
 
 	/**
 	 * handle signals and all basic events into the main-thread

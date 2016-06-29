@@ -135,18 +135,18 @@ int network_connection_pool_lua_add_connection(network_mysqld_con *con) {
 	return 0;
 }
 
-network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend) {
+network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend, GHashTable *pwd_table) {
 	//1. connect DB
 	network_socket *sock = network_socket_new();
 	network_address_copy(sock->dst, backend->addr);
 	if (-1 == (sock->fd = socket(sock->dst->addr.common.sa_family, sock->socket_type, 0))) {
-		network_socket_free(sock);
 		g_critical("%s.%d: socket(%s) failed: %s (%d)", __FILE__, __LINE__, sock->dst->name->str, g_strerror(errno), errno);
+		network_socket_free(sock);
 		return NULL;
 	}
 	if (-1 == (connect(sock->fd, &sock->dst->addr.common, sock->dst->len))) {
-		network_socket_free(sock);
 		g_message("%s.%d: connecting to backend (%s) failed, marking it as down for ...", __FILE__, __LINE__, sock->dst->name->str);
+		network_socket_free(sock);
 		if (backend->state != BACKEND_STATE_OFFLINE) backend->state = BACKEND_STATE_DOWN;
 		return NULL;
 	}
@@ -154,7 +154,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 	//2. read handshake，重点是获取20个字节的随机串
 	off_t to_read = NET_HEADER_SIZE;
 	guint offset = 0;
-	char header[NET_HEADER_SIZE];
+	guchar header[NET_HEADER_SIZE];
 	while (to_read > 0) {
 		gssize len = recv(sock->fd, header + offset, to_read, 0);
 		if (len == -1 || len == 0) {
@@ -188,7 +188,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 
 	//3. 生成response
 	GString *response = g_string_sized_new(20);
-	GString *hashed_password = g_hash_table_lookup(con->config->pwd_table, con->client->response->username->str);
+	GString *hashed_password = g_hash_table_lookup(pwd_table, con->client->response->username->str);
 	if (hashed_password) {
 		network_mysqld_proto_password_scramble(response, S(challenge->challenge), S(hashed_password));
 	} else {
@@ -253,7 +253,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 	}
 	data->len = offset;
 
-	if (data->str[NET_HEADER_SIZE] != MYSQLD_PACKET_OK) {
+	if (data->str[0] != MYSQLD_PACKET_OK) {
 		network_socket_free(sock);
 		g_string_free(data, TRUE);
 		network_mysqld_auth_challenge_free(challenge);
@@ -280,11 +280,10 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
  * @return NULL if swapping failed
  *         the new backend on success
  */
-network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx) {
+network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx, GHashTable *pwd_table) {
 	network_backend_t *backend = NULL;
 	network_socket *send_sock;
 	network_mysqld_con_lua_t *st = con->plugin_con_state;
-	chassis_private *g = con->srv->priv;
 //	GString empty_username = { "", 0, 0 };
 
 	/*
@@ -292,7 +291,7 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 	 * in the connection pool and connected
 	 */
 
-	backend = network_backends_get(g->backends, backend_ndx);
+	backend = network_backends_get(con->srv->backends, backend_ndx);
 	if (!backend) return NULL;
 
 
@@ -310,7 +309,7 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 		/**
 		 * no connections in the pool
 		 */
-		if (NULL == (send_sock = self_connect(con, backend))) {
+		if (NULL == (send_sock = self_connect(con, backend, pwd_table))) {
 			st->backend_ndx = -1;
 			return NULL;
 		}

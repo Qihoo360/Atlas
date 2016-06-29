@@ -63,8 +63,8 @@ void chassis_event_add(network_mysqld_con* client_con) {		//主线程执行，ping工作
 	chassis* chas = client_con->srv;
 
 	// choose a event thread
-	static guint last_thread = 0;
-	if (last_thread == chas->event_thread_count) last_thread = 0;
+	static guint last_thread = 1;
+	if (last_thread > chas->event_thread_count) last_thread = 1;
 	chassis_event_thread_t *thread = chas->threads->pdata[last_thread];
 	++last_thread;
 

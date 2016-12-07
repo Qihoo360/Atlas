@@ -1,3 +1,5 @@
+We have build another interesting proect pika. Pika is a nosql compatible with redis protocol with huge storage space. You can have a try. ![pika](https://github.com/Qihoo360/pika)
+
 ###1.Brief introduction
 
 Atlas is a MySQL protocol-based database middleware project developed and maintained by infrastructure team of the Web platform Department in QIHU 360 SOFTWARE CO. LIMITED(NYSE:QIHU). It fixed lots of bugs and added lot of new functions on the basis of MySQL-Proxy 0.8.2. Currently the project has been widely applied in QIHU, many MySQL business has connected to the Atlas platform. The number of read and write requests forwarded by Atlas has reached billions.

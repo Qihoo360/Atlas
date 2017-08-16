@@ -1,0 +1,71 @@
+{
+    "admin-username": "mysqlproxy",
+    "admin-password": "25d9da7627501b6b",
+    "admin-lua-script": "/usr/local/mysql-proxy/lib/mysql-proxy/lua/admin.lua",
+    "log-level": "waring",
+    "log-path": "/usr/local/mysql-proxy/log",
+    "daemon": false,
+    "keepalive": false,
+    "event-threads": 1,
+    "instance": "test",
+    "pwds": ["root:kHEMokVPCu0="],
+    "clients-ips": ["10.102.64.112","10.108.72.102", "10.108.72.44", "10.113.88.14"],
+    "sql-log": "realtime",
+    "sql-safe-update": false,
+    "max-conn-in-pool": 1000,
+    "groups": 
+    [
+        {
+            "name": "group-1",
+            "master": "127.0.0.1:3307",
+            "slaves": [
+            {
+                "name": "slave1",
+                "ips": [ "127.0.0.1:3308@1", "127.0.0.1:3309@2"]
+            },
+            {
+                "name": "slave2",
+                "ips": ["127.0.0.1:3308@1", "127.0.0.1:3309@2"]
+            }
+            ]
+        },
+        {
+            "name": "group-2",
+            "master": "127.0.0.1:3307",
+            "slaves": 
+                [
+                {
+                    "name": "slave1",
+                    "ips": [ "127.0.0.1:3308@1", "127.0.0.1:3309@2" ]
+                },
+                {
+                    "name": "slave2",
+                    "ips": [ "127.0.0.1:3308@1", "127.0.0.1:3309@2" ]
+                }
+            ]
+        }
+    ],
+    "schema": 
+    {
+        "groups": [ "group-1", "group-2" ],
+        "default": "group1",
+        "sharding-rule": 
+        [
+            {
+                "db": "testDB1",
+                "table": "testtable1",
+                "sharding-key": "id",
+                "nodes": [ "group-1", "group-2" ],
+                "type": "hash"
+            },
+            {
+                "db": "testDB2",
+                "table": "testtable2",
+                "sharding-key": "id",
+                "nodes": [ "group-1", "group-2" ],
+                "type": "range"
+            }
+        ]
+    },
+    "forbiddenSQL": [ "" ]
+}

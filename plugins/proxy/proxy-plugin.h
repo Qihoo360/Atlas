@@ -22,6 +22,9 @@
 #ifndef _PROXY_PLUGIN_H
 #define	_PROXY_PLUGIN_H
 
+#include "network-mysqld.h"
+#include "network-injection.h"
 
+void chassis_query_statistics_update(network_mysqld_con *con, injection *inj, int success, int running);
 #endif	/* _PROXY_PLUGIN_H */
 

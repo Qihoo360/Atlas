@@ -1,0 +1,72 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+
+PROJECT(mysql-proxy C)
+
+SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
+INCLUDE(CheckIncludeFiles)
+INCLUDE(CheckFunctionExists)
+INCLUDE(CheckLibraryExists)
+INCLUDE(FindPkgConfig)
+INCLUDE(CheckTypeSize)
+
+## if the paths are not set, use pkg-config to fetch them
+IF(NOT GLIB_DEV_BASE_DIR)
+    SET(GLIB_INCLUDE_DIRS  CACHE PATH "glib-2.0 include dir [see pkg-config glib-2.0 --cflags]")
+    SET(GLIB_LIBRARY_DIRS  CACHE PATH "glib-2.0 library dir [see pkg-config glib-2.0 --libs]")
+    SET(GMODULE_INCLUDE_DIRS  CACHE PATH "gmodule-2.0 include dir [see pkg-config gmodule-2.0 --cflags]")
+    SET(GMODULE_LIBRARY_DIRS  CACHE PATH "gmodule-2.0 library dir [see pkg-config gmodule-2.0 --libs]")
+    SET(GTHREAD_INCLUDE_DIRS  CACHE PATH "gthread-2.0 include dir [see pkg-config gthread-2.0 --cflags]")
+    SET(GTHREAD_LIBRARY_DIRS  CACHE PATH "gthread-2.0 library dir [see pkg-config gthread-2.0 --libs]")
+ENDIF(NOT GLIB_DEV_BASE_DIR)
+
+SET(MYSQL_INCLUDE_DIRS CACHE PATH "MySQL include dir")
+SET(MYSQL_LIBRARY_DIRS CACHE PATH "MySQL library dir")
+SET(LUA_INCLUDE_DIRS   CACHE PATH "lua-5.1 include dir")
+SET(LUA_LIBRARY_DIRS   CACHE PATH "lua-5.1 library dir")
+IF (NOT EVENT_BASE_DIR)
+    SET(EVENT_INCLUDE_DIRS CACHE PATH "libevent include dir")
+    SET(EVENT_LIBRARY_DIRS CACHE PATH "libevent library dir")
+ENDIF(NOT EVENT_BASE_DIR)
+
+IF(NOT GLIB_INCLUDE_DIRS) 
+    SET(__pkg_config_checked_GLIB 0)
+    PKG_CHECK_MODULES(GLIB REQUIRED glib-2.0>=2.16)
+    ADD_DEFINITIONS(-DHAVE_GLIB)
+ENDIF(NOT GLIB_INCLUDE_DIRS) 
+
+IF(NOT GMODULE_INCLUDE_DIRS) 
+    PKG_CHECK_MODULES(GMODULE REQUIRED gmodule-2.0>=2.16)
+    ADD_DEFINITIONS(-DHAVE_GMODULE)
+ENDIF(NOT GMODULE_INCLUDE_DIRS) 
+
+IF(NOT GTHREAD_INCLUDE_DIRS) 
+    PKG_CHECK_MODULES(GTHREAD REQUIRED gthread-2.0>=2.16)
+ENDIF(NOT GTHREAD_INCLUDE_DIRS) 
+
+IF(NOT LUA_INCLUDE_DIRS)
+    SET(__pkg_config_checked_LUA 0)
+    PKG_SEARCH_MODULE(LUA lua5.1;lua>=5.1)
+    ADD_DEFINITIONS(-DHAVE_LUA)
+ENDIF(NOT LUA_INCLUDE_DIRS) 
+
+FIND_PACKAGE(MYSQL REQUIRED)
+INCLUDE_DIRECTORIES(${MYSQL_INCLUDE_DIRS})
+
+FIND_PROGRAM(LUA_EXECUTABLE NAMES lua DOC "full path of lua")
+
+#MESSAGE(STATUS "libevent at libs:${EVENT_LIBRARY_DIRS} incl:${EVENT_INCLUDE_DIRS}")
+#MESSAGE(STATUS "liblua   at libs:${LUA_LIBRARY_DIRS} incl:${LUA_INCLUDE_DIRS}")
+#MESSAGE(STATUS "glib2.0  at libs:${GLIB_LIBRARY_DIRS} incl:${GLIB_INCLUDE_DIRS}")
+#MESSAGE(STATUS "gthread  at libs:${GTHREAD_LIBRARY_DIRS} incl:${GTHREAD_INCLUDE_DIRS}")
+#MESSAGE(STATUS "gmodule  at libs:${GMODULE_LIBRARY_DIRS} incl:${GMODULE_INCLUDE_DIRS}")
+#MESSAGE(STATUS "mysql    at libs:${MYSQL_LIBRARY_DIRS} incl:${MYSQL_INCLUDE_DIRS}")
+
+ADD_DEFINITIONS(-DHAVE_CONFIG_H)
+
+INCLUDE_DIRECTORIES(./)
+
+ADD_SUBDIRECTORY(./lib)
+ADD_SUBDIRECTORY(./util)
+ADD_SUBDIRECTORY(./src)
+ADD_SUBDIRECTORY(./plugins)

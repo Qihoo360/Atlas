@@ -30,22 +30,22 @@
 #include "network_mysqld_proto_binary.h"
 
 #include "glib-ext.h"
-#include "../lib/sql-tokenizer.h"
+//#include "../lib/sql-tokenizer.h"
 
 #define C(x) x, sizeof(x) - 1
 #define S(x) x->str, x->len
 
-gboolean sql_token_equal(sql_token *token, sql_token_id token_id, const char *text)
-{
-	if( token->token_id != token_id)
-		return FALSE;
-	if(token_id == TK_LITERAL) {
-		g_string_ascii_up(token->text);
-		if( 0 != strcmp(token->text->str, text) ) 
-			return FALSE;
-	}
-	return TRUE;
-}
+//gboolean sql_token_equal(sql_token *token, sql_token_id token_id, const char *text)
+//{
+//	if( token->token_id != token_id)
+//		return FALSE;
+//	if(token_id == TK_LITERAL) {
+//		g_string_ascii_up(token->text);
+//		if( 0 != strcmp(token->text->str, text) ) 
+//			return FALSE;
+//	}
+//	return TRUE;
+//}
 
 void update_charset(network_mysqld_con* con) {
 	GString* charset_client     = con->charset_client;

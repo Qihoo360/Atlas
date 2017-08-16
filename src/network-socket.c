@@ -120,7 +120,7 @@ network_socket *network_socket_new() {
 
 void network_socket_free(network_socket *s) {
 	if (!s) return;
-
+    g_message("sock free on fd(%d)", s->fd);
 	network_queue_free(s->send_queue);
 	network_queue_free(s->recv_queue);
 	network_queue_free(s->recv_queue_raw);
@@ -452,6 +452,9 @@ network_socket_retval_t network_socket_bind(network_socket * con) {
  */
 network_socket_retval_t network_socket_read(network_socket *sock) {
 	gssize len;
+    if (NULL == sock) {
+        return NETWORK_SOCKET_ERROR;
+    } 
 
 	if (sock->to_read > 0) {
 		GString *packet = g_string_sized_new(sock->to_read);

@@ -17,6 +17,24 @@
 # 02110-1301  USA
 # $%ENDLICENSE%$
 
+FIND_PATH(JSON_C_INCLUDE_DIRS 
+    NAMES "json.h"
+    PATHS "/usr/local/include/json-c"
+    "/usr/include/json-c"
+    "/usr/include")
+FIND_LIBRARY(JSON_C_LIB_PATH
+    NAME "json-c"
+    PATHS "/usr/local/lib"
+          "/usr/lib"
+          "/usr/lib32")
+
+FIND_PATH(LEMON_INCLUDE_DIRS 
+    NAMES "sqliteInt.h"
+    PATHS "/usr/local/include/lemon")
+FIND_LIBRARY(LEMON_LIB_PATH
+    NAME "lemon_parser"
+    PATHS "/usr/local/lib")
+
 INCLUDE_DIRECTORIES(${PROJECT_BINARY_DIR}) # for config.h
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -29,10 +47,24 @@ LINK_DIRECTORIES(${MYSQL_LIBRARY_DIRS})
 INCLUDE_DIRECTORIES(${LUA_INCLUDE_DIRS})
 LINK_DIRECTORIES(${LUA_LIBRARY_DIRS})
 
+INCLUDE_DIRECTORIES(${JSON_C_INCLUDE_DIRS})
+LINK_DIRECTORIES(${JSON_C_LIB_PATH})
+
+
+INCLUDE_DIRECTORIES(${LEMON_INCLUDE_DIRS})
+LINK_DIRECTORIES(${LEMON_LIB_PATH})
+
 INCLUDE_DIRECTORIES(${EVENT_INCLUDE_DIRS})
 LINK_DIRECTORIES(${EVENT_LIBRARY_DIRS})
 
+INCLUDE_DIRECTORIES(${REDIS_INCLUDE_DIRS})
+LINK_DIRECTORIES(${REDIS_LIB_PATH})
+
+
 STRING(REPLACE "." "" SHARED_LIBRARY_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
+ADD_DEFINITIONS(-DHAVE_LUA_H)
+ADD_DEFINITIONS(-DHAVE_ULONG)
+ADD_DEFINITIONS(-DHAVE_SYS_RESOURCE_H)
 ADD_DEFINITIONS(-DSHARED_LIBRARY_SUFFIX="${SHARED_LIBRARY_SUFFIX}")
 
 SET(chassis_sources 
@@ -52,6 +84,7 @@ SET(chassis_sources
 	chassis-options.c
 	chassis-unix-daemon.c
 	chassis-win32-service.c
+    chassis-sharding.c 
 )
 
 SET(timing_sources
@@ -113,15 +146,19 @@ TARGET_LINK_LIBRARIES(mysql-chassis-timing
 	mysql-chassis-glibext
 )
 
+FIND_LIBRARY(LIBEVENT_LIB NAMES event PATHS /usr/local/lib)
+MESSAGE(STATUS "libcurl lib path: ${LIBEVENT_LIB}") 
 TARGET_LINK_LIBRARIES(mysql-chassis 
 	${GLIB_LIBRARIES} 
 	${GMODULE_LIBRARIES} 
 	${GTHREAD_LIBRARIES} 
 	${LUA_LIBRARIES}
-	${EVENT_LIBRARIES}
+    ${LIBEVENT_LIB}
 	${WINSOCK_LIBRARIES}
+    ${LEMON_LIB_PATH}
 	mysql-chassis-timing
 	mysql-chassis-glibext
+    crypto
 )
 
 TARGET_LINK_LIBRARIES(mysql-chassis-proxy
@@ -136,121 +173,12 @@ TARGET_LINK_LIBRARIES(mysql-proxy
 	${GTHREAD_LIBRARIES} 
 	${LUA_LIBRARIES}
 	${EVENT_LIBRARIES}
+    ${MYSQL_LIBRARY}
+	mysql
 	mysql-chassis
 	mysql-chassis-proxy
 	mysql-chassis-glibext
 	mysql-chassis-timing
+    atlas-util
 )
 
-IF(WIN32)
-	ADD_EXECUTABLE(mysql-proxy-svc mysql-proxy-cli.c)
-	TARGET_LINK_LIBRARIES(mysql-proxy-svc
-		${GLIB_LIBRARIES} 
-		${GMODULE_LIBRARIES} 
-		${GTHREAD_LIBRARIES} 
-		${LUA_LIBRARIES}
-		${EVENT_LIBRARIES}
-		mysql-chassis
-		mysql-chassis-proxy
-		mysql-chassis-glibext
-		mysql-chassis-timing
-	)
-	SET_TARGET_PROPERTIES(mysql-proxy-svc
-		PROPERTIES
-		COMPILE_DEFINITIONS WIN32_AS_SERVICE
-	)
-ENDIF(WIN32)
-
-IF(WIN32)
-	CHASSIS_INSTALL_TARGET(mysql-proxy)
-	CHASSIS_INSTALL_TARGET(mysql-proxy-svc)
-ELSE(WIN32)
-	# Unix platforms provide a wrapper script to avoid relinking at install time
-	
-	# figure out the correct name of the shared linker lookup path for this system, default to LD_LIBRARY_PATH
-	SET(DYNLIB_PATH_VAR "LD_LIBRARY_PATH")
-	
-	IF("AIX" STREQUAL ${CMAKE_SYSTEM_NAME})
-		SET(DYNLIB_PATH_VAR "LIBPATH")
-	ENDIF("AIX" STREQUAL ${CMAKE_SYSTEM_NAME})
-	
-	IF("HP-UX" STREQUAL ${CMAKE_SYSTEM_NAME})
-		SET(DYNLIB_PATH_VAR "SHLIB_PATH")
-	ENDIF("HP-UX" STREQUAL ${CMAKE_SYSTEM_NAME})
-	
-	IF(APPLE)
-		SET(DYNLIB_PATH_VAR "DYLD_LIBRARY_PATH")
-	ENDIF(APPLE)
-	
-	# write the wrapper script, which uses DYNLIB_PATH_VAR
-	CONFIGURE_FILE(
-		${CMAKE_SOURCE_DIR}/scripts/mysql-proxy-binwrapper.in 
-		${PROJECT_BINARY_DIR}/mysql-proxy.sh
-		@ONLY
-	)
-	INSTALL(FILES ${PROJECT_BINARY_DIR}/mysql-proxy.sh
-		DESTINATION bin/
-		PERMISSIONS OWNER_EXECUTE OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-		RENAME mysql-proxy
-	)
-
-	INSTALL(TARGETS mysql-proxy
-		RUNTIME DESTINATION libexec
-	)
-ENDIF(WIN32)
-
-CHASSIS_INSTALL_TARGET(mysql-chassis)
-CHASSIS_INSTALL_TARGET(mysql-chassis-proxy)
-CHASSIS_INSTALL_TARGET(mysql-chassis-glibext)
-CHASSIS_INSTALL_TARGET(mysql-chassis-timing)
-
-INSTALL(FILES
-	network-mysqld.h
-	network-mysqld-lua.h
-	network-mysqld-proto.h
-	network_mysqld_type.h
-	network_mysqld_proto_binary.h
-	network-mysqld-binlog.h
-	network-mysqld-packet.h
-	network-mysqld-masterinfo.h
-	network-conn-pool.h
-	network-conn-pool-lua.h
-	network-queue.h
-	network-socket.h
-	network-socket-lua.h
-	network-address.h
-	network-address-lua.h
-	sys-pedantic.h
-	chassis-plugin.h
-	chassis-log.h
-	chassis-keyfile.h
-	chassis-mainloop.h
-	chassis-shutdown-hooks.h
-	chassis-path.h
-	chassis-filemode.h
-	chassis-limits.h
-	chassis-event-thread.h
-	glib-ext.h
-	glib-ext-ref.h
-	string-len.h
-	lua-load-factory.h
-	lua-scope.h
-	lua-env.h
-	network-injection.h
-	network-injection-lua.h
-	chassis-exports.h
-	network-exports.h
-	network-backend.h
-	network-backend-lua.h
-	disable-dtrace.h
-	lua-registry-keys.h
-	chassis-stats.h
-	chassis-timings.h
-	chassis-gtimeval.h
-	chassis-frontend.h
-	chassis-options.h
-	chassis-unix-daemon.h
-	chassis-win32-service.h
-	my_rdtsc.h
-	DESTINATION include/
-	)

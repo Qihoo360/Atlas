@@ -43,5 +43,6 @@ NETWORK_API void network_connection_pool_remove(network_connection_pool *pool, n
 
 NETWORK_API network_connection_pool *network_connection_pool_new(void);
 NETWORK_API void network_connection_pool_free(network_connection_pool *pool);
+NETWORK_API void network_connection_pools_free(GPtrArray *pools);
 
 #endif

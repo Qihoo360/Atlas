@@ -1,23 +1,23 @@
 /* $%BEGINLICENSE%$
- Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License as
- published by the Free Software Foundation; version 2 of the
- License.
+   This program is free software; you can redistribute it and/or
+   modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation; version 2 of the
+   License.
 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   GNU General Public License for more details.
 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+   02110-1301  USA
 
- $%ENDLICENSE%$ */
- 
+   $%ENDLICENSE%$ */
+
 /** @file
  * the user-interface for the MySQL Proxy @see main()
  *
@@ -85,6 +85,8 @@
 #include "chassis-unix-daemon.h"
 #include "chassis-frontend.h"
 #include "chassis-options.h"
+//#include "mysql-proxy-cli.h"
+#include "../util/parse_config_file.h"
 
 #ifdef WIN32
 #define CHASSIS_NEWLINE "\r\n"
@@ -94,68 +96,20 @@
 
 #define GETTEXT_PACKAGE "mysql-proxy"
 
-/**
- * options of the MySQL Proxy frontend
- */
-typedef struct {
-	int print_version;
-	int verbose_shutdown;
-
-	int daemon_mode;
-	gchar *user;
-
-	gchar *base_dir;
-	int auto_base_dir;
-
-	gchar *default_file;
-	GKeyFile *keyfile;
-
-	chassis_plugin *p;
-	GOptionEntry *config_entries;
-
-	gchar *pid_file;
-
-	gchar *plugin_dir;
-	gchar **plugin_names;
-
-	guint invoke_dbg_on_crash;
-
-#ifndef _WIN32
-	/* the --keepalive option isn't available on Unix */
-	guint auto_restart;
-#endif
-
-	gint max_files_number;
-
-	gint event_thread_count;
-
-	gchar *log_level;
-	gchar *log_path;
-	int    use_syslog;
-
-	char *lua_path;
-	char *lua_cpath;
-	char **lua_subdirs;
-
-	gchar *instance_name;
-
-	gint wait_timeout;
-} chassis_frontend_t;
 
 /**
  * create a new the frontend for the chassis
  */
 chassis_frontend_t *chassis_frontend_new(void) {
-	chassis_frontend_t *frontend;
+    chassis_frontend_t *frontend;
 
-	frontend = g_slice_new0(chassis_frontend_t);
-	frontend->event_thread_count = 1;
-	frontend->max_files_number = 0;
-	frontend->wait_timeout = 0;
+    frontend = g_slice_new0(chassis_frontend_t);
+    frontend->event_thread_count = 1;
+    frontend->max_files_number = 0;
+    frontend->wait_timeout = 0;
 
-	return frontend;
+    return frontend;
 }
-
 /**
  * free the frontend of the chassis
  */
@@ -179,35 +133,85 @@ void chassis_frontend_free(chassis_frontend_t *frontend) {
 
 	g_slice_free(chassis_frontend_t, frontend);
 }
+/*
+**  create a new process_list    
+ */
+void hash_value_free(gpointer value){
+    process_list_content_t *t = (process_list_content_t *)value;
+    if (!t) { 
+        return; 
+    }
+    g_free(t->query);
+    g_free(t->client_addr);
+    g_free(t->server_addr);
+    g_free(t->database);
+    g_free(t->user);
+    
+    g_slice_free(process_list_content_t, t);
+}
+/**
+ * create a new statistics for the chassis
+ **/
+statistics_t *chassis_query_statistics_new(void){
+    statistics_t *statistics;
+
+    statistics = g_slice_new0(statistics_t);
+    //statistics->mutex = g_mutex_new();
+    g_mutex_init(&statistics->mutex);
+    statistics->com_select = 0;
+    statistics->com_insert = 0;
+    statistics->com_update = 0;
+    statistics->com_delete = 0;
+    statistics->com_replace = 0;
+    statistics->com_replace = 0;
+
+    statistics->com_error = 0;
+
+    statistics->threads_connected = 0;
+    statistics->threads_running = 0;
+
+    statistics->start_time = chassis_get_rel_microseconds();
+    statistics->up_time = chassis_get_rel_microseconds();
+
+    return statistics;
+}
+
+void chassis_query_statistics_free(statistics_t *statistics){
+    if (NULL == statistics) { 
+        return; 
+    }
+    g_mutex_clear(&statistics->mutex); 
+    g_slice_free(statistics_t, statistics);        
+}
 
 /**
  * setup the options of the chassis
  */
 int chassis_frontend_set_chassis_options(chassis_frontend_t *frontend, chassis_options_t *opts) {
-	chassis_options_add(opts, "verbose-shutdown", 0, 0, G_OPTION_ARG_NONE, &(frontend->verbose_shutdown), "Always log the exit code when shutting down", NULL);
-	chassis_options_add(opts, "daemon", 0, 0, G_OPTION_ARG_NONE, &(frontend->daemon_mode), "Start in daemon-mode", NULL);
-	chassis_options_add(opts, "user", 0, 0, G_OPTION_ARG_STRING, &(frontend->user), "Run mysql-proxy as user", "<user>");
-	chassis_options_add(opts, "basedir", 0, 0, G_OPTION_ARG_STRING, &(frontend->base_dir), "Base directory to prepend to relative paths in the config", "<absolute path>");
-	chassis_options_add(opts, "plugin-dir", 0, 0, G_OPTION_ARG_STRING, &(frontend->plugin_dir), "path to the plugins", "<path>");
-	chassis_options_add(opts, "plugins", 0, 0, G_OPTION_ARG_STRING_ARRAY, &(frontend->plugin_names), "plugins to load", "<name>");
-	chassis_options_add(opts, "log-level", 0, 0, G_OPTION_ARG_STRING, &(frontend->log_level), "log all messages of level ... or higher", "(error|warning|info|message|debug)");
-	chassis_options_add(opts, "log-path", 0, 0, G_OPTION_ARG_STRING, &(frontend->log_path), "log all messages in a path", "<path>");
-	chassis_options_add(opts, "log-use-syslog", 0, 0, G_OPTION_ARG_NONE, &(frontend->use_syslog), "log all messages to syslog", NULL);
-	chassis_options_add(opts, "log-backtrace-on-crash", 0, 0, G_OPTION_ARG_NONE, &(frontend->invoke_dbg_on_crash), "try to invoke debugger on crash", NULL);
-	chassis_options_add(opts, "keepalive", 0, 0, G_OPTION_ARG_NONE, &(frontend->auto_restart), "try to restart the proxy if it crashed", NULL);
-	chassis_options_add(opts, "max-open-files", 0, 0, G_OPTION_ARG_INT, &(frontend->max_files_number), "maximum number of open files (ulimit -n)", NULL);
-	chassis_options_add(opts, "event-threads", 0, 0, G_OPTION_ARG_INT, &(frontend->event_thread_count), "number of event-handling threads (default: 1)", NULL);
-	chassis_options_add(opts, "lua-path", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_path), "set the LUA_PATH", "<...>");
-	chassis_options_add(opts, "lua-cpath", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_cpath), "set the LUA_CPATH", "<...>");
-	chassis_options_add(opts, "instance", 0, 0, G_OPTION_ARG_STRING, &(frontend->instance_name), "instance name", "<name>");
-	chassis_options_add(opts, "wait-timeout", 0, 0, G_OPTION_ARG_INT, &(frontend->wait_timeout), "the number of seconds which Atlas waits for activity on a connection before closing it (default:0)", NULL);
+    chassis_options_add(opts, "verbose-shutdown", 0, 0, G_OPTION_ARG_NONE, &(frontend->verbose_shutdown), "Always log the exit code when shutting down", NULL);
+    chassis_options_add(opts, "daemon", 0, 0, G_OPTION_ARG_NONE, &(frontend->daemon_mode), "Start in daemon-mode", NULL);
+    chassis_options_add(opts, "user", 0, 0, G_OPTION_ARG_STRING, &(frontend->user), "Run mysql-proxy as user", "<user>");
+    chassis_options_add(opts, "basedir", 0, 0, G_OPTION_ARG_STRING, &(frontend->base_dir), "Base directory to prepend to relative paths in the config", "<absolute path>");
+    chassis_options_add(opts, "plugin-dir", 0, 0, G_OPTION_ARG_STRING, &(frontend->plugin_dir), "path to the plugins", "<path>");
+    chassis_options_add(opts, "plugins", 0, 0, G_OPTION_ARG_STRING_ARRAY, &(frontend->plugin_names), "plugins to load", "<name>");
+    chassis_options_add(opts, "log-level", 0, 0, G_OPTION_ARG_STRING, &(frontend->log_level), "log all messages of level ... or higher", "(error|warning|info|message|debug)");
+    chassis_options_add(opts, "log-path", 0, 0, G_OPTION_ARG_STRING, &(frontend->log_path), "log all messages in a path", "<path>");
+    chassis_options_add(opts, "log-use-syslog", 0, 0, G_OPTION_ARG_NONE, &(frontend->use_syslog), "log all messages to syslog", NULL);
+    chassis_options_add(opts, "log-backtrace-on-crash", 0, 0, G_OPTION_ARG_NONE, &(frontend->invoke_dbg_on_crash), "try to invoke debugger on crash", NULL);
+    chassis_options_add(opts, "keepalive", 0, 0, G_OPTION_ARG_NONE, &(frontend->auto_restart), "try to restart the proxy if it crashed", NULL);
+    chassis_options_add(opts, "max-open-files", 0, 0, G_OPTION_ARG_INT, &(frontend->max_files_number), "maximum number of open files (ulimit -n)", NULL);
+    chassis_options_add(opts, "event-threads", 0, 0, G_OPTION_ARG_INT, &(frontend->event_thread_count), "number of event-handling threads (default: 1)", NULL);
+    chassis_options_add(opts, "lua-path", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_path), "set the LUA_PATH", "<...>");
+    chassis_options_add(opts, "lua-cpath", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_cpath), "set the LUA_CPATH", "<...>");
+    chassis_options_add(opts, "instance", 0, 0, G_OPTION_ARG_STRING, &(frontend->instance_name), "instance name", "<name>");
+    chassis_options_add(opts, "wait-timeout", 0, 0, G_OPTION_ARG_INT, &(frontend->wait_timeout), "the number of seconds which Atlas waits for activity on a connection before closing it (default:0)", NULL);
 
-	return 0;	
+    return 0;	
 }
 
 static void sigsegv_handler(int G_GNUC_UNUSED signum) {
-	g_on_error_stack_trace(g_get_prgname());
-	abort(); /* trigger a SIGABRT instead of just exiting */
+    g_on_error_stack_trace(g_get_prgname());
+    abort(); /* trigger a SIGABRT instead of just exiting */
 }
 
 /**
@@ -216,390 +220,357 @@ static void sigsegv_handler(int G_GNUC_UNUSED signum) {
  * up the logging support appropriately.
  */
 int main_cmdline(int argc, char **argv) {
-	chassis *srv = NULL;
+
+    chassis *srv = NULL;
 #ifdef HAVE_SIGACTION
-	static struct sigaction sigsegv_sa;
+    static struct sigaction sigsegv_sa;
 #endif
-	/* read the command-line options */
-	GOptionContext *option_ctx = NULL;
-	GOptionEntry *main_entries = NULL;
-	chassis_frontend_t *frontend = NULL;
-	chassis_options_t *opts = NULL;
+    /* read the command-line options */
+    GOptionContext *option_ctx = NULL;
+    GOptionEntry *main_entries = NULL;
+    chassis_frontend_t *frontend = NULL;
+    chassis_options_t *opts = NULL;
+    chassis_config_t *config = NULL; 
 
-	GError *gerr = NULL;
-	chassis_log *log = NULL;
 
-	/* a little helper macro to set the src-location that we stepped out at to exit */
+    statistics_t *statistics = NULL;
+
+    GError *gerr = NULL;
+    chassis_log *log = NULL;
+
+    /* a little helper macro to set the src-location that we stepped out at to exit */
 #define GOTO_EXIT(status) \
-	exit_code = status; \
-	exit_location = G_STRLOC; \
-	goto exit_nicely;
+    exit_code = status; \
+    exit_location = G_STRLOC; \
+    goto exit_nicely;
 
-	int exit_code = EXIT_SUCCESS;
-	const gchar *exit_location = G_STRLOC;
+    int exit_code = EXIT_SUCCESS;
+    const gchar *exit_location = G_STRLOC;
 
-	if (chassis_frontend_init_glib()) { /* init the thread, module, ... system */
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (chassis_frontend_init_glib()) { /* init the thread, module, ... system */
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	/* start the logging ... to stderr */
-	log = chassis_log_new();
-	log->min_lvl = G_LOG_LEVEL_MESSAGE; /* display messages while parsing or loading plugins */
-	g_log_set_default_handler(chassis_log_func, log);
+    /* start the logging ... to stderr */
+    log = chassis_log_new();
+    log->min_lvl = G_LOG_LEVEL_MESSAGE; /* display messages while parsing or loading plugins */
+    g_log_set_default_handler(chassis_log_func, log);
 
 #ifdef _WIN32
-	if (chassis_win32_is_service() && chassis_log_set_event_log(log, g_get_prgname())) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (chassis_win32_is_service() && chassis_log_set_event_log(log, g_get_prgname())) {
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	if (chassis_frontend_init_win32()) { /* setup winsock */
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (chassis_frontend_init_win32()) { /* setup winsock */
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 #endif
 
-	/* may fail on library mismatch */
-	if (NULL == (srv = chassis_new())) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    /* may fail on library mismatch */
+    if (NULL == (srv = chassis_new())) {
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	srv->log = log; /* we need the log structure for the log-rotation */
+    srv->log = log; /* we need the log structure for the log-rotation */
 
-	frontend = chassis_frontend_new();
-	option_ctx = g_option_context_new("- MySQL Proxy");
-	/**
-	 * parse once to get the basic options like --defaults-file and --version
-	 *
-	 * leave the unknown options in the list
-	 */
-	if (chassis_frontend_init_base_options(option_ctx, &argc, &argv, &(frontend->print_version), &(frontend->default_file), &gerr)) {
-		g_critical("%s: %s", G_STRLOC, gerr->message);
-		g_clear_error(&gerr);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    frontend = chassis_frontend_new();
+    statistics = chassis_query_statistics_new();
+    config = chassis_config_new(); 
 
-	if (frontend->default_file) {
-		if (!(frontend->keyfile = chassis_frontend_open_config_file(frontend->default_file, &gerr))) {
-			g_critical("%s: loading config from '%s' failed: %s", G_STRLOC, frontend->default_file, gerr->message);
-			g_clear_error(&gerr);
-			GOTO_EXIT(EXIT_FAILURE);
-		}
-	}
+    option_ctx = g_option_context_new("- MySQL Proxy");
+    /**
+     * parse once to get the basic options like --defaults-file and --version
+     *
+     * leave the unknown options in the list
+     */
+    if (chassis_frontend_init_base_options(option_ctx, &argc, &argv, &(config->print_version), &(config->default_file), &gerr)) {
+        g_critical("%s: %s", G_STRLOC, gerr->message);
+        g_clear_error(&gerr);
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	/* print the main version number here, but don't exit
-	 * we check for print_version again, after loading the plugins (if any)
-	 * and print their version numbers, too. then we exit cleanly.
-	 */
-	if (frontend->print_version) {
+    /* print the main version number here, but don't exit
+     * we check for print_version again, after loading the plugins (if any)
+     * and print their version numbers, too. then we exit cleanly.
+     */
+    if (frontend->print_version) {
 #ifndef CHASSIS_BUILD_TAG
 #define CHASSIS_BUILD_TAG PACKAGE_STRING
 #endif
-		g_print("%s" CHASSIS_NEWLINE, CHASSIS_BUILD_TAG); 
-		chassis_frontend_print_version();
-	}
+        g_print("%s" CHASSIS_NEWLINE, CHASSIS_BUILD_TAG); 
+        chassis_frontend_print_version();
+    }
 
-	/* add the other options which can also appear in the configfile */
-	opts = chassis_options_new();
-	chassis_frontend_set_chassis_options(frontend, opts);
-	main_entries = chassis_options_to_g_option_entries(opts);
-	g_option_context_add_main_entries(option_ctx, main_entries, NULL);
+    /**
+     * parse once to get the basic options 
+     *
+     * leave the unknown options in the list
+     */
+    if (chassis_frontend_init_basedir(argv[0], &(config->base_dir))){
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	/**
-	 * parse once to get the basic options 
-	 *
-	 * leave the unknown options in the list
-	 */
-	if (FALSE == g_option_context_parse(option_ctx, &argc, &argv, &gerr)) {
-		g_critical("%s", gerr->message);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (FALSE == parse_config_file(config)) {
+        GOTO_EXIT(EXIT_FAILURE);
+    };    
+    /* basic setup is done, base-dir is known, ... */
+    config->lua_subdirs = g_new(char *, 2);
+    config->lua_subdirs[0] = g_strdup("mysql-proxy");
+    config->lua_subdirs[1] = NULL;
 
-	if (frontend->keyfile) {
-		if (chassis_keyfile_to_options(frontend->keyfile, "mysql-proxy", main_entries)) {
-			GOTO_EXIT(EXIT_FAILURE);
-		}
-	}
+    if (chassis_frontend_init_lua_path(config->lua_path, config->base_dir, config->lua_subdirs)) {
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	if (chassis_frontend_init_basedir(argv[0], &(frontend->base_dir))) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (chassis_frontend_init_lua_cpath(config->lua_cpath, config->base_dir, config->lua_subdirs)) {
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	/* basic setup is done, base-dir is known, ... */
-	frontend->lua_subdirs = g_new(char *, 2);
-	frontend->lua_subdirs[0] = g_strdup("mysql-proxy");
-	frontend->lua_subdirs[1] = NULL;
+    /* make sure that he max-thread-count isn't negative */
+    if (config->event_thread_count < 1) {
+        g_critical("--event-threads has to be >= 1, is %d", config->event_thread_count);
+        GOTO_EXIT(EXIT_FAILURE);
+    }
+    srv->event_thread_count = config->event_thread_count;
 
-	if (chassis_frontend_init_lua_path(frontend->lua_path, frontend->base_dir, frontend->lua_subdirs)) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (config->wait_timeout < 0) {
+        g_critical("--wait-timeout has to be >= 0, is %d", config->wait_timeout);
+        GOTO_EXIT(EXIT_FAILURE);
+    }
+    srv->wait_timeout = config->wait_timeout;
 
-	if (chassis_frontend_init_lua_cpath(frontend->lua_cpath, frontend->base_dir, frontend->lua_subdirs)) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-
-	/* make sure that he max-thread-count isn't negative */
-	if (frontend->event_thread_count < 1) {
-		g_critical("--event-threads has to be >= 1, is %d", frontend->event_thread_count);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-	srv->event_thread_count = frontend->event_thread_count;
-
-	if (frontend->wait_timeout < 0) {
-		g_critical("--wait-timeout has to be >= 0, is %d", frontend->wait_timeout);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-	srv->wait_timeout = frontend->wait_timeout;
-
-	/* assign the mysqld part to the */
-	network_mysqld_init(srv, frontend->default_file); /* starts the also the lua-scope, LUA_PATH and LUA_CPATH have to be set before this being called */
+    /* assign the mysqld part to the */
+    network_mysqld_init(srv, config->default_file); /* starts the also the lua-scope, LUA_PATH and LUA_CPATH have to be set before this being called */
 
 #ifdef HAVE_SIGACTION
-	/* register the sigsegv interceptor */
+    /* register the sigsegv interceptor */
 
-	memset(&sigsegv_sa, 0, sizeof(sigsegv_sa));
-	sigsegv_sa.sa_handler = sigsegv_handler;
-	sigemptyset(&sigsegv_sa.sa_mask);
+    memset(&sigsegv_sa, 0, sizeof(sigsegv_sa));
+    sigsegv_sa.sa_handler = sigsegv_handler;
+    sigemptyset(&sigsegv_sa.sa_mask);
 
-	if (frontend->invoke_dbg_on_crash && !(RUNNING_ON_VALGRIND)) {
-		sigaction(SIGSEGV, &sigsegv_sa, NULL);
-	}
+    if (config->invoke_dbg_on_crash && !(RUNNING_ON_VALGRIND)) {
+        sigaction(SIGSEGV, &sigsegv_sa, NULL);
+    }
 #endif
 
-	/*
-	 * some plugins cannot see the chassis struct from the point
-	 * where they open files, hence we must make it available
-	 */
-	srv->base_dir = g_strdup(frontend->base_dir);
+    /*
+     * some plugins cannot see the chassis struct from the point
+     * where they open files, hence we must make it available
+     */
+    srv->base_dir = g_strdup(config->base_dir);
 
-	chassis_frontend_init_plugin_dir(&frontend->plugin_dir, srv->base_dir);
-	
-	/* 
-	 * these are used before we gathered all the options
-	 * from the plugins, thus we need to fix them up before
-	 * dealing with all the rest.
-	 */
-	if (chassis_frontend_init_logdir(frontend->log_path)) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-	chassis_resolve_path(srv->base_dir, &frontend->log_path);
-	chassis_resolve_path(srv->base_dir, &frontend->plugin_dir);
+    chassis_frontend_init_plugin_dir(&config->plugin_dir, srv->base_dir);
 
-	/*
-	 * start the logging and pid
-	 */
-	if (frontend->log_path) {
-		if (frontend->instance_name == NULL) {
-			gchar *default_file = frontend->default_file;
+    /* 
+     * these are used before we gathered all the options
+     * from the plugins, thus we need to fix them up before
+     * dealing with all the rest.
+     */
+    if (chassis_frontend_init_logdir(config->log_path)) {
+        GOTO_EXIT(EXIT_FAILURE);
+    }
+    chassis_resolve_path(srv->base_dir, &config->log_path);
+    chassis_resolve_path(srv->base_dir, &config->plugin_dir);
 
-			gchar *slash = strrchr(default_file, '/');
-			if (slash != NULL) ++slash;
-			else slash = default_file;
+    /*
+     * start the logging and pid
+     */
+    if (config->log_path) {
+        if (config->instance_name == NULL) {
+            gchar *default_file = config->default_file;
 
-			gchar *dot = strrchr(default_file, '.');
-			if (dot != NULL && dot >= slash) frontend->instance_name = g_strndup(slash, dot-slash);
-			else frontend->instance_name = g_strdup(slash);
-		}
-		log->log_filename = g_strdup_printf("%s/%s.log", frontend->log_path, frontend->instance_name);
-		frontend->pid_file = g_strdup_printf("%s/%s.pid", frontend->log_path, frontend->instance_name);
-		srv->log_path = g_strdup(frontend->log_path);
-	}
+            gchar *slash = strrchr(default_file, '/');
+            if (slash != NULL) ++slash;
+            else slash = default_file;
 
-	log->use_syslog = frontend->use_syslog;
+            gchar *dot = strrchr(default_file, '.');
+            if (dot != NULL && dot >= slash) config->instance_name = g_strndup(slash, dot-slash);
+            else config->instance_name = g_strdup(slash);
+        }
+        log->log_filename = g_strdup_printf("%s/%s.log", config->log_path, config->instance_name);
+        config->pid_file = g_strdup_printf("%s/%s.pid", config->log_path, config->instance_name);
+        srv->log_path = g_strdup(config->log_path);
+    }
 
-	if (log->log_filename && log->use_syslog) {
-		g_critical("%s: log-file and log-use-syslog were given, but only one is allowed", G_STRLOC);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    //log->use_syslog = frontend->use_syslog;
+    log->use_syslog = config->use_syslog;
 
-	if (log->log_filename && FALSE == chassis_log_open(log)) {
-		g_critical("can't open log-file '%s': %s", log->log_filename, g_strerror(errno));
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (log->log_filename && log->use_syslog) {
+        g_critical("%s: log-file and log-use-syslog were given, but only one is allowed", G_STRLOC);
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	/* handle log-level after the config-file is read, just in case it is specified in the file */
-	if (frontend->log_level) {
-		if (0 != chassis_log_set_level(log, frontend->log_level)) {
-			g_critical("--log-level=... failed, level '%s' is unknown ", frontend->log_level);
-			GOTO_EXIT(EXIT_FAILURE);
-		}
-	} else {
-		/* if it is not set, use "critical" as default */
-		log->min_lvl = G_LOG_LEVEL_CRITICAL;
-	}
+    if (log->log_filename && FALSE == chassis_log_open(log)) {
+        g_critical("can't open log-file '%s': %s", log->log_filename, g_strerror(errno));
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
-	/*
-	 * the MySQL Proxy should load 'admin' and 'proxy' plugins
-	 */
-	if (!frontend->plugin_names) {
-		frontend->plugin_names = g_new(char *, 3);
+    if (config->log_level) {
+        if (0 != chassis_log_set_level(log, config->log_level)) {
+            g_critical("--log-level=... failed, level '%s' is unknown ", config->log_level);
+            GOTO_EXIT(EXIT_FAILURE);
+        }
+    } else {
+        /* if it is not set, use "critical" as default */
+        log->min_lvl = G_LOG_LEVEL_CRITICAL;
+    }
 
-		frontend->plugin_names[0] = g_strdup("admin");
-		frontend->plugin_names[1] = g_strdup("proxy");
-		frontend->plugin_names[2] = NULL;
-	}
+    if (!config->plugin_names) {
+        config->plugin_names = g_new(char *, 3);
 
-	if (chassis_frontend_load_plugins(srv->modules, frontend->plugin_dir, frontend->plugin_names)) {
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-/*
-	if (chassis_frontend_init_plugins(srv->modules, option_ctx, &argc, &argv, frontend->keyfile, "mysql-proxy", srv->base_dir, &gerr)) {
-		g_critical("%s: %s", G_STRLOC, gerr->message);
-		g_clear_error(&gerr);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-*/
-	/* if we only print the version numbers, exit and don't do any more work */
-	if (frontend->print_version) {
-		chassis_frontend_print_lua_version();
-		chassis_frontend_print_plugin_versions(srv->modules);
-		GOTO_EXIT(EXIT_SUCCESS);
-	}
+        config->plugin_names[0] = g_strdup("admin");
+        config->plugin_names[1] = g_strdup("proxy");
+        config->plugin_names[2] = NULL;
+    }
 
-	/* we know about the options now, lets parse them */
-	g_option_context_set_help_enabled(option_ctx, TRUE);
-	g_option_context_set_ignore_unknown_options(option_ctx, FALSE);
+    if (chassis_frontend_load_plugins(srv->modules, config->plugin_dir, config->plugin_names)) {
+        GOTO_EXIT(EXIT_FAILURE);
+    }
+    /* if we only print the version numbers, exit and don't do any more work */
+    if (config->print_version) {
+        chassis_frontend_print_lua_version();
+        chassis_frontend_print_plugin_versions(srv->modules);
+        GOTO_EXIT(EXIT_SUCCESS);
+    }
 
-	/* handle unknown options */
-	if (FALSE == g_option_context_parse(option_ctx, &argc, &argv, &gerr)) {
-		if (gerr->domain == G_OPTION_ERROR && gerr->code == G_OPTION_ERROR_UNKNOWN_OPTION) {
-			g_critical("%s: %s (use --help to show all options)", G_STRLOC, gerr->message);
-		} else {
-			g_critical("%s: %s (code = %d, domain = %s)", G_STRLOC, gerr->message, gerr->code, g_quark_to_string(gerr->domain));
-		}
-		
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-/*
-	g_option_context_free(option_ctx);
-	option_ctx = NULL;
-*/
-	/* after parsing the options we should only have the program name left */
-	if (argc > 1) {
-		g_critical("unknown option: %s", argv[1]);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-	
+    /* we know about the options now, lets parse them */
+    g_option_context_set_help_enabled(option_ctx, TRUE);
+    g_option_context_set_ignore_unknown_options(option_ctx, FALSE);
+
+    /* handle unknown options */
+    if (FALSE == g_option_context_parse(option_ctx, &argc, &argv, &gerr)) {
+        if (gerr->domain == G_OPTION_ERROR && gerr->code == G_OPTION_ERROR_UNKNOWN_OPTION) {
+            g_critical("%s: %s (use --help to show all options)", G_STRLOC, gerr->message);
+        } else {
+            g_critical("%s: %s (code = %d, domain = %s)", G_STRLOC, gerr->message, gerr->code, g_quark_to_string(gerr->domain));
+        }
+
+        GOTO_EXIT(EXIT_FAILURE);
+    }
+    /* after parsing the options we should only have the program name left */
+    if (argc > 1) {
+        g_critical("unknown option: %s", argv[1]);
+        GOTO_EXIT(EXIT_FAILURE);
+    }
+
 #ifndef _WIN32	
-	signal(SIGPIPE, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
 
-	if (frontend->daemon_mode) {
-		chassis_unix_daemonize();
-	}
+    if (config->daemon_mode) {
+        chassis_unix_daemonize();
+    }
 
-	if (frontend->auto_restart) {
-		int child_exit_status = EXIT_SUCCESS; /* forward the exit-status of the child */
-		int ret = chassis_unix_proc_keepalive(&child_exit_status, frontend->pid_file);
+    if (config->auto_restart) {
+        int child_exit_status = EXIT_SUCCESS; /* forward the exit-status of the child */
+        int ret = chassis_unix_proc_keepalive(&child_exit_status, config->pid_file);
 
-		if (ret > 0) {
-			/* the agent stopped */
-
-			exit_code = child_exit_status;
-			goto exit_nicely;
-		} else if (ret < 0) {
-			GOTO_EXIT(EXIT_FAILURE);
-		} else {
-			/* we are the child, go on */
-		}
-	}
+        if (ret > 0) {
+            /* the agent stopped */
+            exit_code = child_exit_status;
+            goto exit_nicely;
+        } else if (ret < 0) {
+            GOTO_EXIT(EXIT_FAILURE);
+        } else {
+            /* we are the child, go on */
+        }
+    }
 #endif
-	if (frontend->keyfile) {
-		g_key_file_free(frontend->keyfile);
-		frontend->keyfile = NULL;
-	}
-	if (frontend->default_file) {
-		if (!(frontend->keyfile = chassis_frontend_open_config_file(frontend->default_file, &gerr))) {
-			g_critical("%s: loading config from '%s' failed: %s", G_STRLOC, frontend->default_file, gerr->message);
-			g_clear_error(&gerr);
-			GOTO_EXIT(EXIT_FAILURE);
-		}
-	}
-	if (chassis_frontend_init_plugins(srv->modules, option_ctx, &argc, &argv, frontend->keyfile, "mysql-proxy", srv->base_dir, &gerr)) {
-		g_critical("%s: %s", G_STRLOC, gerr->message);
-		g_clear_error(&gerr);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
-	g_option_context_free(option_ctx);
-	option_ctx = NULL;
 
-	if (frontend->pid_file && access(frontend->pid_file, F_OK)) {
-		if (0 != chassis_frontend_write_pidfile(frontend->pid_file, &gerr)) {
-			g_critical("%s", gerr->message);
-			g_clear_error(&gerr);
+    if (config->keyfile) {
+        g_key_file_free(config->keyfile);
+        config->keyfile = NULL;
+    }
+    srv->proxy_config = frontend;
+    srv->config = config;
+    srv->statistics = statistics;
 
-			GOTO_EXIT(EXIT_FAILURE);
-		}
-	}
+    g_option_context_free(option_ctx);
+    option_ctx = NULL;
 
-	// we need instance name that read by lua, may be use in lua log and ...
-	srv->instance_name = g_strdup(frontend->instance_name);
+    if (config->pid_file && access(config->pid_file, F_OK)) {
+        if (0 != chassis_frontend_write_pidfile(config->pid_file, &gerr)) {
+            g_critical("%s", gerr->message);
+            g_clear_error(&gerr);
 
-	/* the message has to be _after_ the g_option_content_parse() to 
-	 * hide from the output if the --help is asked for
-	 */
-	g_message("%s started - instance: %s", PACKAGE_STRING, srv->instance_name); /* add tag to the logfile (after we opened the logfile) */
+            GOTO_EXIT(EXIT_FAILURE);
+        }
+    }
+
+    // we need instance name that read by lua, may be use in lua log and ...
+    //srv->instance_name = g_strdup(frontend->instance_name);
+    srv->instance_name = g_strdup(config->instance_name);
+
+    /* the message has to be _after_ the g_option_content_parse() to 
+     * hide from the output if the --help is asked for
+     */
+    g_message("%s started - instance: %s", PACKAGE_STRING, srv->instance_name); /* add tag to the logfile (after we opened the logfile) */
 
 #ifdef _WIN32
-	if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_RUNNING, 0);
+    if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_RUNNING, 0);
 #endif
 
-	/*
-	 * we have to drop root privileges in chassis_mainloop() after
-	 * the plugins opened the ports, so we need the user there
-	 */
-	srv->user = g_strdup(frontend->user);
+    /*
+     * we have to drop root privileges in chassis_mainloop() after
+     * the plugins opened the ports, so we need the user there
+     */
+    srv->user = g_strdup(config->user);
 
-	if (frontend->max_files_number) {
-		if (0 != chassis_fdlimit_set(frontend->max_files_number)) {
-			g_critical("%s: setting fdlimit = %d failed: %s (%d)", G_STRLOC, frontend->max_files_number, g_strerror(errno), errno);
-			GOTO_EXIT(EXIT_FAILURE);
-		}
-	}
-	g_debug("max open file-descriptors = %"G_GINT64_FORMAT, chassis_fdlimit_get());
+    if (config->max_files_number) {
+        if (0 != chassis_fdlimit_set(config->max_files_number)) {
+            g_critical("%s: setting fdlimit = %d failed: %s (%d)", G_STRLOC, frontend->max_files_number, g_strerror(errno), errno);
+            GOTO_EXIT(EXIT_FAILURE);
+        }
+    }
+    g_debug("max open file-descriptors = %"G_GINT64_FORMAT, chassis_fdlimit_get());
 
-	if (chassis_mainloop(srv)) {
-		/* looks like we failed */
-		g_critical("%s: Failure from chassis_mainloop. Shutting down.", G_STRLOC);
-		GOTO_EXIT(EXIT_FAILURE);
-	}
+    if (chassis_mainloop(srv, config)) {
+        /* looks like we failed */
+        g_critical("%s: Failure from chassis_mainloop. Shutting down.", G_STRLOC);
+        GOTO_EXIT(EXIT_FAILURE);
+    }
 
 exit_nicely:
-	/* necessary to set the shutdown flag, because the monitor will continue
-	 * to schedule timers otherwise, causing an infinite loop in cleanup
-	 */
-	if (!exit_code) {
-		exit_location = G_STRLOC;
-	}
-	chassis_set_shutdown_location(exit_location);
+    /* necessary to set the shutdown flag, because the monitor will continue
+     * to schedule timers otherwise, causing an infinite loop in cleanup
+     */
+    if (!exit_code) {
+        exit_location = G_STRLOC;
+    }
+    chassis_set_shutdown_location(exit_location);
 
-	if (!frontend->print_version) {
-		g_log(G_LOG_DOMAIN, (frontend->verbose_shutdown ? G_LOG_LEVEL_CRITICAL : G_LOG_LEVEL_MESSAGE), "shutting down normally, exit code is: %d", exit_code); /* add a tag to the logfile */
-	}
+    if (!frontend->print_version) {
+        g_log(G_LOG_DOMAIN, (frontend->verbose_shutdown ? G_LOG_LEVEL_CRITICAL : G_LOG_LEVEL_MESSAGE), "shutting down normally, exit code is: %d", exit_code); /* add a tag to the logfile */
+    }
 
 #ifdef _WIN32
-	if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_STOP_PENDING, 0);
+    if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_STOP_PENDING, 0);
 #endif
 
-	if (gerr) g_error_free(gerr);
-	if (option_ctx) g_option_context_free(option_ctx);
-	if (srv) chassis_free(srv);
-	if (opts) chassis_options_free(opts);
-	if (main_entries) g_free(main_entries);
+    if (gerr) g_error_free(gerr);
+    if (option_ctx) g_option_context_free(option_ctx);
+    if (srv) chassis_free(srv);
+    if (opts) chassis_options_free(opts);
+    if (main_entries) g_free(main_entries);
 
-	chassis_log_free(log);
-	
+    chassis_log_free(log);
+
 #ifdef _WIN32
-	if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_STOPPED, 0);
+    if (chassis_win32_is_service()) chassis_win32_service_set_state(SERVICE_STOPPED, 0);
 #endif
 
 #ifdef HAVE_SIGACTION
-	/* reset the handler */
-	sigsegv_sa.sa_handler = SIG_DFL;
-	if (frontend->invoke_dbg_on_crash && !(RUNNING_ON_VALGRIND)) {
-		sigaction(SIGSEGV, &sigsegv_sa, NULL);
-	}
+    /* reset the handler */
+    sigsegv_sa.sa_handler = SIG_DFL;
+    if (frontend->invoke_dbg_on_crash && !(RUNNING_ON_VALGRIND)) {
+        sigaction(SIGSEGV, &sigsegv_sa, NULL);
+    }
 #endif
-	chassis_frontend_free(frontend);	
+    chassis_frontend_free(frontend);	
+    chassis_config_free(config);
+    chassis_query_statistics_free(statistics);
 
-	return exit_code;
+    return exit_code;
 }
 
 /**
@@ -609,9 +580,9 @@ exit_nicely:
  */
 int main(int argc, char **argv) {
 #ifdef WIN32_AS_SERVICE
-	return main_win32(argc, argv, main_cmdline);
+    return main_win32(argc, argv, main_cmdline);
 #else
-	return main_cmdline(argc, argv);
+    return main_cmdline(argc, argv);
 #endif
 }
 

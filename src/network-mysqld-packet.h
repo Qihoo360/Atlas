@@ -26,6 +26,7 @@
 
 #include "network-mysqld-proto.h"
 #include "network-mysqld.h"
+//#include "lib/sql-tokenizer.h"
 
 /**
  * mid-level protocol 
@@ -209,6 +210,7 @@ NETWORK_API int network_mysqld_proto_get_stmt_prepare_ok_packet(network_packet *
 NETWORK_API int network_mysqld_proto_append_stmt_prepare_ok_packet(GString *packet, network_mysqld_stmt_prepare_ok_packet_t *stmt_prepare_ok_packet);
 
 typedef struct {
+    guint8 response_cnt;
 	guint32 stmt_id;
 	guint8  flags;
 	guint32 iteration_count;
@@ -239,4 +241,13 @@ NETWORK_API void network_mysqld_stmt_close_packet_free(network_mysqld_stmt_close
 NETWORK_API int network_mysqld_proto_get_stmt_close_packet(network_packet *packet, network_mysqld_stmt_close_packet_t *stmt_close_packet);
 NETWORK_API int network_mysqld_proto_append_stmt_close_packet(GString *packet, network_mysqld_stmt_close_packet_t *stmt_close_packet);
 
+
+typedef struct{
+    char state; 
+    GString *prepare_Query;
+    gboolean first_packet_from_preprare_response;
+    network_mysqld_stmt_prepare_ok_packet_t *stmt_prepare_ok_packet;
+    network_mysqld_stmt_execute_packet_t *stmt_execute_packet; 
+    gint token_id;
+} stmt_paras_t;
 #endif

@@ -49,12 +49,13 @@ IF(FLEX_EXECUTABLE)
 	)
 ENDIF(FLEX_EXECUTABLE)
 
-ADD_EXECUTABLE(sql-tokenizer-gen
-	sql-tokenizer-tokens.c
-	sql-tokenizer-gen.c)
-TARGET_LINK_LIBRARIES(sql-tokenizer-gen
-	${GLIB_LIBRARIES}
-)
+#ADD_EXECUTABLE(sql-tokenizer-gen
+#    #sql-tokenizer-tokens.c
+#    #sql-tokenizer-gen.c
+#    )
+#TARGET_LINK_LIBRARIES(sql-tokenizer-gen
+#	${GLIB_LIBRARIES}
+#)
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT  "${CMAKE_CURRENT_BINARY_DIR}/sql-tokenizer-keywords.c"
@@ -71,10 +72,10 @@ SET(LUA_LFS_SOURCES
 )
 SET(LUA_MYSQL_SOURCES
 	mysql-proto.c
-	sql-tokenizer.c 
-	sql-tokenizer-keywords.c 
-	sql-tokenizer-tokens.c 
-	sql-tokenizer-lua.c 
+    #sql-tokenizer.c 
+    #sql-tokenizer-keywords.c 
+    #sql-tokenizer-tokens.c 
+    #sql-tokenizer-lua.c 
 )
 
 SET(LUA_CHASSIS_SOURCES

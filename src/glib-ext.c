@@ -241,4 +241,45 @@ gboolean g_memeq(const char *a, gsize a_len, const char *b, gsize b_len) {
 	return (0 == memcmp(a, b, b_len));
 }
 
+GArray* g_array_unique_append_val(GArray *array, gconstpointer value, GCompareFunc compare_func) {
+    guint elem_size = g_array_get_element_size(array);
+
+    if (array->len == 0) {
+        g_array_insert_vals(array, 0, value, 1);
+        return array;
+
+    }
+    /* binary search*/
+    gint low_index = 0, high_index = array->len-1, mid = (high_index + low_index) / 2;
+    gint cmp_ret = 0;
+    while (low_index <= high_index) {
+        gconstpointer elem = (array->data + elem_size * mid);
+        cmp_ret = compare_func(value, elem);
+        if (cmp_ret < 0) {
+            high_index = mid - 1;
+
+        } else if (cmp_ret == 0) { // duplicate
+            return array;
+        } else {
+            low_index = mid + 1;
+
+        }
+
+        mid = (low_index + high_index) / 2;
+
+    }
+
+    gint insert_index = 0;
+    if (cmp_ret < 0) {
+        insert_index = low_index;
+
+    } else {
+        insert_index = high_index + 1; // insert after high_index because value > array[high_index]
+
+    }
+
+    return g_array_insert_vals(array, insert_index, value, 1);
+
+}
+
 

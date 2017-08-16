@@ -20,6 +20,7 @@
  
 
 #include <sys/types.h>
+#include <pwd.h> 
 #include <signal.h>
 #include <string.h>
 #include <errno.h>
@@ -41,14 +42,16 @@
 #include <pwd.h>	 /* getpwnam() */
 #endif
 
+#include <sqliteInt.h> 
 #include <glib.h>
+#include "network-backend.h" 
 #include "chassis-plugin.h"
 #include "chassis-mainloop.h"
 #include "chassis-event-thread.h"
 #include "chassis-log.h"
 #include "chassis-stats.h"
 #include "chassis-timings.h"
-
+#include "../util/id_generator_local.h"
 #ifdef _WIN32
 static volatile int signal_shutdown;
 #else
@@ -111,7 +114,11 @@ chassis *chassis_new() {
 	chas->event_hdr_version = g_strdup(_EVENT_VERSION);
 
 	chas->shutdown_hooks = chassis_shutdown_hooks_new();
+    
+    chas->parse_objs = g_ptr_array_new();
 
+    id_generators_init(&chas->id_generators);
+    //chas->id_generators = g_ptr_array_new();
 	return chas;
 }
 
@@ -166,6 +173,7 @@ void chassis_free(chassis *chas) {
 		g_ptr_array_free(threads, TRUE);
 	}
 
+    id_generators_free(&chas->id_generators);
 	if (chas->instance_name) g_free(chas->instance_name);
 
 #ifdef HAVE_EVENT_BASE_FREE
@@ -180,38 +188,55 @@ void chassis_free(chassis *chas) {
 		if (chas->event_base) event_base_free(chas->event_base);
 	}
 #endif
-	g_free(chas->event_hdr_version);
+    // parse_objs
+    for (i = 0; i < chas->parse_objs->len; i++) {
+        Parse *parse_obj = (Parse*)g_ptr_array_index(chas->parse_objs, i);
+        sqlite3ParseDelete(parse_obj);
 
-	chassis_shutdown_hooks_free(chas->shutdown_hooks);
+    }
+    g_ptr_array_free(chas->parse_objs, TRUE);
 
-	lua_scope_free(chas->sc);
+    // id_generators 
+    //for (i = 0; i < chas->id_generators->len; i++) {
+    //    id_generate_t *t = g_ptr_array_index(chas->id_generators, i); 
+    //    id_generate_free(t);
+    //}
+    //g_ptr_array_free(chas->id_generators, TRUE);
 
-	network_backends_free(chas->backends);
+    g_free(chas->event_hdr_version);
 
-	g_free(chas);
+    chassis_shutdown_hooks_free(chas->shutdown_hooks);
+
+    lua_scope_free(chas->sc);
+
+    //network_backends_free(chas->backends);
+    network_nodes_free(chas->nodes);
+    g_free(chas->router_para); 
+    //swap_buffer_free(chas->forbidden_sql);
+    g_free(chas);
 }
 
 void chassis_set_shutdown_location(const gchar* location) {
-	if (signal_shutdown == 0) g_message("Initiating shutdown, requested from %s", (location != NULL ? location : "signal handler"));
-	signal_shutdown = 1;
+    if (signal_shutdown == 0) g_message("Initiating shutdown, requested from %s", (location != NULL ? location : "signal handler"));
+    signal_shutdown = 1;
 }
 
 gboolean chassis_is_shutdown() {
-	return signal_shutdown == 1;
+    return signal_shutdown == 1;
 }
 
 static void sigterm_handler(int G_GNUC_UNUSED fd, short G_GNUC_UNUSED event_type, void G_GNUC_UNUSED *_data) {
-	chassis_set_shutdown_location(NULL);
+    chassis_set_shutdown_location(NULL);
 }
 
 static void sighup_handler(int G_GNUC_UNUSED fd, short G_GNUC_UNUSED event_type, void *_data) {
-	chassis *chas = _data;
+    chassis *chas = _data;
 
-	g_message("received a SIGHUP, closing log file"); /* this should go into the old logfile */
+    g_message("received a SIGHUP, closing log file"); /* this should go into the old logfile */
 
-	chassis_log_set_logrotate(chas->log);
-	
-	g_message("re-opened log file after SIGHUP"); /* ... and this into the new one */
+    chassis_log_set_logrotate(chas->log);
+
+    g_message("re-opened log file after SIGHUP"); /* ... and this into the new one */
 }
 
 
@@ -219,15 +244,15 @@ static void sighup_handler(int G_GNUC_UNUSED fd, short G_GNUC_UNUSED event_type,
  * forward libevent messages to the glib error log 
  */
 static void event_log_use_glib(int libevent_log_level, const char *msg) {
-	/* map libevent to glib log-levels */
+    /* map libevent to glib log-levels */
 
-	GLogLevelFlags glib_log_level = G_LOG_LEVEL_DEBUG;
+    GLogLevelFlags glib_log_level = G_LOG_LEVEL_DEBUG;
 
-	if (libevent_log_level == _EVENT_LOG_DEBUG) glib_log_level = G_LOG_LEVEL_DEBUG;
-	else if (libevent_log_level == _EVENT_LOG_MSG) glib_log_level = G_LOG_LEVEL_MESSAGE;
-	else if (libevent_log_level == _EVENT_LOG_WARN) glib_log_level = G_LOG_LEVEL_WARNING;
-	else if (libevent_log_level == _EVENT_LOG_ERR) glib_log_level = G_LOG_LEVEL_CRITICAL;
-    
+    if (libevent_log_level == _EVENT_LOG_DEBUG) glib_log_level = G_LOG_LEVEL_DEBUG;
+    else if (libevent_log_level == _EVENT_LOG_MSG) glib_log_level = G_LOG_LEVEL_MESSAGE;
+    else if (libevent_log_level == _EVENT_LOG_WARN) glib_log_level = G_LOG_LEVEL_WARNING;
+    else if (libevent_log_level == _EVENT_LOG_ERR) glib_log_level = G_LOG_LEVEL_CRITICAL;
+
     /*only error to be logged*/
     if (libevent_log_level == _EVENT_LOG_ERR) {
         g_log(G_LOG_DOMAIN, glib_log_level, "(libevent) %s", msg);
@@ -235,124 +260,139 @@ static void event_log_use_glib(int libevent_log_level, const char *msg) {
 }
 
 
-int chassis_mainloop(void *_chas) {
-	chassis *chas = _chas;
-	guint i;
-	struct event ev_sigterm, ev_sigint;
+int chassis_mainloop(void *_chas, chassis_config_t *config) {
+    chassis *chas = _chas;
+    guint i;
+    struct event ev_sigterm, ev_sigint;
 #ifdef SIGHUP
-	struct event ev_sighup;
+    struct event ev_sighup;
 #endif
-	chassis_event_thread_t *mainloop_thread;
+    chassis_event_thread_t *mainloop_thread;
 
-	/* redirect logging from libevent to glib */
-	event_set_log_callback(event_log_use_glib);
-
-
-	/* add a event-handler for the "main" events */
-	mainloop_thread = chassis_event_thread_new(0);
-	chassis_event_threads_init_thread(mainloop_thread, chas);
-	g_ptr_array_add(chas->threads, mainloop_thread);
-
-	chas->event_base = mainloop_thread->event_base; /* all global events go to the 1st thread */
-
-	g_assert(chas->event_base);
+    /* redirect logging from libevent to glib */
+    event_set_log_callback(event_log_use_glib);
 
 
-	/* setup all plugins all plugins */
-	for (i = 0; i < chas->modules->len; i++) {
-		chassis_plugin *p = chas->modules->pdata[i];
+    /* add a event-handler for the "main" events */
+    mainloop_thread = chassis_event_thread_new(0);
+    chassis_event_threads_init_thread(mainloop_thread, chas);
+    g_ptr_array_add(chas->threads, mainloop_thread);
 
-		g_assert(p->apply_config);
-		if (0 != p->apply_config(chas, p->config)) {
-			g_critical("%s: applying config of plugin %s failed",
-					G_STRLOC, p->name);
-			return -1;
-		}
-	}
+    chas->event_base = mainloop_thread->event_base; /* all global events go to the 1st thread */
 
-	/*
-	 * drop root privileges if requested
-	 */
+    g_assert(chas->event_base);
+
+
+    /* setup all plugins all plugins */
+    for (i = 0; i < chas->modules->len; i++) {
+        chassis_plugin *p = chas->modules->pdata[i];
+
+        g_assert(p->apply_config);
+        if (0 != p->apply_config(chas, config, p->config)) {
+            g_critical("%s: applying config of plugin %s failed",
+                    G_STRLOC, p->name);
+            return -1;
+        }
+    }
+
+    /*
+     * drop root privileges if requested
+     */
 #ifndef _WIN32
-	if (chas->user) {
-		struct passwd *user_info;
-		uid_t user_id= geteuid();
+    if (chas->user) {
+        struct passwd *user_info;
+        uid_t user_id= geteuid();
 
-		/* Don't bother if we aren't superuser */
-		if (user_id) {
-			g_critical("can only use the --user switch if running as root");
-			return -1;
-		}
+        /* Don't bother if we aren't superuser */
+        if (user_id) {
+            g_critical("can only use the --user switch if running as root");
+            return -1;
+        }
 
-		if (NULL == (user_info = getpwnam(chas->user))) {
-			g_critical("unknown user: %s", chas->user);
-			return -1;
-		}
+        if (NULL == (user_info = getpwnam(chas->user))) {
+            g_critical("unknown user: %s", chas->user);
+            return -1;
+        }
 
-		if (chas->log->log_filename) {
-			/* chown logfile */
-			if (-1 == chown(chas->log->log_filename, user_info->pw_uid, user_info->pw_gid)) {
-				g_critical("%s.%d: chown(%s) failed: %s",
-							__FILE__, __LINE__,
-							chas->log->log_filename,
-							g_strerror(errno) );
+        if (chas->log->log_filename) {
+            /* chown logfile */
+            if (-1 == chown(chas->log->log_filename, user_info->pw_uid, user_info->pw_gid)) {
+                g_critical("%s.%d: chown(%s) failed: %s",
+                        __FILE__, __LINE__,
+                        chas->log->log_filename,
+                        g_strerror(errno) );
 
-				return -1;
-			}
-		}
+                return -1;
+            }
+        }
 
-		setgid(user_info->pw_gid);
-		setuid(user_info->pw_uid);
-		g_debug("now running as user: %s (%d/%d)",
-				chas->user,
-				user_info->pw_uid,
-				user_info->pw_gid );
-	}
+        setgid(user_info->pw_gid);
+        setuid(user_info->pw_uid);
+        g_debug("now running as user: %s (%d/%d)",
+                chas->user,
+                user_info->pw_uid,
+                user_info->pw_gid );
+    }
 #endif
 
-	signal_set(&ev_sigterm, SIGTERM, sigterm_handler, NULL);
-	event_base_set(chas->event_base, &ev_sigterm);
-	signal_add(&ev_sigterm, NULL);
+    signal_set(&ev_sigterm, SIGTERM, sigterm_handler, NULL);
+    event_base_set(chas->event_base, &ev_sigterm);
+    signal_add(&ev_sigterm, NULL);
 
-	/* signal_set(&ev_sigint, SIGINT, sigterm_handler, NULL); */
-	/* event_base_set(chas->event_base, &ev_sigint); */
-	/* signal_add(&ev_sigint, NULL); */
+    /* signal_set(&ev_sigint, SIGINT, sigterm_handler, NULL); */
+    /* event_base_set(chas->event_base, &ev_sigint); */
+    /* signal_add(&ev_sigint, NULL); */
 
 #ifdef SIGHUP
-	signal_set(&ev_sighup, SIGHUP, sighup_handler, chas);
-	event_base_set(chas->event_base, &ev_sighup);
-	if (signal_add(&ev_sighup, NULL)) {
-		g_critical("%s: signal_add(SIGHUP) failed", G_STRLOC);
-	}
+    signal_set(&ev_sighup, SIGHUP, sighup_handler, chas);
+    event_base_set(chas->event_base, &ev_sighup);
+    if (signal_add(&ev_sighup, NULL)) {
+        g_critical("%s: signal_add(SIGHUP) failed", G_STRLOC);
+    }
 #endif
 
-	if (chas->event_thread_count < 1) chas->event_thread_count = 1;
+    if (chas->event_thread_count < 1) chas->event_thread_count = 1;
 
-	/* create the event-threads
-	 *
-	 * - dup the async-queue-ping-fds
-	 * - setup the events notification
-	 * */
-	for (i = 1; i <= (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
-		chassis_event_thread_t *thread = chassis_event_thread_new(i);
-		chassis_event_threads_init_thread(thread, chas);
-		g_ptr_array_add(chas->threads, thread);
-	}
+    /* create the event-threads
+     *
+     * - dup the async-queue-ping-fds
+     * - setup the events notification
+     * */
+    for (i = 1; i <= (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
+        chassis_event_thread_t *thread = chassis_event_thread_new(i);
+        chassis_event_threads_init_thread(thread, chas);
+        g_ptr_array_add(chas->threads, thread);
+    }
 
-	/* start the event threads */
-	chassis_event_threads_start(chas->threads);
+    /** 
+     * create the lemon parse objs
+     **/
+    for (i = 0; i <= (guint)chas->event_thread_count; i++) { /* we already have 1 event-thread running, the main-thread */
+        Parse *obj = sqlite3ParseNew();
+        g_ptr_array_add(chas->parse_objs, obj);
+    }
+    
+    /**
+     * create id_generators //TODO(dengyihao): to make it configure 
+     */
+    //for (i = 0; i <= (guint)chas->event_thread_count; i++) {
+    //    id_generate_t *generator = id_generate_init("127.0.0.1", 6389);
+    //    g_ptr_array_add(chas->id_generators, generator);
+    //}
+    /* start the event threads */
+    chassis_event_threads_start(chas->threads);
 
-	/**
-	 * handle signals and all basic events into the main-thread
-	 *
-	 * block until we are asked to shutdown
-	 */
-	chassis_event_thread_loop(mainloop_thread);
+    /**
+     * handle signals and all basic events into the main-thread
+     *
+     * block until we are asked to shutdown
+     */
+    chassis_event_thread_loop(mainloop_thread);
 
-	signal_del(&ev_sigterm);
-	signal_del(&ev_sigint);
+    signal_del(&ev_sigterm);
+    signal_del(&ev_sigint);
 #ifdef SIGHUP
-	signal_del(&ev_sighup);
+    signal_del(&ev_sighup);
 #endif
-	return 0;
+    return 0;
 }

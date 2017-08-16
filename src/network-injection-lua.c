@@ -131,7 +131,7 @@ static int proxy_queue_reset(lua_State *L) {
 	/* we expect 2 parameters */
 	GQueue *q = *(GQueue **)luaL_checkself(L);
 
-	network_injection_queue_reset(q);
+	network_injection_queue_clear(q);
     
 	return 0;
 }

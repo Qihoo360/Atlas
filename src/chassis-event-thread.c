@@ -208,7 +208,7 @@ void *chassis_event_thread_loop(chassis_event_thread_t *thread) {
 		g_assert(event_base_loopexit(thread->event_base, &timeout) == 0);
 
 		r = event_base_dispatch(thread->event_base);
-
+        g_message("%s:%d, dispatch ret(%d)", __FILE__, __LINE__, r);
 		if (r == -1) {
 #ifdef WIN32
 			errno = WSAGetLastError();
@@ -238,7 +238,8 @@ void chassis_event_threads_start(GPtrArray *threads) {
 		chassis_event_thread_t *thread = threads->pdata[i];
 		GError *gerr = NULL;
 
-		thread->thr = g_thread_create((GThreadFunc)chassis_event_thread_loop, thread, TRUE, &gerr);
+		//thread->thr = g_thread_create((GThreadFunc)chassis_event_thread_loop, thread, TRUE, &gerr);
+        thread->thr = g_thread_new("thread-event-loop", (GThreadFunc)chassis_event_thread_loop, thread);
 
 		if (gerr) {
 			g_critical("%s: %s", G_STRLOC, gerr->message);
@@ -250,5 +251,19 @@ void chassis_event_threads_start(GPtrArray *threads) {
 
 network_connection_pool* chassis_event_thread_pool(network_backend_t* backend) {
 	guint index = GPOINTER_TO_UINT(g_private_get(&tls_index));
-	return g_ptr_array_index(backend->pools, index);
+    g_mutex_lock(&backend->mutex);
+    if (NULL == backend->pools) {
+        g_mutex_unlock(&backend->mutex);
+        return NULL;
+    }
+	network_connection_pool *ret = g_ptr_array_index(backend->pools, index);
+    g_mutex_unlock(&backend->mutex); 
+    return ret;
 }
+
+
+void* chassis_thread_lemon_parse_obj(chassis* chas) {
+    guint index = GPOINTER_TO_UINT(g_private_get(&tls_index));
+    return g_ptr_array_index(chas->parse_objs, index);
+}
+

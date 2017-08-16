@@ -40,7 +40,7 @@ CHASSIS_API chassis_shutdown_hook_t *chassis_shutdown_hook_new(void);
 CHASSIS_API void chassis_shutdown_hook_free(chassis_shutdown_hook_t *);
 
 typedef struct {
-	GMutex *mutex;
+	GMutex mutex;
 	GHashTable *hooks;
 } chassis_shutdown_hooks_t;
 

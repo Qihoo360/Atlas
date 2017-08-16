@@ -64,7 +64,7 @@ lua_scope *lua_scope_new(void) {
 	lua_atpanic(sc->L, proxy_lua_panic);
 #endif
 
-	sc->mutex = g_mutex_new();	/*remove lock*/
+	 g_mutex_init(&sc->mutex);	/*remove lock*/
 
 	return sc;
 }
@@ -88,14 +88,14 @@ void lua_scope_free(lua_scope *sc) {
 
 	lua_close(sc->L);
 #endif
-	g_mutex_free(sc->mutex);	/*remove lock*/
+	g_mutex_clear(&sc->mutex);	/*remove lock*/
 
 	g_free(sc);
 }
 
 void lua_scope_get(lua_scope *sc, const char G_GNUC_UNUSED* pos) {
 /*	g_warning("%s: === waiting for lua-scope", pos); */
-	g_mutex_lock(sc->mutex);
+	g_mutex_lock(&sc->mutex);
 /*	g_warning("%s: +++ got lua-scope", pos); */
 #ifdef HAVE_LUA_H
 	sc->L_top = lua_gettop(sc->L);
@@ -111,7 +111,7 @@ void lua_scope_release(lua_scope *sc, const char* pos) {
 	}
 #endif
 
-	g_mutex_unlock(sc->mutex);
+	g_mutex_unlock(&sc->mutex);
 /*	g_warning("%s: --- released lua scope", pos); */
 
 	return;

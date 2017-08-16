@@ -26,6 +26,7 @@
 
 #include "chassis-exports.h"
 #include "chassis-mainloop.h"
+//#include "network-backend-new.h"
 #include "network-backend.h"
 #include "network-mysqld.h"
 
@@ -65,4 +66,7 @@ CHASSIS_API void chassis_event_threads_start(GPtrArray *threads);
 
 CHASSIS_API network_connection_pool* chassis_event_thread_pool(network_backend_t* backend);
 
+CHASSIS_API void* chassis_thread_lemon_parse_obj(chassis *chas);
+
+CHASSIS_API void *chasis_thread_generator(chassis *chas);
 #endif

@@ -22,11 +22,13 @@
 
 #include <lua.h>
 
+//#include "network-backend-new.h" /* query-status */
 #include "network-backend.h" /* query-status */
 #include "network-injection.h" /* query-status */
 
 #include "network-exports.h"
 
+//typedef struct chassis chassis;
 typedef enum {
 	PROXY_NO_DECISION,
 	PROXY_SEND_QUERY,
@@ -64,7 +66,8 @@ typedef struct {
 	lua_State *L;                  /**< The Lua interpreter state of the current connection. */
 	int L_ref;                     /**< The reference into the lua_scope's registry (a global structure in the Lua interpreter) */
 
-	network_backend_t *backend;
+	//network_backend_t *backend;
+    network_group_backend_t *backend; 
 	int backend_ndx;               /**< [lua] index into the backend-array */
 
 	gboolean connection_close;     /**< [lua] set by the lua code to close a connection */

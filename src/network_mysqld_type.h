@@ -74,7 +74,8 @@ struct _network_mysqld_type_t {
 	 * @param s_len length of the const char *
 	 * @return 0 on success, -1 on error
 	 */
-	int (*get_string_const)(network_mysqld_type_t *type, const char **s, gsize *s_len);
+	//int (*get_string_const)(network_mysqld_type_t *type, GString *dst);
+	int (*get_string_const)(network_mysqld_type_t *type, char **dst, guint *dst_len);
 	/**
 	 * get a copy of ->data as char *
 	 *

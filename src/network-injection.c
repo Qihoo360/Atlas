@@ -44,7 +44,7 @@ injection *injection_new(int id, GString *query) {
     
 	i = g_new0(injection, 1);
 	i->id = id;
-	i->query = query;
+	i->query = g_string_new_len(query->str, query->len); 
 	i->resultset_is_needed = FALSE; /* don't buffer the resultset */
     
 	/**
@@ -63,8 +63,10 @@ injection *injection_new(int id, GString *query) {
 void injection_free(injection *i) {
 	if (!i) return;
     
-	if (i->query) g_string_free(i->query, TRUE);
-    
+    if (i->query) {
+        g_string_free(i->query, TRUE);
+        i->query = NULL;
+    }    
 	g_free(i);
 }
 
@@ -75,12 +77,12 @@ network_injection_queue *network_injection_queue_new() {
 void network_injection_queue_free(network_injection_queue *q) {
 	if (!q) return;
 
-	network_injection_queue_reset(q);
+	network_injection_queue_clear(q);
 
 	g_queue_free(q);
 }
 
-void network_injection_queue_reset(network_injection_queue *q) {
+void network_injection_queue_clear(network_injection_queue *q) {
 	injection *inj;
 	if (!q) return;
 	

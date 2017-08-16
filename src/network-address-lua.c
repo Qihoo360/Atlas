@@ -108,6 +108,17 @@ int network_address_lua_getmetatable(lua_State *L) {
 	return proxy_getmetatable(L, methods);
 }
 
+//void get_backend_info(gchar *in, network_backend_t *b){
+//        gchar *t = NULL; 
+//        t = g_stpcpy(in, b->group_name); 
+//        if (t) {
+//            t = g_stpcpy(t, "::");
+//        } 
+//        if (t) {
+//            t = g_stpcpy(t, b->slave_with_tag);
+//        }
+//        
+//} 
 int network_address_lua_push(lua_State *L, network_address *addr) {
 	network_address **address_p;
 

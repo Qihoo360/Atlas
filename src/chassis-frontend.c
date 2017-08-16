@@ -47,7 +47,7 @@
 
 #include "chassis-frontend.h"
 #include "chassis-path.h"
-#include "chassis-plugin.h"
+#include "chassis-mainloop.h"
 #include "chassis-keyfile.h"
 #include "chassis-filemode.h"
 #include "chassis-options.h"
@@ -86,7 +86,7 @@ int chassis_frontend_init_glib() {
 		return -1;
 	}
 
-	g_thread_init(NULL);
+	//g_thread_init(NULL);
 
 	return 0;
 }

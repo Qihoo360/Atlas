@@ -31,7 +31,7 @@
 #include <signal.h>
 #endif
 
-#include "chassis-plugin.h"
+#include "chassis-mainloop.h"
 
 /**
  * @deprecated will be removed in 1.0

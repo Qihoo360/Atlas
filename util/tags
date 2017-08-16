@@ -1,0 +1,103 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+_ID_GENERATE_H_	id_generator.h	2;"	d
+_PARSE_CONFIG_FILE_H_	parse_config_file.h	3;"	d
+__SAVA_CONFIG_FILE_H__	save_config_file.h	2;"	d
+admin_address	parse_config_file.h	/^    gchar *admin_address;$/;"	m	struct:chassis_config_t
+admin_lua_script	parse_config_file.h	/^    gchar *admin_lua_script;$/;"	m	struct:chassis_config_t
+admin_passwd	parse_config_file.h	/^    gchar *admin_passwd;$/;"	m	struct:chassis_config_t
+admin_username	parse_config_file.h	/^    gchar *admin_username;$/;"	m	struct:chassis_config_t
+auto_base_dir	parse_config_file.h	/^    gint auto_base_dir;$/;"	m	struct:chassis_config_t
+auto_restart	parse_config_file.h	/^    guint auto_restart;$/;"	m	struct:chassis_config_t
+auto_sql_filter	parse_config_file.h	/^    gboolean auto_sql_filter;$/;"	m	struct:chassis_config_t
+base_dir	parse_config_file.h	/^    gchar *base_dir;$/;"	m	struct:chassis_config_t
+charset	parse_config_file.h	/^    gchar *charset;$/;"	m	struct:chassis_config_t
+chassis_config_free	parse_config_file.c	/^void chassis_config_free(chassis_config_t* config){$/;"	f
+chassis_config_new	parse_config_file.c	/^chassis_config_t* chassis_config_new(){$/;"	f
+chassis_config_t	parse_config_file.h	/^typedef struct chassis_config_t{$/;"	s
+chassis_config_t	parse_config_file.h	/^} chassis_config_t;$/;"	t	typeref:struct:chassis_config_t
+client_ips	parse_config_file.h	/^    GPtrArray *client_ips;$/;"	m	struct:chassis_config_t
+close	id_generator.c	/^void close(redisContext *conn) {$/;"	f
+config_entries	parse_config_file.h	/^    GOptionEntry *config_entries;$/;"	m	struct:chassis_config_t
+daemon_mode	parse_config_file.h	/^    gint daemon_mode;$/;"	m	struct:chassis_config_t
+db_name	parse_config_file.h	/^    gchar *db_name;$/;"	m	struct:sharding_rule_t
+default_file	parse_config_file.h	/^    gchar *default_file;$/;"	m	struct:chassis_config_t
+default_node	parse_config_file.h	/^    gchar *default_node;$/;"	m	struct:schema_info_t
+event_thread_count	parse_config_file.h	/^    gint event_thread_count;$/;"	m	struct:chassis_config_t
+forbiddenSQL	parse_config_file.h	/^    GPtrArray *forbiddenSQL;$/;"	m	struct:chassis_config_t
+get	id_generator.c	/^gboolean get(redisContext *conn, gchar *k, glong *v) {$/;"	f
+get_json_object_bool	parse_config_file.c	/^gboolean get_json_object_bool(json_object *json, const gchar *key){$/;"	f
+get_json_object_int	parse_config_file.c	/^gint get_json_object_int(json_object *json, const gchar *key){$/;"	f
+get_json_object_string	parse_config_file.c	/^gchar *get_json_object_string(json_object *json, const gchar *key){$/;"	f
+get_json_object_string_array	parse_config_file.c	/^GPtrArray *get_json_object_string_array(json_object *json, const gchar *key) {$/;"	f
+instance_name	parse_config_file.h	/^    gchar *instance_name;$/;"	m	struct:chassis_config_t
+invoke_dbg_on_crash	parse_config_file.h	/^    guint invoke_dbg_on_crash;$/;"	m	struct:chassis_config_t
+ips	parse_config_file.h	/^    GPtrArray *ips; $/;"	m	struct:slaves_info_t
+keyfile	parse_config_file.h	/^    GKeyFile *keyfile;$/;"	m	struct:chassis_config_t
+log_level	parse_config_file.h	/^    gchar *log_level;$/;"	m	struct:chassis_config_t
+log_path	parse_config_file.h	/^    gchar *log_path;$/;"	m	struct:chassis_config_t
+lua_cpath	parse_config_file.h	/^    char *lua_cpath;$/;"	m	struct:chassis_config_t
+lua_path	parse_config_file.h	/^    char *lua_path;$/;"	m	struct:chassis_config_t
+lua_subdirs	parse_config_file.h	/^    char **lua_subdirs;$/;"	m	struct:chassis_config_t
+lvs_ips	parse_config_file.h	/^    GPtrArray *lvs_ips; $/;"	m	struct:chassis_config_t
+master	parse_config_file.h	/^    gchar *master;  $/;"	m	struct:node_info_t
+max_conn_in_pool	parse_config_file.h	/^    gint max_conn_in_pool;$/;"	m	struct:chassis_config_t
+max_files_number	parse_config_file.h	/^    gint max_files_number;$/;"	m	struct:chassis_config_t
+node_info_free	parse_config_file.c	/^static node_info_free(gpointer data, gpointer user_data) {$/;"	f	file:
+node_info_new	parse_config_file.c	/^node_info_t* node_info_new() {$/;"	f
+node_info_t	parse_config_file.h	/^typedef struct node_info_t{$/;"	s
+node_info_t	parse_config_file.h	/^} node_info_t;$/;"	t	typeref:struct:node_info_t
+node_name	parse_config_file.h	/^    gchar *node_name;$/;"	m	struct:node_info_t
+nodes	parse_config_file.h	/^    GPtrArray *nodes;    $/;"	m	struct:chassis_config_t
+nodes	parse_config_file.h	/^    GPtrArray *nodes; $/;"	m	struct:schema_info_t
+nodes	parse_config_file.h	/^    GPtrArray *nodes;$/;"	m	struct:sharding_rule_t
+nodes_info_free	parse_config_file.c	/^void nodes_info_free(GPtrArray *nodes){$/;"	f
+offline_timeout	parse_config_file.h	/^    gint offline_timeout;$/;"	m	struct:chassis_config_t
+open	id_generator.c	/^redisContext *open(gchar *addr, gint port) {$/;"	f
+open_file	save_config_file.c	/^json_object *open_file(gchar *file) {$/;"	f
+parse_comm_para	parse_config_file.c	/^gboolean  parse_comm_para(chassis_config_t *config, json_object *jso){$/;"	f
+parse_config_file	parse_config_file.c	/^gboolean parse_config_file(chassis_config_t *config){$/;"	f
+parse_nodes_para	parse_config_file.c	/^gboolean  parse_nodes_para(chassis_config_t *config, json_object *jso, const gchar *key) {$/;"	f
+parse_schema_para	parse_config_file.c	/^gboolean parse_schema_para(chassis_config_t *config, json_object *jso, const gchar *key) {$/;"	f
+pid_file	parse_config_file.h	/^    gchar *pid_file;$/;"	m	struct:chassis_config_t
+plugin_dir	parse_config_file.h	/^    gchar *plugin_dir;$/;"	m	struct:chassis_config_t
+plugin_names	parse_config_file.h	/^    gchar **plugin_names;$/;"	m	struct:chassis_config_t
+print_version	parse_config_file.h	/^    gint print_version; $/;"	m	struct:chassis_config_t
+proxy_address	parse_config_file.h	/^    gchar *proxy_address;$/;"	m	struct:chassis_config_t
+pwds	parse_config_file.h	/^    GPtrArray *pwds;$/;"	m	struct:chassis_config_t
+save_file	save_config_file.c	/^void save_file(json_object *fd, gchar *file) {$/;"	f
+schema	parse_config_file.h	/^    schema_info_t *schema;$/;"	m	struct:chassis_config_t
+schema_info_free	parse_config_file.c	/^void schema_info_free(schema_info_t *schema) {$/;"	f
+schema_info_new	parse_config_file.c	/^schema_info_t* schema_info_new(){$/;"	f
+schema_info_t	parse_config_file.h	/^typedef struct schema_info_t{$/;"	s
+schema_info_t	parse_config_file.h	/^} schema_info_t;$/;"	t	typeref:struct:schema_info_t
+set	id_generator.c	/^gboolean set(redisContext *conn, gchar *k, gchar *v) {$/;"	f
+set_json_object_bool	save_config_file.c	/^gint set_json_object_bool(json_object *obj, gchar *k, gboolean v) {$/;"	f
+set_json_object_int	save_config_file.c	/^gint set_json_object_int(json_object *obj, gchar *k, gint v) {$/;"	f
+set_json_object_string	save_config_file.c	/^gint set_json_object_string(json_object *obj, gchar *k, gchar *v) {$/;"	f
+set_json_object_string_array	save_config_file.c	/^gint set_json_object_string_array(json_object *obj, gchar *k, GPtrArray *arr) {$/;"	f
+set_router_rule	parse_config_file.h	/^    gboolean set_router_rule;$/;"	m	struct:chassis_config_t
+sharding_key	parse_config_file.h	/^    gchar *sharding_key;$/;"	m	struct:sharding_rule_t
+sharding_rule_t	parse_config_file.h	/^typedef struct sharding_rule_t {$/;"	s
+sharding_rule_t	parse_config_file.h	/^} sharding_rule_t; $/;"	t	typeref:struct:sharding_rule_t
+sharding_rules	parse_config_file.h	/^    GPtrArray *sharding_rules;$/;"	m	struct:schema_info_t
+shutdown_timeout	parse_config_file.h	/^    gint shutdown_timeout;$/;"	m	struct:chassis_config_t
+slaves	parse_config_file.h	/^    GPtrArray *slaves;$/;"	m	struct:node_info_t
+slaves_info_t	parse_config_file.h	/^typedef struct slaves_info_t{$/;"	s
+slaves_info_t	parse_config_file.h	/^}slaves_info_t;$/;"	t	typeref:struct:slaves_info_t
+slaves_name	parse_config_file.h	/^    gchar *slaves_name;$/;"	m	struct:slaves_info_t
+sql_log_type	parse_config_file.h	/^    gchar *sql_log_type; $/;"	m	struct:chassis_config_t
+sql_safe_update	parse_config_file.h	/^    gboolean sql_safe_update;$/;"	m	struct:chassis_config_t
+status	parse_config_file.h	/^typedef gboolean status;$/;"	t
+string_array_free	parse_config_file.c	/^void string_array_free(GPtrArray *arr){$/;"	f
+string_free	parse_config_file.c	/^static void string_free(gpointer data, gpointer user_data){$/;"	f	file:
+table	parse_config_file.h	/^    gchar *table; $/;"	m	struct:sharding_rule_t
+type	parse_config_file.h	/^    gchar *type; $/;"	m	struct:sharding_rule_t
+use_syslog	parse_config_file.h	/^    int    use_syslog;$/;"	m	struct:chassis_config_t
+user	parse_config_file.h	/^    gchar *user;$/;"	m	struct:chassis_config_t
+verbose_shutdown	parse_config_file.h	/^    gint verbose_shutdown;$/;"	m	struct:chassis_config_t
+wait_timeout	parse_config_file.h	/^    gint wait_timeout;$/;"	m	struct:chassis_config_t

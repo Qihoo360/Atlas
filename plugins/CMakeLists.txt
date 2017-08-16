@@ -4,6 +4,7 @@ IF(WIN32)
 	## between winsock2.h and winsock.h
 	ADD_DEFINITIONS(-DWIN32_LEAN_AND_MEAN)
 ENDIF(WIN32)
+SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY "../../lib/mysql-proxy/plugins")
 ADD_SUBDIRECTORY(debug)
 ADD_SUBDIRECTORY(proxy)
 ADD_SUBDIRECTORY(admin)

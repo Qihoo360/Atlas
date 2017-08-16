@@ -1,0 +1,13 @@
+prefix=/usr/local/mysql-proxy
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+pkglibdir=${exec_prefix}/lib/mysql-proxy
+lualibdir=${pkglibdir}/lua
+plugindir=${pkglibdir}/plugins
+
+Name: MySQL Proxy
+Version: 0.8.2
+Description: MySQL Proxy
+URL: http://forge.mysql.com/wiki/MySQL_Proxy
+Requires: glib-2.0 >= 2.16, mysql-chassis >= 0.8.2
+Libs: -L${libdir} -lmysql-proxy

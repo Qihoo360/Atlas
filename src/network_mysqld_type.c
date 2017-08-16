@@ -227,12 +227,15 @@ static void network_mysqld_type_data_string_free(network_mysqld_type_t *type) {
 	network_mysqld_type_string_free(type->data);
 }
 
-static int network_mysqld_type_data_string_get_string_const(network_mysqld_type_t *type, const char **dst, gsize *dst_len) {
+//static int network_mysqld_type_data_string_get_string_const(network_mysqld_type_t *type, GString *dst) 
+static int network_mysqld_type_data_string_get_string_const(network_mysqld_type_t *type, char **dst, guint *dst_len) 
+{
 	GString *src = type->data;
 
 	if (NULL == type->data) return -1;
 
 	*dst = src->str;
+    //g_string_append_len(dst, src->str, src->len);
 	*dst_len = src->len;
 	
 	return 0;
@@ -583,7 +586,7 @@ int network_mysqld_type_get_gstring(network_mysqld_type_t *type, GString *s) {
 int network_mysqld_type_get_string_const(network_mysqld_type_t *type, const char **s, gsize *s_len) {
 	if (NULL == type->get_string_const) return -1;
 
-	return type->get_string_const(type, s, s_len);
+	return type->get_string_const(type, (char **)s, (guint *)s_len);
 }
 
 int network_mysqld_type_get_string(network_mysqld_type_t *type, char **s, gsize *s_len) {

@@ -49,7 +49,11 @@ void lua_getfield_literal (lua_State *L, int idx, const char *k, size_t k_len) {
 void *luaL_checkself (lua_State *L) {
 	return lua_touserdata(L, 1);
 }
-
+/*
+ */
+void *luaL_checktop(lua_State *L){
+    return lua_touserdata(L, -1);
+}
 /**
  * emulate luaL_newmetatable() with lightuserdata instead of strings 
  *

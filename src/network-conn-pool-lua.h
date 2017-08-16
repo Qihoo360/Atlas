@@ -30,6 +30,9 @@
 NETWORK_API int network_connection_pool_getmetatable(lua_State *L);
 
 NETWORK_API int network_connection_pool_lua_add_connection(network_mysqld_con *con);
-NETWORK_API network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx, GHashTable *pwd_table);
-
+NETWORK_API network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int backend_ndx, GHashTable *pwd_table, gchar *node_name);
+NETWORK_API network_group_backend_t* master_backend_get(group_info_t *t); 
+NETWORK_API network_group_backend_t* slave_backend_get(group_info_t *t, gchar *annotate);
+NETWORK_API network_connection_pool* chassis_event_thread_pool(network_backend_t* backend);
+NETWORK_API network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend, GHashTable *pwd_table);
 #endif

@@ -93,6 +93,7 @@
 #include "glib-ext.h"
 #include "lua-env.h"
 
+#include "../../util/parse_config_file.h"
 #include <gmodule.h>
 
 #define C(x) x, sizeof(x) -1
@@ -307,7 +308,7 @@ static network_mysqld_lua_stmt_ret admin_lua_read_query(network_mysqld_con *con)
 		    0 == g_ascii_strncasecmp(packet->str + NET_HEADER_SIZE + 1, C("LOAD "))) return PROXY_SEND_QUERY;
 	}
 
-	network_injection_queue_reset(st->injected.queries);
+	network_injection_queue_clear(st->injected.queries);
 
 	/* ok, here we go */
 
@@ -556,76 +557,91 @@ static GOptionEntry * network_mysqld_admin_plugin_get_options(chassis_plugin_con
 /**
  * init the plugin with the parsed config
  */
-static int network_mysqld_admin_plugin_apply_config(chassis *chas, chassis_plugin_config *config) {
+static int network_mysqld_admin_plugin_apply_config(chassis *chas, chassis_config_t *config, chassis_plugin_config *plugin_config) {
 	network_mysqld_con *con;
 	network_socket *listen_sock;
 
-	//if (!config->address) config->address = g_strdup(":4041");
-	if (!config->address) {
-		g_critical("%s: Failed to get bind address, please set by --admin-address=<host:port>",
-				G_STRLOC);
-		return -1;
-	}
-	if (!config->admin_username) {
-		g_critical("%s: --admin-username needs to be set",
-				G_STRLOC);
-		return -1;
-	}
-	if (!config->admin_password) {
-		g_critical("%s: --admin-password needs to be set",
-				G_STRLOC);
-		return -1;
-	}
-	if (!config->lua_script) {
-		config->lua_script = g_strdup_printf("%s/lib/mysql-proxy/lua/admin.lua", chas->base_dir);
-	}
+    if (!plugin_config->address) { 
+        if (config->admin_address) { 
+            plugin_config->address = g_strdup(config->admin_address);
+        } else {
+            g_critical("%s: Failed to get bind address, please set by --admin-address=<host:port>",
+                    G_STRLOC);
+            return -1;
+        } 
+    }
+    if (!plugin_config->admin_username) {
+        if (config->admin_username) {
+            plugin_config->admin_username = g_strdup(config->admin_username);
+        } else {
+            g_critical("%s: --admin-username needs to be set",
+                    G_STRLOC);
+            return -1;
+        }
+    }
+    if (!plugin_config->admin_password) {
+        if (config->admin_passwd) {
+            plugin_config->admin_password = g_strdup(config->admin_passwd);
+        } else {
+            g_critical("%s: --admin-password needs to be set",
+                    G_STRLOC);
+            return -1;
+        }
+    }
+    if (!plugin_config->lua_script) {
+        if (config->admin_lua_script) {
+            plugin_config->lua_script = g_strdup(config->admin_lua_script);
+        } else {
+            plugin_config->lua_script = g_strdup_printf("%s/lib/mysql-proxy/lua/admin.lua", chas->base_dir);
+        }
+    }
 
-	/** 
-	 * create a connection handle for the listen socket 
-	 */
-	con = network_mysqld_con_new();
-	network_mysqld_add_connection(chas, con);
-	con->config = config;
+    /** 
+     * create a connection handle for the listen socket 
+     */
+    con = network_mysqld_con_new();
+    network_mysqld_add_connection(chas, con);
+    con->config = plugin_config;
 
-	config->listen_con = con;
-	
-	listen_sock = network_socket_new();
-	con->server = listen_sock;
+    plugin_config->listen_con = con;
 
-	/* set the plugin hooks as we want to apply them to the new connections too later */
-	network_mysqld_server_connection_init(con);
+    listen_sock = network_socket_new();
+    con->server = listen_sock;
 
-	/* FIXME: network_socket_set_address() */
-	if (0 != network_address_set_address(listen_sock->dst, config->address)) {
-		return -1;
-	}
+    /* set the plugin hooks as we want to apply them to the new connections too later */
+    network_mysqld_server_connection_init(con);
 
-	/* FIXME: network_socket_bind() */
-	if (0 != network_socket_bind(listen_sock)) {
-		return -1;
-	}
+    /* FIXME: network_socket_set_address() */
+    if (0 != network_address_set_address(listen_sock->dst, plugin_config->address)) {
+        return -1;
+    }
 
-	/**
-	 * call network_mysqld_con_accept() with this connection when we are done
-	 */
-	event_set(&(listen_sock->event), listen_sock->fd, EV_READ|EV_PERSIST, network_mysqld_admin_con_accept, con);
-	event_base_set(chas->event_base, &(listen_sock->event));
-	event_add(&(listen_sock->event), NULL);
+    /* FIXME: network_socket_bind() */
+    if (0 != network_socket_bind(listen_sock)) {
+        return -1;
+    }
 
-	return 0;
+    /**
+     * call network_mysqld_con_accept() with this connection when we are done
+     */
+    event_set(&(listen_sock->event), listen_sock->fd, EV_READ|EV_PERSIST, network_mysqld_admin_con_accept, con);
+    event_base_set(chas->event_base, &(listen_sock->event));
+    event_add(&(listen_sock->event), NULL);
+
+    return 0;
 }
 
 G_MODULE_EXPORT int plugin_init(chassis_plugin *p) {
-	p->magic        = CHASSIS_PLUGIN_MAGIC;
-	p->name         = g_strdup("admin");
-	p->version		= g_strdup(PACKAGE_VERSION);
+    p->magic        = CHASSIS_PLUGIN_MAGIC;
+    p->name         = g_strdup("admin");
+    p->version		= g_strdup(PACKAGE_VERSION);
 
-	p->init         = network_mysqld_admin_plugin_new;
-	p->get_options  = network_mysqld_admin_plugin_get_options;
-	p->apply_config = network_mysqld_admin_plugin_apply_config;
-	p->destroy      = network_mysqld_admin_plugin_free;
+    p->init         = network_mysqld_admin_plugin_new;
+    p->get_options  = network_mysqld_admin_plugin_get_options;
+    p->apply_config = network_mysqld_admin_plugin_apply_config;
+    p->destroy      = network_mysqld_admin_plugin_free;
 
-	return 0;
+    return 0;
 }
 
 

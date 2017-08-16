@@ -33,24 +33,24 @@ chassis_shutdown_hooks_t *chassis_shutdown_hooks_new() {
 			(GEqualFunc)g_string_equal,
 			g_string_free_true,
 			(GDestroyNotify)chassis_shutdown_hook_free);
-	hooks->mutex = g_mutex_new();
+	g_mutex_init(&hooks->mutex);
 
 	return hooks;
 }
 
 void chassis_shutdown_hooks_free(chassis_shutdown_hooks_t *hooks) {
 	g_hash_table_destroy(hooks->hooks);
-	g_mutex_free(hooks->mutex);
+	g_mutex_clear(&hooks->mutex);
 
 	g_slice_free(chassis_shutdown_hooks_t, hooks);
 }
 
 void chassis_shutdown_hooks_lock(chassis_shutdown_hooks_t *hooks) {
-	g_mutex_lock(hooks->mutex);
+	g_mutex_lock(&hooks->mutex);
 }
 
 void chassis_shutdown_hooks_unlock(chassis_shutdown_hooks_t *hooks) {
-	g_mutex_unlock(hooks->mutex);
+	g_mutex_unlock(&hooks->mutex);
 }
 
 /**

@@ -1,0 +1,12 @@
+prefix=/usr/local/mysql-proxy
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: mysql-chassis
+Version: 0.8.2
+Description: the Chassis of the MySQL Proxy
+URL: http://forge.mysql.com/wiki/MySQL_Proxy
+Requires: glib-2.0 >= 2.16, gthread-2.0 >= 2.16
+Libs: -L${libdir} -lmysql-chassis
+Cflags: -I${includedir} 

@@ -12,5 +12,4 @@ LINK_DIRECTORIES(${GLIB_LIBRARY_DIRS})
 SET(_plugin_name admin)
 ADD_LIBRARY(${_plugin_name} SHARED "${_plugin_name}-plugin.c")
 TARGET_LINK_LIBRARIES(${_plugin_name} mysql-chassis-proxy) 
-CHASSIS_PLUGIN_INSTALL(${_plugin_name})
 

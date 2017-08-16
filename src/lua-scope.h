@@ -39,7 +39,7 @@ typedef struct {
 	lua_State *L;
 	int L_ref;
 #endif
-	GMutex *mutex;	/*remove lock*/
+	GMutex mutex;	/*remove lock*/
 
 	int L_top;
 } lua_scope;

@@ -60,7 +60,7 @@ void network_connection_pool_entry_free(network_connection_pool_entry *e, gboole
 
 	if (e->sock && free_sock) {
 		network_socket *sock = e->sock;
-			
+	    g_message("socke free on fd(%d)", sock->fd);		
 		event_del(&(sock->event));
 		network_socket_free(sock);
 	}
@@ -87,7 +87,19 @@ void network_connection_pool_free(network_connection_pool *pool) {
 		g_queue_free(pool);
 	}
 }
+/**
+ * free all entries of pools 
+ **/
+void network_connection_pools_free(GPtrArray *pools) {
+    if (!pools) { return; }
 
+    guint i;
+    network_connection_pool *pool = NULL;
+    for (i = 0; i < pools->len; i++) {
+        pool = g_ptr_array_index(pools, i);     
+        network_connection_pool_free(pool);  
+    } 
+}
 /**
  * get a connection from the pool
  *
@@ -100,8 +112,8 @@ void network_connection_pool_free(network_connection_pool *pool) {
  */
 network_socket *network_connection_pool_get(network_connection_pool *pool) {
 	network_connection_pool_entry *entry = NULL;
-
-	if (pool->length > 0) {
+    
+	if (pool && pool->length > 0) {
 	//	entry = g_queue_pop_head(pool);
 		entry = g_queue_pop_tail(pool);
 	}

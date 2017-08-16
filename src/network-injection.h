@@ -29,43 +29,61 @@
 #include <glib.h>
 
 #include "network-exports.h"
+//#include "lib/sql-tokenizer.h"
+typedef enum {
+    INJECTION_ORIGINAL_SQL = 1,
+    INJECTION_INIT_DB,
+    INJECTION_SET_CHARACTER_SET_CLIENT_SQL,
+    INJECTION_SET_CHARACTER_SET_RESULTS_SQL,
+    INJECTION_SET_CHARACTER_SET_CONNECTION_SQL,
+    INJECTION_MODIFY_USER_SQL,
+    INJECTION_READ_SQL,
+    INJECTION_WRITE_SQL,
+    INJECTION_SHARDING_WRITE_SQL,
+    INJECTION_SHARDING_READ_SQL,
+    INJECTION_TRANS_BEGIN_SQL,
+    INJECTION_TRANS_FINISH_SQL, // include commit and rollback
+} injection_id_t;
 
 typedef struct {
-	/**
-	 * the content of the OK packet 
-	 */
-	guint16 server_status;
-	guint16 warning_count;
-	guint64 affected_rows;
-	guint64 insert_id;
-    
-	gboolean was_resultset;                      /**< if set, affected_rows and insert_id are ignored */
-	
-	gboolean binary_encoded;                     /**< if set, the row data is binary encoded. we need the metadata to decode */
-    
-	/**
-	 * MYSQLD_PACKET_OK or MYSQLD_PACKET_ERR
-	 */	
-	guint8 query_status;
+    /**
+     * the content of the OK packet 
+     */
+    guint16 server_status;
+    guint16 warning_count;
+    guint64 affected_rows;
+    guint64 insert_id;
+
+    gboolean was_resultset;                      /**< if set, affected_rows and insert_id are ignored */
+
+    gboolean binary_encoded;                     /**< if set, the row data is binary encoded. we need the metadata to decode */
+
+    /**
+     * MYSQLD_PACKET_OK or MYSQLD_PACKET_ERR
+     */	
+    guint8 query_status;
 } query_status;
 
 typedef struct {
-	GString *query;
-    
-	int id;                                 /**< a unique id set by the scripts to map the query to a handler */
-    
-	/* the userdata's need them */
-	GQueue *result_queue;                   /**< the data to parse */
-	query_status qstat;                     /**< summary information about the query status */
-    
-	guint64 ts_read_query;                  /**< microsec timestamp when we added this query to the queues */
-	guint64 ts_read_query_result_first;     /**< microsec timestamp when we received the first packet */
-	guint64 ts_read_query_result_last;      /**< microsec timestamp when we received the last packet */
+    GString *query;
 
-	guint64      rows;
-	guint64      bytes;
+    injection_id_t id;                                 /**< a unique id set by the scripts to map the query to a handler */
 
-	gboolean     resultset_is_needed;       /**< flag to announce if we have to buffer the result for later processing */
+    /* the userdata's need them */
+    GQueue *result_queue;                   /**< the data to parse */
+    query_status qstat;                     /**< summary information about the query status */
+
+    guint64 ts_read_query;                  /**< microsec timestamp when we added this query to the queues */
+    guint64 ts_read_query_result_first;     /**< microsec timestamp when we received the first packet */
+    guint64 ts_read_query_result_last;      /**< microsec timestamp when we received the last packet */
+
+    guint64      rows;
+    guint64      bytes;
+
+    gboolean     resultset_is_needed;       /**< flag to announce if we have to buffer the result for later processing */
+    
+    gint token_id;
+    //sql_token_id token;
 } injection;
 
 /**
@@ -76,7 +94,7 @@ typedef GQueue network_injection_queue;
 
 NETWORK_API network_injection_queue *network_injection_queue_new(void);
 NETWORK_API void network_injection_queue_free(network_injection_queue *q);
-NETWORK_API void network_injection_queue_reset(network_injection_queue *q);
+NETWORK_API void network_injection_queue_clear(network_injection_queue *q);
 NETWORK_API void network_injection_queue_prepend(network_injection_queue *q, injection *inj);
 NETWORK_API void network_injection_queue_append(network_injection_queue *q, injection *inj);
 NETWORK_API guint network_injection_queue_len(network_injection_queue *q);
@@ -85,17 +103,17 @@ NETWORK_API guint network_injection_queue_len(network_injection_queue *q);
  * parsed result set
  */
 typedef struct {
-	GQueue *result_queue;   /**< where the packets are read from */
-    
-	GPtrArray *fields;      /**< the parsed fields */
-    
-	GList *rows_chunk_head; /**< pointer to the EOF packet after the fields */
-	GList *row;             /**< the current row */
-    
-	query_status qstat;     /**< state of this query */
-	
-	guint64      rows;
-	guint64      bytes;
+    GQueue *result_queue;   /**< where the packets are read from */
+
+    GPtrArray *fields;      /**< the parsed fields */
+
+    GList *rows_chunk_head; /**< pointer to the EOF packet after the fields */
+    GList *row;             /**< the current row */
+
+    query_status qstat;     /**< state of this query */
+
+    guint64      rows;
+    guint64      bytes;
 } proxy_resultset_t;
 
 NETWORK_API injection *injection_new(int id, GString *query);

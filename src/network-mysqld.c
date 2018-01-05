@@ -1134,7 +1134,7 @@ void network_mysqld_con_handle(int event_fd, short events, void *user_data) {
 			case NETWORK_SOCKET_SUCCESS:
 				break;
 			case NETWORK_SOCKET_WAIT_FOR_EVENT:
-				WAIT_FOR_EVENT(con->client, EV_READ, src->wait_timeout);
+				WAIT_FOR_EVENT(con->client, EV_READ, srv->wait_timeout);
 				NETWORK_MYSQLD_CON_TRACK_TIME(con, "wait_for_event::read_auth");
 
 				return;

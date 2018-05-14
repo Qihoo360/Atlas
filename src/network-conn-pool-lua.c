@@ -142,8 +142,10 @@ int network_connection_pool_lua_add_connection(network_mysqld_con *con) {
 
 network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend, GHashTable *pwd_table) {
 
-    /*make sure that the max conn for the backend is no more than the config number*/
-    if (backend->connected_clients >= con->srv->max_conn_for_a_backend) {
+    /*make sure that the max conn for the backend is no more than the config number
+     *when max_conn_for_a_backend is no more than 0, there is no limitation for max connection for a backend;
+     * */
+    if (con->srv->max_conn_for_a_backend > 0 && backend->connected_clients >= con->srv->max_conn_for_a_backend) {
         g_critical("%s.%d: self_connect:%08x's connected_clients is %d, which are too many!",__FILE__, __LINE__, backend,  backend->connected_clients);
         return NULL;
     }

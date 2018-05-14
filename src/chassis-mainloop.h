@@ -69,6 +69,8 @@ struct chassis {
 	
 	chassis_stats_t *stats;			/**< the overall chassis stats, includes lua and glib allocation stats */
 
+    gint max_conn_for_a_backend;
+
 	/* network-io threads */
 	guint event_thread_count;
 

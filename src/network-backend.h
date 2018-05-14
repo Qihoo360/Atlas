@@ -59,7 +59,7 @@ typedef struct {
 //	network_connection_pool *pool; /**< the pool of open connections */
 	GPtrArray *pools;
 
-	guint connected_clients; /**< number of open connections to this backend for SQF */
+	gint connected_clients; /**< number of open connections to this backend for SQF */
 
 	GString *uuid;           /**< the UUID of the backend */
 

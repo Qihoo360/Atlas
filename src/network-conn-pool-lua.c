@@ -125,7 +125,12 @@ int network_connection_pool_lua_add_connection(network_mysqld_con *con) {
 		event_set(&(con->server->event), con->server->fd, EV_READ, network_mysqld_con_idle_handle, pool_entry);
 		chassis_event_add_local(con->srv, &(con->server->event)); /* add a event, but stay in the same thread */
 	}
-	
+
+    if (!g_atomic_int_compare_and_exchange(&st->backend->connected_clients, 0, 0)) {
+        g_atomic_int_dec_and_test(&st->backend->connected_clients);    
+        //g_critical("add_connection: %08x's connected_clients is %d\n", backend,  backend->connected_clients);
+    }
+
 //	st->backend->connected_clients--;
 	st->backend = NULL;
 	st->backend_ndx = -1;
@@ -136,7 +141,16 @@ int network_connection_pool_lua_add_connection(network_mysqld_con *con) {
 }
 
 network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend, GHashTable *pwd_table) {
-	//1. connect DB
+
+    /*make sure that the max conn for the backend is no more than the config number
+     *when max_conn_for_a_backend is no more than 0, there is no limitation for max connection for a backend;
+     * */
+    if (con->srv->max_conn_for_a_backend > 0 && backend->connected_clients >= con->srv->max_conn_for_a_backend) {
+        g_critical("%s.%d: self_connect:%08x's connected_clients is %d, which are too many!",__FILE__, __LINE__, backend,  backend->connected_clients);
+        return NULL;
+    }
+    
+    //1. connect DB
 	network_socket *sock = network_socket_new();
 	network_address_copy(sock->dst, backend->addr);
 	if (-1 == (sock->fd = socket(sock->dst->addr.common.sa_family, sock->socket_type, 0))) {
@@ -267,7 +281,7 @@ network_socket *self_connect(network_mysqld_con *con, network_backend_t *backend
 
 	sock->challenge = challenge;
 	sock->response = network_mysqld_auth_response_copy(con->client->response);
-
+    g_atomic_int_inc(&backend->connected_clients);
 	return sock;
 }
 
@@ -304,11 +318,13 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 #ifdef DEBUG_CONN_POOL
 	g_debug("%s: (swap) check if we have a connection for this user in the pool '%s'", G_STRLOC, con->client->response ? con->client->response->username->str: "empty_user");
 #endif
+       int flag = 0;
 	network_connection_pool* pool = chassis_event_thread_pool(backend);
 	if (NULL == (send_sock = network_connection_pool_get(pool))) {
 		/**
 		 * no connections in the pool
 		 */
+        flag = 1;
 		if (NULL == (send_sock = self_connect(con, backend, pwd_table))) {
 			st->backend_ndx = -1;
 			return NULL;
@@ -325,6 +341,11 @@ network_socket *network_connection_pool_lua_swap(network_mysqld_con *con, int ba
 	st->backend = backend;
 //	st->backend->connected_clients++;
 	st->backend_ndx = backend_ndx;
+    
+        if (flag == 0 && !g_atomic_int_compare_and_exchange(&st->backend->connected_clients, 0, 0)) {
+            g_atomic_int_dec_and_test(&st->backend->connected_clients);
+            //g_critical("pool_lua_swap:%08x's connected_clients is %d\n", backend,  backend->connected_clients);
+        }
 
 	return send_sock;
 }

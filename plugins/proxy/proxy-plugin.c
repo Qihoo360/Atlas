@@ -2103,6 +2103,16 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_disconnect_client) {
 		st->backend->connected_clients--;
 	}
 */
+
+    if (st && st->backend) {
+        if (!g_atomic_int_compare_and_exchange(&st->backend->connected_clients, 0, 0)) {
+            g_atomic_int_dec_and_test(&st->backend->connected_clients);
+        }
+        //g_critical("last in proxy_disconnect_client: %08x's connected_clients is %d\n", st->backend, st->backend->connected_clients);
+    }
+
+
+
 #ifdef HAVE_LUA_H
 	/* remove this cached script from registry */
 	if (st->L_ref > 0) {

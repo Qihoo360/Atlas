@@ -127,6 +127,8 @@ typedef struct {
 
 	gint max_files_number;
 
+    gint max_conn_for_a_backend;
+
 	gint event_thread_count;
 
 	gchar *log_level;
@@ -152,6 +154,7 @@ chassis_frontend_t *chassis_frontend_new(void) {
 	frontend->event_thread_count = 1;
 	frontend->max_files_number = 0;
 	frontend->wait_timeout = 0;
+    frontend->max_conn_for_a_backend = 0;
 
 	return frontend;
 }
@@ -201,7 +204,8 @@ int chassis_frontend_set_chassis_options(chassis_frontend_t *frontend, chassis_o
 	chassis_options_add(opts, "lua-cpath", 0, 0, G_OPTION_ARG_STRING, &(frontend->lua_cpath), "set the LUA_CPATH", "<...>");
 	chassis_options_add(opts, "instance", 0, 0, G_OPTION_ARG_STRING, &(frontend->instance_name), "instance name", "<name>");
 	chassis_options_add(opts, "wait-timeout", 0, 0, G_OPTION_ARG_INT, &(frontend->wait_timeout), "the number of seconds which Atlas waits for activity on a connection before closing it (default:0)", NULL);
-
+	chassis_options_add(opts, "max_conn_for_a_backend", 0, 0, G_OPTION_ARG_INT, &(frontend->max_conn_for_a_backend), "max conn for a backend(default: 0)", NULL);
+    
 	return 0;	
 }
 
@@ -348,6 +352,14 @@ int main_cmdline(int argc, char **argv) {
 		GOTO_EXIT(EXIT_FAILURE);
 	}
 	srv->wait_timeout = frontend->wait_timeout;
+
+	if (frontend->max_conn_for_a_backend <= 0) {
+		g_critical("--max_conn_for_a_backend is %d, which means there is not any conn limitation for a backend", frontend->max_conn_for_a_backend);
+	} else {
+		g_message("--max_conn_for_a_backend is %d ", frontend->max_conn_for_a_backend);
+    }
+
+    srv->max_conn_for_a_backend = frontend->max_conn_for_a_backend;
 
 	/* assign the mysqld part to the */
 	network_mysqld_init(srv, frontend->default_file); /* starts the also the lua-scope, LUA_PATH and LUA_CPATH have to be set before this being called */

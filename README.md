@@ -42,7 +42,7 @@ Atlas is a MySQL protocol-based database middleware project developed and mainta
 
 ### 5.Requirement and feedback
 
-If You have new functional requirements about Atlas in the production environment, or find a bug in the process of using Atlas. Welcome to send a mail to g-atlas@360.cn, we will reply as soon as possible. Also you can contact us in [Google group](https://groups.google.com/forum/#!forum/atlas-proxy). Enthusiastic user has established a QQ group:326544838, the developers of Atlas have also been in the QQ group.
+If You have new functional requirements about Atlas in the production environment, or find a bug in the process of using Atlas. Welcome to send a mail to g-atlas[at]360.cn, we will reply as soon as possible. Also you can contact us in [Google group](https://groups.google.com/forum/#!forum/atlas-proxy). Enthusiastic user has established a QQ group:326544838, the developers of Atlas have also been in the QQ group.
 
 ### 6.The origin of the name
 
